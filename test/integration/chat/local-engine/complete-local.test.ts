@@ -57,13 +57,13 @@ describe('request forwarding', () => {
 describe('errors', () => {
   it('propagates a failure from the built-in model and releases the restart hold', async () => {
     installLlama({ tokens: [], error: 'ERR_AFM_CONTEXT' });
-    await expect(ask()).rejects.toThrow('ERR_AFM_CONTEXT');
+    await expect(ask()).rejects.toMatchObject({ code: 'ERR_AFM_CONTEXT' });
     expect(activeHolds()).not.toContain('local-inference');
   });
 
   it('a failed call does not wedge the lock: the next call runs', async () => {
     installLlama((call) => (llamaCalls().indexOf(call) === 0 ? { tokens: [], error: 'ERR_AFM_BUSY' } : ['fine']));
-    await expect(ask()).rejects.toThrow('ERR_AFM_BUSY');
+    await expect(ask()).rejects.toMatchObject({ code: 'ERR_AFM_BUSY' });
     await expect(ask()).resolves.toBe('fine');
   });
 });
