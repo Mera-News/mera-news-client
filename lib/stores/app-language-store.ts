@@ -7,7 +7,7 @@ import {
     sweepTranslationCache,
 } from '@/lib/database/services/translation-cache-service';
 import { clearTranslationFailuresFor, setLateTranslationSink } from '@/lib/platform/translation';
-import { SUPPORTED_LANGUAGES } from '@/lib/translation-service';
+import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages';
 import { bumpTranslationEpoch } from '@/lib/translation-queue';
 import { applyLanguage } from '@/lib/platform/i18n';
 
