@@ -206,6 +206,7 @@ export interface PlatformHost {
   canTranslateIntoLanguage?(targetLangCode: string, osMajorOverride?: number): boolean;
   clearTranslationFailuresFor?(targetLangCode: string): void;
   setLateTranslationSink?(sink: LateTranslationSink | null): void;
+  bumpTranslationEpoch?(reason?: string): number;
 
   /** Shows the toast for an inbox row the package already wrote (row is null when the write failed). */
   showNotifiedToast?(row: unknown, opts: NotifiedToastOptions): void;

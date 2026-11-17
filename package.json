@@ -28,7 +28,8 @@
     "@noble/ciphers": "^2.4.0",
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
-    "i18n-iso-countries": "^7.14.0"
+    "i18n-iso-countries": "^7.14.0",
+    "pako": "^3.0.3"
   },
   "peerDependencies": {
     "@apollo/client": "^4.3.5",

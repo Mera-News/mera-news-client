@@ -1,5 +1,5 @@
-// Stands in for the app's lib/translation-service (the OS translator). A host without one can
-// translate into nothing, and the other calls do nothing.
+// Stands in for the app's lib/translation-service and lib/translation-queue (the OS translator).
+// A host without one can translate into nothing, and the other calls do nothing.
 import { platform, type LateTranslationSink } from './index';
 
 export type { LateTranslationSink } from './index';
@@ -14,4 +14,9 @@ export function clearTranslationFailuresFor(targetLangCode: string): void {
 
 export function setLateTranslationSink(sink: LateTranslationSink | null): void {
   platform('translation').setLateTranslationSink?.(sink);
+}
+
+/** Drops the host's queued translations for the old language. Without a host queue there is no epoch: 0. */
+export function bumpTranslationEpoch(reason?: string): number {
+  return platform('translation').bumpTranslationEpoch?.(reason) ?? 0;
 }
