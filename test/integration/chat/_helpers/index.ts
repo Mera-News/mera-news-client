@@ -4,6 +4,18 @@ export { resetChatModules } from './reset';
 export { seedFacts, setProcessingMode, setWebSearchInChat, type SeedFact } from './persona';
 export { toolCall, reply, systemOf, personMessage, isRouteLeg, toolResultsIn, hasToolResult } from './replies';
 export { driveUntilDone, useStrictClock } from './clock';
+export {
+  installDecide,
+  installLlama,
+  decideCalls,
+  llamaCalls,
+  llamaReleases,
+  KEV_GPU_FAILED,
+  type DecideCall,
+  type DecideScript,
+  type LlamaCall,
+  type LlamaScript,
+} from './llama';
 
 /** Polls `cond` on real macrotasks until it holds (or throws after `ms`). Under the fake clock
  *  use advanceUntilDone from '@/test/helpers' instead. */
