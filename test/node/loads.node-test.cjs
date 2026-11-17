@@ -29,6 +29,10 @@ test('a platform read before registration names the facade', () => {
   );
 });
 
+// The host below has no network module, as a server may not. lib/platform/netinfo then throws
+// while loading by design, and its one importer (the network store) loads it inside a try.
+const NETINFO = path.join(dist, 'platform/netinfo.js');
+
 test('every built module loads once a host is registered', () => {
   const { ApolloClient, HttpLink, InMemoryCache } = require('@apollo/client');
   const LokiJSAdapter = require('@nozbe/watermelondb/adapters/lokijs').default;
@@ -66,8 +70,6 @@ test('every built module loads once a host is registered', () => {
       withScope: (callback) => callback({ setTag() {}, setLevel() {} }),
     },
     fetch: (input, init) => globalThis.fetch(input, init),
-    // Optional in PlatformHost, but lib/platform/netinfo throws at load without it.
-    netInfo: { fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} },
     asyncStorage: store,
     secureStore: {
       getItemAsync: secure.getItem,
@@ -91,7 +93,9 @@ test('every built module loads once a host is registered', () => {
   const files = filesUnder(dist);
   assert.ok(files.length > 500, `only ${files.length} built modules found`);
   for (const file of files) {
+    if (file === NETINFO) continue;
     assert.doesNotThrow(() => require(file), `${path.relative(dist, file)} failed to load`);
   }
+  assert.throws(() => require(NETINFO), /provides no network status/);
   console.log(`loaded ${files.length} modules`);
 });
