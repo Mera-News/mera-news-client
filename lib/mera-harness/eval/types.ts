@@ -26,7 +26,7 @@ export interface EvalModelRequest {
    *  `thinkingRequested` so an unhonoured switch is visible — NEAR answers 200
    *  for unknown chat_template_kwargs, so nothing else would say so. */
   enableThinking?: boolean;
-  /** Object, not a bare string (§16). `ttVisibleMs` keys on the first
+  /** Object, not a bare string. `ttVisibleMs` keys on the first
    *  CONTENT delta; a reasoning-only delta is not prose and must not start the
    *  clock. */
   onDelta?: (d: { content?: string; reasoning?: string }) => void;
@@ -86,7 +86,7 @@ export type TurnEnd =
   | 'leg_cap'
   /** The route leg never produced a route, even after its re-asks. Reported
    *  separately from `settled` because the two used to be indistinguishable:
-   *  90 of 308 G2d route legs ended in prose with no skill loaded and were
+   *  90 of 308 evaluation route legs ended in prose with no skill loaded and were
    *  counted as settled turns. */
   | 'no_route';
 

@@ -66,7 +66,7 @@ const idleAfterStop = async () => {
 const chatCalls = (): GatewayCall[] => gatewayCalls('chat');
 const lastContent = (c: GatewayCall) => c.messages[c.messages.length - 1].content;
 
-describe('item 8: Stop with a call half-parsed', () => {
+describe('Stop with a call half-parsed', () => {
   it('stream level: CallerAbortError, no tool-call-delta, and no tag text in any text-delta', async () => {
     server.use(...mockGateway(() => stalledOn(HALF_CALL('recordNote', 'note'))));
     const stop = new AbortController();
@@ -176,10 +176,10 @@ describe('item 8: Stop with a call half-parsed', () => {
   });
 });
 
-describe('item 9: Stop between the forced leg and its re-ask', () => {
+describe('Stop between the forced leg and its re-ask', () => {
   const real = cloudCompleteModule.cloudChatStream;
 
-  /** Wraps the REAL cloudChatStream (R23b): yields everything, and once the FIRST forced call's
+  /** Wraps the REAL cloudChatStream: yields everything, and once the FIRST forced call's
    *  generator has finished, fires `afterFirstForced`. The Stop lands exactly in the gap between the
    *  forced leg and its re-ask. Returns the list of requests the wrapper saw. */
   function wrapForced(afterFirstForced: () => void): CloudChatStreamRequest[] {

@@ -54,7 +54,7 @@ export type MeraPageKey =
     | 'profile'
     | 'facts'
     | 'sources'
-    // Settings, Search and the article page: the generic set (owner M5).
+    // Settings, Search and the article page: the generic set (owner ruling).
     | 'settings';
 
 export type ChatContext =
@@ -106,7 +106,7 @@ interface FloatingChatState {
     // Where ChatPopover morphs from: the Mera button publishes its centre.
     bubbleCenter: { x: number; y: number };
     // When the popover last closed. A reopen within KEEP_THREAD_MS keeps the
-    // thread even from another page (navx amendment).
+    // thread even from another page.
     closedAt: number | null;
     // Text a starter put in the composer. Level-triggered: ChatThread consumes
     // it once the composer exists, so a fresh conversation cannot swallow it.
@@ -352,7 +352,7 @@ export const useFloatingChatStore = create<FloatingChatState>((set, get) => ({
             //
             // A PAGE change between two persona chats keeps the thread when the
             // chat closed less than KEEP_THREAD_MS ago or a proposal card is
-            // still waiting (navx amendment); the new page's starters show
+            // still waiting; the new page's starters show
             // under it. A change of kind or target always starts fresh.
             const keepsThread =
                 context !== undefined &&

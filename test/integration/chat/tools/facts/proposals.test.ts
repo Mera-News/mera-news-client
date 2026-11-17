@@ -179,7 +179,7 @@ describe('partial failure', () => {
 
   it('a database failure on one action is collected and the next action still runs', async () => {
     const [second, first] = await seedFacts(['a', 'b']);
-    // Fault injection on one call of the real service (R23): the first delete throws.
+    // Fault injection on one call of the real service: the first delete throws.
     jest.spyOn(factService, 'deleteFact').mockRejectedValueOnce(new Error('db boom'));
 
     const result = await executeProposalActions([

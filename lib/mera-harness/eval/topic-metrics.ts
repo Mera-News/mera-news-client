@@ -1,17 +1,17 @@
-// mera-harness/eval — topic-set scoring, shared by Step A (the topic-prompt
-// comparison) and G2 (the agent corpus). Pure.
+// mera-harness/eval — topic-set scoring, shared by the topic-prompt
+// comparison and the agent corpus. Pure.
 //
 // GATE ORDER IS LOAD-BEARING AND IT IS ENCODED HERE, not left to the caller's
 // discretion. `scoreTopicRun` returns the gates in the order they must be read:
 //
 //   1. output integrity  - empty content / finish_reason
 //   2. filter correctness - the place-name regression
-//   3. S7                - within-set near duplicates, POST-FILTER (shipped)
+//   3. near duplicates   - within the set, POST-FILTER (shipped)
 //   4. everything else   - quality
 //
 // Because every quality number IMPROVES as output disappears. An arm that
 // generated nothing has no duplicates, no em dashes, no over-long topics and a
-// perfect S7 rate. Reading S7 before integrity rewards the arm that failed
+// perfect near-duplicate rate. Reading it before integrity rewards the arm that failed
 // hardest, and reading it before filter correctness rewards a filter that
 // bought its pass by eating ladder rungs.
 
@@ -218,7 +218,7 @@ export function filterCorrectness(
 }
 
 // ---------------------------------------------------------------------------
-// Gate 3: S7, within-set near duplicates
+// Gate 3: within-set near duplicates
 // ---------------------------------------------------------------------------
 
 export interface S7Report {

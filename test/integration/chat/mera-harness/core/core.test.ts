@@ -105,7 +105,7 @@ describe('the arm reaches the leg it claims to change', () => {
   // a different `routerPrompt` VALUE, and it did. Nothing asserted that the
   // value reached the model, and it did not: `promptVariant` was declared on
   // RunAgentTurnParams, passed by the eval runner, and never read. Three corpus
-  // runs (g2b, G2c, G2d, 2,101 rows) compared the shipped configuration against
+  // runs (2,101 rows) compared the shipped configuration against
   // itself under four arm names.
   //
   // So this test reads the OUTGOING request, not the registry.
@@ -140,7 +140,7 @@ describe('the arm reaches the leg it claims to change', () => {
 describe('the bounded loop', () => {
   // THIS TEST USED TO ASSERT THE BUG. "A text-only turn is exactly ONE leg"
   // described a route leg answering in prose and ending the turn, which is what
-  // 90 of 308 G2d route legs did: the user's message landed, nothing routed,
+  // 90 of 308 evaluation route legs did: the user's message landed, nothing routed,
   // nothing was proposed, and the row read as settled. Prose is not a route.
   it('a route leg that answers in prose is RE-ASKED, not accepted', async () => {
     const { deps, calls } = scriptedDeps([modelResult({ content: 'Hello there.' })]);
@@ -158,7 +158,7 @@ describe('the bounded loop', () => {
     expect(out.legBudgetHit).toBe(false);
   });
 
-  // THE DROPPED REFERENT. Measured on G3: an answer to the previous turn's
+  // THE DROPPED REFERENT. Measured in an evaluation run: an answer to the previous turn's
   // question arrived with the question nowhere in context, so the model was
   // classifying a fragment. These assert the text makes the round trip.
   it('carries the previous turn\'s question into the next turn\'s state line', async () => {
@@ -199,7 +199,7 @@ describe('the bounded loop', () => {
     expect(state.turn.lastQuestion).toBeNull();
   });
 
-  // RUNNING OUT OF LEGS IS NOT FAILING. G3 labelled 16 of 18 finished turns as
+  // RUNNING OUT OF LEGS IS NOT FAILING. An evaluation run labelled 16 of 18 finished turns as
   // capped because the proposal landed on the last leg and said nothing.
   it('a turn that proposed and then ran out of legs is settled, not capped', async () => {
     const save = modelResult({
@@ -268,7 +268,7 @@ describe('the bounded loop', () => {
   });
 
   // ---- THE REPLY GATE --------------------------------------------------
-  // Measured on G4: 10% of turns told the user something was saved while a card
+  // Measured in an evaluation corpus: 10% of turns told the user something was saved while a card
   // was still waiting to be tapped, and 4.3% put the state block, a tool name or
   // third-person narration into the bubble.
   const SAVE_TOOL = tc('saveExtractedFacts', {
@@ -328,7 +328,7 @@ describe('the bounded loop', () => {
 
     expect(out.replyLeakUnfixed).toBe(true);
     // A card is on screen (this turn staged one), so the leak is dropped
-    // rather than replaced with a question (C4).
+    // rather than replaced with a question.
     expect(out.reply).toBe('');
     expect(out.reply).not.toContain('their residence');
   });
@@ -482,7 +482,7 @@ describe('the bounded loop', () => {
       state: createAgentState(PERSONA), userMessage: 'I moved to Porto', deps,
     });
 
-    // Its last leg was the forced offer (see B13 below), which produced
+    // Its last leg was the forced offer (see 'a facts turn ends with an offer'), which produced
     // nothing: counted as `no-proposal`, and still rendered as a terminal.
     expect(out.forcedProposal).toBe(true);
     expect(out.terminalReason).toBe('no-proposal');
@@ -1045,7 +1045,7 @@ describe('per-leg tool payload', () => {
   const names = (t: unknown[]) =>
     (t as { function: { name: string } }[]).map((d) => d.function.name).sort();
 
-  // The route leg used to carry all four discovery tools, and 9 of G2d's 99
+  // The route leg used to carry all four discovery tools, and 9 of an evaluation run's 99
   // no-route legs discharged "call a tool" with one of the other three. The
   // route leg has one job, so it gets one tool.
   it('the ROUTER leg offers load_skill and NOTHING else', async () => {
@@ -1362,7 +1362,7 @@ describe('TestFlight regressions', () => {
     expect(firstLeg).toContain('my parents live in bhopal');
   });
 
-  it('the earlier messages ride on every leg in the guarded recent block, never loose (S1.5)', async () => {
+  it('the earlier messages ride on every leg in the guarded recent block, never loose', async () => {
     const state = createAgentState(PERSONA);
     state.turn.lastUserMessage = 'my parents live in bhopal';
     state.turn.recentExchanges = [{ user: 'my parents live in bhopal', reply: 'Here is the reading to confirm.' }];

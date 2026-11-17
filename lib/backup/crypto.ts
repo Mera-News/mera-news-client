@@ -17,8 +17,8 @@
 // side is powerless against that, so the derivation has to be deliberately slow
 // and "slow" is a number you get from a device, not from a keyboard. If it ever
 // returns, `BackupHeader.algo` is the upgrade path, `@noble/hashes` ships
-// `argon2.js` (the option the plan recommends), and the server half is built and
-// parked on `mera-server` branch `backup-escrow`.
+// `argon2.js` (the recommended option), and the server half is built and
+// parked on an unmerged server branch, `backup-escrow`.
 //
 // Primitives are reused from what `lib/e2ee/e2ee-service.ts` already ships —
 // same libraries, same `.js` subpath import style — rather than introducing a

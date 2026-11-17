@@ -1,5 +1,5 @@
 // supranational-codes — the app-side mirror of
-// mera-server/libs/mera-shared/src/enrichment/supranational-codes.ts.
+// mera-news-data-server/libs/mera-shared/src/enrichment/supranational-codes.ts.
 //
 // The trap this whole module exists to avoid: EU is exactly two characters,
 // the same length as every real ISO-3166 alpha-2 country code, so membership

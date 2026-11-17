@@ -147,13 +147,13 @@ describe('mera-explainer-content — pipeline confidentiality', () => {
       .toBeNull();
   });
 
-  it('names no downloaded on-device model; only Apple Intelligence may be named (D29, D44)', () => {
+  it('names no downloaded on-device model; only Apple Intelligence may be named', () => {
     expect(source).not.toMatch(/kev|qwen/i);
     expect(MERA_EXPLAINER_SECTIONS.encryption_and_inference).toContain('Apple Intelligence');
     expect(MERA_EXPLAINER_SECTIONS.encryption_and_inference).toMatch(/Beta/);
   });
 
-  it('says On this phone is an iPhone-only beta, not offered on Android yet (D44)', () => {
+  it('says On this phone is an iPhone-only beta, not offered on Android yet', () => {
     const text = MERA_EXPLAINER_SECTIONS.encryption_and_inference;
     expect(text).toMatch(/iPhone with Apple Intelligence only/);
     expect(text).not.toMatch(/Gemini Nano/);
@@ -237,7 +237,7 @@ describe('mera-explainer-content — what chat can reach', () => {
 describe('mera-explainer-content — profile or followed story', () => {
   const text = MERA_EXPLAINER_SECTIONS.profile_vs_stories;
 
-  it('states the rule in the owner words, with F1 both ways', () => {
+  it('states the rule in the owner words, both ways', () => {
     expect(text).toContain('Your profile is for what affects you. Everything else, just follow.');
     expect(text).toContain('I like Formula 1');
     expect(text).toContain("I'm going to Monaco");

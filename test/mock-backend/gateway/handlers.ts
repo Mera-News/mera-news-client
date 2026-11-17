@@ -242,11 +242,11 @@ const routing = http.get('*/v1/routing', () =>
 const attestation = http.get('*/api/attestation/report', ({ request }) => {
   if (!request.headers.get('authorization')) return unauthorized();
   const url = new URL(request.url);
-  // G2: the verification tap sends a nonce and gets NEAR's captured report.
+  // The verification tap sends a nonce and gets NEAR's captured report.
   if (url.searchParams.has('nonce')) {
     return new HttpResponse(readFileSync(FIXTURE_PATH), { headers: { 'content-type': 'application/json' } });
   }
-  // G1: the hot path. A test key on the model's curve (no secret exists for the fixture's key).
+  // The hot path. A test key on the model's curve (no secret exists for the fixture's key).
   const model = url.searchParams.get('model') ?? '';
   state.attestationCount.set(model, (state.attestationCount.get(model) ?? 0) + 1);
   const algo = curveFor(model);

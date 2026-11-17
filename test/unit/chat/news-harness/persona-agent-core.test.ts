@@ -291,7 +291,7 @@ describe('getPersonaToolDefinitions', () => {
     });
   });
 
-  // --- item 12b: searchNews -------------------------------------------------
+  // --- searchNews -----------------------------------------------------------
 
   describe('searchNews', () => {
     it('is present on CLOUD, for BOTH surfaces, at every filter rung', () => {
@@ -324,7 +324,7 @@ describe('getPersonaToolDefinitions', () => {
     });
   });
 
-  // --- item 13: webSearch, gated on the user's toggle -----------------------
+  // --- webSearch, gated on the user's toggle -----------------------
 
   describe('webSearch (declaration gate)', () => {
     // THE privacy default, asserted at the seam: every caller that does not
@@ -668,7 +668,7 @@ describe('persona prompt token budget', () => {
     }
   });
 
-  // --- item 17: deep mode must not cost budget -----------------------------
+  // --- deep mode must not cost budget -----------------------------
   //
   // The filters ladder CANNOT rescue a deep-mode user: its last rung still
   // carries the question bank, so a bank that merely APPENDED would push the
@@ -676,7 +676,7 @@ describe('persona prompt token budget', () => {
   // useLocalLLM's hard error. That is why DEEP_EXAMPLE_QUESTIONS replaces the
   // standard bank rather than extending it — and why this is measured on
   // LOCAL, the path the budget actually governs.
-  describe('deep mode (item 17)', () => {
+  describe('deep mode', () => {
     it('never makes the worst-case LOCAL prompt larger, at any rung', () => {
       for (const rung of ['full', 'compact', 'off'] as const) {
         expect(estimateTokens(worstCaseSystemPrompt(rung, true)))
@@ -720,7 +720,7 @@ describe('persona prompt token budget', () => {
     });
   });
 
-  // item 13 — the web-search prose is the one change here that makes a
+  // The web-search prose is the one change here that makes a
   // prompt BIGGER, and it feeds planTurn's systemTokensFor. A CLOUD user with
   // many facts who enables it can therefore drop a filter rung sooner: the
   // ladder working as designed, documented here so the interaction is not

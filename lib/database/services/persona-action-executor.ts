@@ -327,7 +327,7 @@ async function dispatch(
         source,
         summary: `Suppressed: ${pattern}`,
       });
-      // D12a. Hard filters are retroactive — screen what is ALREADY stored.
+      // Hard filters are retroactive — screen what is ALREADY stored.
       // Soft suppressions are a score penalty, so they wait for the next pass.
       // Compare the strength WE clamped/defaulted, not the persisted row's:
       // the decision is about the action, and it must not depend on the shape
@@ -365,7 +365,7 @@ async function dispatch(
         source,
         summary: `Removed filter: ${pattern}`,
       });
-      // D12c. Retiring a HARD filter gives its casualties a second chance. Rows
+      // Retiring a HARD filter gives its casualties a second chance. Rows
       // a still-active filter also matches stay excluded (the sweep re-screens
       // against the live persona, so the two-filters-on-one-row case is free).
       // The released rows come back `unscored` for the next scoring pass.
@@ -415,7 +415,7 @@ async function dispatch(
         source,
         summary: `Set publication preference: ${action.publicationId} → ${action.publicationPref}`,
       });
-      // D12b. A mute (weight ≤ -0.9) IS a hard `kind:'publication'` filter — it
+      // A mute (weight ≤ -0.9) IS a hard `kind:'publication'` filter — it
       // is synthesized as one when the scoring context loads, so both sweeps
       // see it live with no extra plumbing here. Muting purges retroactively;
       // raising the weight back above -0.9 (unmute, incl. switching to

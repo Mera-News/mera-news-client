@@ -494,7 +494,7 @@ describe('reconstructLookups', () => {
     expect(chunkIdToCandidates.get('score:1')!.map((c) => c.id)).toEqual(candidateIds.slice(size));
   });
 
-  // P4b: an all-TOP-HEADLINE batch was chunked at 3, not 5. Decode passes the size persisted on the
+  // An all-TOP-HEADLINE batch was chunked at 3, not 5. Decode passes the size persisted on the
   // batch; slicing with the standard size here would shift every score onto a neighbouring article
   // with no error raised anywhere.
   it('honours an explicit chunk size (headline batches chunk at 3)', () => {

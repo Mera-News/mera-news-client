@@ -58,7 +58,7 @@ const resetStore = (store: unknown): void =>
 
 const ownSpies: jest.SpyInstance[] = [];
 
-/** jest.spyOn on a real module export (R23: fault injection on one call), restored by `cleanupFeedSync`. */
+/** jest.spyOn on a real module export (fault injection on one call), restored by `cleanupFeedSync`. */
 export function spyOnExport<T extends object, K extends keyof T & string>(target: T, method: K): jest.SpyInstance {
   const spy = jest.spyOn(target, method as never);
   ownSpies.push(spy);
@@ -453,7 +453,7 @@ export async function retentionRows(): Promise<{ id: string; origin: string | nu
   return rows.map((r: any) => ({ id: r.id as string, origin: (r.origin ?? null) as string | null }));
 }
 
-// Fault injection (R26) and the real-timer waits live in the shared data helpers.
+// Fault injection and the real-timer waits live in the shared data helpers.
 export { failSettingRead, failTableQuery, until, flush } from '../../support/faults';
 
 // ---------------------------------------------------------------------------

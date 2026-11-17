@@ -1,4 +1,4 @@
-// S1.5: the recent-conversation block's pure parts.
+// The recent-conversation block's pure parts.
 import {
   escapeRecent,
   pointsBack,

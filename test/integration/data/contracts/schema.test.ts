@@ -1,4 +1,4 @@
-// §8 structural assertions for lib/database/schema.ts
+// Structural assertions for lib/database/schema.ts
 // No WatermelonDB native runtime needed — appSchema/tableSchema are pure data builders.
 
 import schema from '@/lib/database/schema';

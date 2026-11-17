@@ -28,7 +28,7 @@ export const KEV_QUESTIONS = {
  *  Pro, 2026-10-19) the same model scores much lower: over 97 real articles the median k was 0.20,
  *  the max 0.63, and 0.62 let 1 row through. 0.29 is the top-28% point of that sample, so it keeps
  *  the cloud feed size on the phone's own scale.
- *  ponytail: fitted on one unlabelled evening of one feed; refit on goldset-348 run through the same
+ *  shortcut: fitted on one unlabelled evening of one feed; refit on goldset-348 run through the same
  *  Q4 file before trusting the bands above the gate. */
 export const KEV_CUT = 0.29;
 
@@ -38,7 +38,7 @@ const DESCRIPTION_CHARS = 500;
  *  prompt must fit n_ctx 4096 tokens, or decide fails with "(error 1)". Measured on the Mac with
  *  harness-local/adapters/kev-local.ts: English runs about 5 characters a token, so two full lists,
  *  a long title and the description stay near 3,000 tokens; a 7-fact bank is far below the cap.
- *  ponytail: a character budget; a non-Latin fact bank tokenizes denser and can still overflow.
+ *  shortcut: a character budget; a non-Latin fact bank tokenizes denser and can still overflow.
  *  Count tokens (context.tokenize) if one does. */
 export const KEV_FACT_CHARS = 6000;
 const LEVELS_MAX = KEV_QUESTIONS.rel.criteria.length - 1;

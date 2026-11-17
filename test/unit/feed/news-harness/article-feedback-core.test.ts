@@ -74,8 +74,8 @@ function scoredContext(overrides: Partial<SuggestionFeedbackContext['suggestion'
   };
 }
 
-// F34: see follow-story-core.test.ts. The article chat stages the same card.
-describe('article-feedback follow card copy (F34)', () => {
+// See follow-story-core.test.ts. The article chat stages the same card.
+describe('article-feedback follow card copy', () => {
   it('asks for the fixed line and bans "scope", in the prompt and the tool description', () => {
     const prompt = buildArticleFeedbackSystemPrompt({ needsToolFormat: false, languageName: 'English' });
     expect(prompt).toContain('"Pick the story to follow below."');
@@ -591,7 +591,7 @@ describe('buildFeedbackContext', () => {
   });
 
   it('tells the model to have the user TAP — not applyProposal — on a chooseOne card', () => {
-    // G1: applyProposal REFUSES a single-select proposal, so the context must
+    // applyProposal REFUSES a single-select proposal, so the context must
     // not order the model to call it (that turn would dead-end).
     const proposal: StagedProposal = {
       id: 'p-choose',

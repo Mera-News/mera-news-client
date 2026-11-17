@@ -95,7 +95,7 @@ const TERMINAL_BANNED = [
  * Phrasings that let the ROUTER end a turn without routing.
  *
  * The four-line procedure this body replaced ended "No row matches: answer
- * briefly and stop", and 90 of 308 route legs in G2d did exactly that: prose,
+ * briefly and stop", and 90 of 308 evaluation route legs did exactly that: prose,
  * `finish_reason: stop`, no skill loaded, a turn that reads as settled and did
  * nothing. The model was obeying the prompt. Every turn now ends in a route,
  * `facts/interest` is the catch-all, and the loop re-asks when no call arrives,

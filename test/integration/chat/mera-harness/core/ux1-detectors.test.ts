@@ -21,7 +21,7 @@ describe('narratesProcess (precision first)', () => {
     'Got it, the Champions League. Want me to add it?',
     'Nothing is stored about you yet.',
     'You live in Berlin, so I checked Berlin news for you.',
-    // From the frozen G4 corpus: a conditional offer is a correct answer.
+    // From the frozen evaluation corpus: a conditional offer is a correct answer.
     "I don't have that on file. If you tell me where you live, I'll look up the place and save it.",
   ])('stays quiet on %p', (text) => {
     expect(narratesProcess(text)).toBe(false);

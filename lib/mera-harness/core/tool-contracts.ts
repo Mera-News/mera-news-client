@@ -477,7 +477,7 @@ function fallbackSkillTools(skillId: string): readonly string[] {
  *  - FORCED leg: saveExtractedFacts and ask_choice only, the two calls that
  *    answer "propose something now".
  *
- * WHY THE ROUTE LEG GETS ONE TOOL: of 99 G2d route legs that loaded no skill,
+ * WHY THE ROUTE LEG GETS ONE TOOL: of 99 evaluation route legs that loaded no skill,
  * 9 discharged "call a tool" with a discovery tool instead of routing. A tool
  * the model cannot see is one it cannot spend a leg on.
  */

@@ -3489,7 +3489,7 @@ async function runPollerTick(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Background (OS task) entry points — bgsubmit
+// Background (OS task) entry points
 // ---------------------------------------------------------------------------
 
 /** Why a background step stopped. `done` means it finished its work list. */

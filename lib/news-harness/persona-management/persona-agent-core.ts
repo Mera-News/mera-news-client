@@ -151,10 +151,10 @@ export interface PersonaSystemPromptInput {
   /** how much of the FILTERS feature this turn can afford
    *  (planPersonaPrompt). Defaults to `full`. */
   filterTools?: FilterToolsVariant;
-  /** item 17 — the user's "Deeper questions" toggle. Swaps the interview's
+  /** The user's "Deeper questions" toggle. Swaps the interview's
    *  question bank; the answers are ordinary LOCAL facts. */
   deepMode?: boolean;
-  /** item 13 — the user's "Web search in chat" toggle. Adds one CLOUD-only
+  /** The user's "Web search in chat" toggle. Adds one CLOUD-only
    *  prose line telling the model the tool exists. */
   webSearch?: boolean;
   /** False On this phone, where recalibration (a cloud call) cannot run. */
@@ -755,7 +755,7 @@ const EXPLAIN_MERA_TOOL: ToolDefinition = {
 };
 
 /**
- * `searchNews` — Mera's OWN article index (item 12b). CLOUD only, appended at
+ * `searchNews` — Mera's OWN article index. CLOUD only, appended at
  * this seam for both of EXPLAIN_MERA_TOOL's reasons: the LOCAL turn is one-shot
  * (a search whose results the model can never read is strictly worse than no
  * search) and the LOCAL XML prompt derived from `buildToolDefinitions` has a
@@ -783,7 +783,7 @@ const SEARCH_NEWS_TOOL: ToolDefinition = {
 };
 
 /**
- * `webSearch` — the OPTIONAL, off-by-default web search (item 13).
+ * `webSearch` — the OPTIONAL, off-by-default web search.
  *
  * Declared only when the user's "Web search in chat" toggle is on. That gate is
  * on the DECLARATION, not merely the handler, and the distinction is the whole

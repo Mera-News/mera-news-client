@@ -8,7 +8,7 @@ import { buildRouterPrompt } from '@/lib/mera-harness/core/router-prompt';
  * parsed, budget-checked, compiled into `index.generated.ts` and NEVER SENT to
  * a model. The prompt the model actually received carried a four-line procedure
  * written inline in `router-prompt.ts`, ending "No row matches: answer briefly
- * and stop" -- and 90 of 308 route legs in G2d took that exit.
+ * and stop" -- and 90 of 308 evaluation route legs took that exit.
  *
  * Every test that could have caught it read the registry or the markdown. None
  * read the string that goes on the wire. These do.

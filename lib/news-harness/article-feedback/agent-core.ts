@@ -323,7 +323,7 @@ export function buildArticleFeedbackSystemPrompt(params: {
   /**
    * CLOUD mode — the SAME gate `getArticleFeedbackToolDefinitions` uses for the
    * `proposeFactCheck` declaration, so the prose and the declaration can never
-   * disagree (the bug F4's webSearch flag exists to prevent).
+   * disagree (the bug the webSearch flag exists to prevent).
    *
    * CLOUD-ONLY, and for two independent reasons. Substantively: the quick path
    * runs a gateway web search and a cloud synthesis call, so offering it in

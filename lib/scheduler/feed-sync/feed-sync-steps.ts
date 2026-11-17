@@ -160,7 +160,7 @@ const cullLowHeadlines = async (): Promise<void> => {
 };
 
 /**
- * ALREADY-READ SCREEN, cheapest apply point (relevance v3 §3). A server-returned
+ * ALREADY-READ SCREEN, cheapest apply point. A server-returned
  * article that re-serves a story the user already TAPPED OPEN is never persisted
  * at all: no suggestion row, no scoring pass, nothing to render or evict later.
  * The matching rules (article_id ∪ normalized-title Jaccard ≥ 0.55) and the
@@ -1213,7 +1213,7 @@ async function getLocalTopicTextsForPersona(): Promise<string[]> {
  * scoring existed, with no timing window to escape through. Rows missing
  * title/description are still tombstoned: no prompt can score empty text.
  *
- * ALREADY-READ BACKFILL (relevance v3 §3). The pre-persist screen upstream only
+ * ALREADY-READ BACKFILL. The pre-persist screen upstream only
  * sees THIS run's server response; it cannot help a row synced on an earlier
  * cycle and still `unscored` when the user finally read that story. This global
  * unscored scan is exactly where such a row is visible, so it doubles as the

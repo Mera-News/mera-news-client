@@ -367,7 +367,7 @@ describe('a row already on the device', () => {
     });
   });
 
-  // P7e: the legacy topics-empty window persisted matched_topics_json = null, which orphaned every
+  // The legacy topics-empty window persisted matched_topics_json = null, which orphaned every
   // article to "Also for you" for good. A later persona sync heals it, never overwriting real data.
   describe('matched topics are healed', () => {
     const topic = { topicId: 't1', text: 'ai', vectorScore: 0.9 };

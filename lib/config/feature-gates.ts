@@ -9,7 +9,7 @@
  * this puts on each `topHeadlines.scopes[]` entry.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * MUST STAY `false` UNTIL mera-server commit `40d7824` IS DEPLOYED TO PROD.
+ * MUST STAY `false` UNTIL THE SERVER THAT HONOURS THE PER-SCOPE `limit` IS IN PRODUCTION.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * Production's GraphQL schema is still

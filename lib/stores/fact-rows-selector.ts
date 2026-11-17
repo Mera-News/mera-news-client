@@ -758,7 +758,7 @@ export function buildFactRows(
     // `RENDER_GATE` to 0.4 — the SAME cutoff as `discardFloor` — so this branch
     // is no longer reachable in practice (kept as the safety net for if the two
     // constants ever diverge again). Applied to headline sections IDENTICALLY,
-    // per the brief: the bar is the existing one, not a new one.
+    // The bar is the existing one, not a new one.
     if (!isSectionMemberEligible(group.bucket)) continue;
     const projection = ownershipProjection(rep);
     const factId = resolveOwningFactLenient(

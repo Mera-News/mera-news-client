@@ -170,7 +170,7 @@ export function trailingQuestion(text: string): string | null {
 //
 // PRECISION FIRST, deliberately. A false positive costs a wasted leg AND a
 // rewrite of a sentence that was already correct; a false negative just leaves
-// today's behaviour. Validated against the 73 G4 final replies that touch save
+// today's behaviour. Validated against the 73 evaluation final replies that touch save
 // vocabulary: 40 fire, 1 false positive, 3 known misses recorded in the tests.
 // ---------------------------------------------------------------------------
 
@@ -205,7 +205,7 @@ const SAVE_SAFE = new RegExp(
     "|(?:check|confirm)[^.]{0,30}before saving" +
     "|already recorded" +
     // A NEGATIVE: "no new specifics were added" says the opposite of a save
-    // claim (device capture, C3).
+    // claim (device capture).
     "|\\bno (?:new )?(?:\\w+ ){0,2}(?:were|was|has been|have been) (?:added|saved|recorded|noted|stored)" +
     ')',
   'i',
@@ -216,7 +216,7 @@ const SAVE_SAFE = new RegExp(
  *
  * False on every turn without exception: nothing persists until the user taps a
  * proposal card, so no reply is ever entitled to this. `facts/generic.md`
- * forbids the same words in prose; measured on G4, 10% of turns said it anyway
+ * forbids the same words in prose; measured in an evaluation corpus, 10% of turns said it anyway
  * with a card on screen, which is the fourth time prompt wording has failed on
  * this model.
  */
@@ -278,7 +278,7 @@ export function claimsChangeHappened(text: string): boolean {
  *
  * The state block, the tool names, the skill ids, a thinking marker, and third
  * person about the user ("I'll extract the fact about their residence"). 4.3%
- * of G4 final replies carried one of these; 2.0% on the enforced arms.
+ * of evaluation final replies carried one of these; 2.0% on the enforced arms.
  */
 const INTERNALS = new RegExp(
   '(' +
@@ -364,7 +364,7 @@ const PROCESS_NARRATION = new RegExp(
     '|\\bloading (?:the|a|an) (?:skill|guideline|instructions)\\b' +
     '|\\bone moment while i\\b' +
     // Narrating how it READ the message: "I read that as answering the Porto
-    // question, but the word does not fit." (device capture, C4)
+    // question, but the word does not fit." (device capture)
     "|\\bi(?:'m|’m| am)? ?(?:read|took|reading|interpreted|understood) (?:that|this|it|your (?:message|reply|answer)) as\\b" +
     '|\\bas (?:an? )?(?:answer|reply) to (?:the|your|my) .{0,40}question\\b' +
     ')',
@@ -378,7 +378,7 @@ export function narratesProcess(text: string): boolean {
   if (!t.trim()) return false;
   // A CONDITIONAL offer is an ordinary sentence, not narration: "If you tell
   // me where you live, I'll look up the place" is a correct answer from the
-  // G4 corpus. The whole conditional sentence is set aside before matching.
+  // evaluation corpus. The whole conditional sentence is set aside before matching.
   const unconditional = t.replace(/\b(?:if|once|when) you\b[^.?!]*[.?!]?/gi, ' ');
   return PROCESS_NARRATION.test(unconditional);
 }

@@ -125,7 +125,7 @@ function aboutMeraAnswerNote(userMessage: string, languageName?: string): string
   // English question back in Dutch (staging round 1).
   const notEnglish = languageName && languageName !== 'English' ? ' The reference text is English; your answer is not.' : '';
   // The question is QUOTED: "their message" after a tool result was read as
-  // ambiguous, and two round-2 answers said the question had been cut off.
+  // ambiguous, and two answers in a later run said the question had been cut off.
   return `Their question: "${escapeUntrusted(userMessage, 500)}". Mera's reference text is in the explainMera `
     + `result above. Answer that question now, from that text only, ${lang}.${notEnglish} Do not call a tool.`;
 }
@@ -160,7 +160,7 @@ function explainedFrom(results: { name: string; result: unknown }[]): boolean {
 export const MAX_FORMAT_RETRIES = 2;
 
 /**
- * Several subjects in one turn (the `multi-subject` arm, audit B1): at most
+ * Several subjects in one turn (the `multi-subject` arm): at most
  * this many skills, and each segment after the first gets this many legs.
  * Three legs is lookups, the offer, and a closing sentence; the last of them
  * is the forced offer when nothing was offered yet.
@@ -174,7 +174,7 @@ export const SEGMENT_LEGS = 3;
  * THE POINT: the turn does not end here. mini-swe-agent raises `FormatError`,
  * appends the error to the SAME conversation and asks again, and its whole
  * loop rests on the model never being able to finish by talking. Ours could:
- * prose plus `finish_reason: stop` fell through to `break`, and 90 of 308 G2d
+ * prose plus `finish_reason: stop` fell through to `break`, and 90 of 308 evaluation
  * route legs ended that way. A dropped turn looked exactly like a finished one,
  * on screen and in the rows.
  */
@@ -204,7 +204,7 @@ export const MAX_REPLY_RETRIES = 1;
  *
  * Same shape as `routeFormatError`, and for the same measured reason: on this
  * model a rule in the system prompt is advice it can decline. `facts/generic.md`
- * has forbidden the save wording since the skill was written, and 10% of G4
+ * has forbidden the save wording since the skill was written, and 10% of evaluation
  * turns used it anyway.
  */
 export function replyFormatError(kind: 'save-claim' | 'change-claim' | 'leak' | 'process'): string {
@@ -315,7 +315,7 @@ export interface AgentState {
   /** The user's active filters, set by the driver before each turn. Listed on
    *  legs that can stage a card, so `retire_suppression` names a real id. */
   activeFilters?: { id: string; pattern: string }[];
-  /** Where the chat was opened, set by the driver (S2a): a `<surface>` message
+  /** Where the chat was opened, set by the driver: a `<surface>` message
    *  after the known facts, the hint alone on the route leg. */
   surfaceContext?: SurfaceContext | null;
   /** Stories the user followed from cards in this chat, in order, set by the
@@ -611,7 +611,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     // line already states the question that answer follows.
     answerPending: answerPending && lastQuestion === null,
     // THE ARM, APPLIED. Omitting this made every agent arm send a byte-identical
-    // leg-0 prompt, so g2b, G2c and G2d each compared the shipped configuration
+    // leg-0 prompt, so three evaluation runs each compared the shipped configuration
     // against itself across four "arms". `promptVariant` was declared on the
     // params, passed by the eval runner, and read nowhere.
     arm: params.promptVariant,
@@ -856,7 +856,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
    *  one is a RE-proposal of a fact already on file, not a new fact. */
   // EVERY fact on file, not just what find_similar_facts returned: a forced
   // leg re-offered "Follows EU regulation" beside a reply saying it was
-  // already on file (C3), and that turn had never called the lookup.
+  // already on file, and that turn had never called the lookup.
   const existingStatements = new Set<string>(
     state.persona.facts.map((f) => comparableStatement(f.statement)).filter(Boolean),
   );
@@ -975,7 +975,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     }
     if (index >= maxLegsThisTurn + formatRetries) {
       legBudgetHit = true;
-      // RUNNING OUT OF LEGS IS NOT THE SAME AS FAILING. Measured on G3: 16 of
+      // RUNNING OUT OF LEGS IS NOT THE SAME AS FAILING. Measured in an evaluation run: 16 of
       // the 18 baseline turns labelled `leg-cap` had already called
       // saveExtractedFacts, and the commonest "capped" shape was
       // load_skill > find_similar_facts > lookup_place > saveExtractedFacts,
@@ -1032,7 +1032,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     const messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string }[] = [
       { role: 'user', content: `<state>${stateLine}</state>` },
       { role: 'user', content: `<known_facts>\n${formatKnownFacts(state.persona.facts)}\n</known_facts>` },
-      // WHERE THE CHAT WAS OPENED (S2a): the hint only on the route leg, hint
+      // WHERE THE CHAT WAS OPENED: the hint only on the route leg, hint
       // and context on skill legs. Verbatim: the driver escaped its fields.
       ...(surfaceBlock(state.surfaceContext ?? null, skillLoaded !== null)),
       // STORIES ALREADY FOLLOWED from cards in this chat (labels are model text).
@@ -1677,7 +1677,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
         let droppedNegativeOffer = false;
         // ONE CURRENT HOME PER TURN. The model offered "Lives in Porto,
         // Portugal, EU" and "Lives in Porto, Porto, Portugal, EU" as two
-        // Replace cards on device (C1). Within a call the richest chain
+        // Replace cards on device. Within a call the richest chain
         // is kept; a home offered on a later leg is dropped.
         const homes = list.filter((e) => isHomeEntry(e));
         const bestHome = homes.length > 1
@@ -1692,7 +1692,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
           }
           const rawStatement = typeof entry.statement === 'string' ? entry.statement.trim() : '';
           // "Lives in Porto, Porto, Portugal, EU" (city and region share a
-          // name) reads as a stutter on the card (C1). Then the chain is
+          // name) reads as a stutter on the card. Then the chain is
           // checked against what the lookup returned: an invented rung goes
           // and the user's own term for an alias match comes first.
           const guarded = guardPlaceRungs(
@@ -2305,7 +2305,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     // Prose is not a proposal, so one forced leg runs before settling.
     // A reply that says there is nothing to add is an answer, not a missing
     // offer: forcing an offer after it put a card under "that's already on
-    // file" (C3).
+    // file".
     if (
       isFactSkill(skillLoaded)
       && !proposedSomething
@@ -2356,7 +2356,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     // ---- THE REPLY GATE -------------------------------------------------
     // Runs HERE and only here, so it sees the FINAL reply. An intermediate
     // leg's prose is overwritten by the next leg that produces content: 12 of
-    // the G4 occurrences were on legs no user ever saw, and correcting those
+    // the occurrences in an evaluation corpus were on legs no user ever saw, and correcting those
     // would spend legs rewriting discarded text.
     //
     // On CLEANED text, because that is what reaches the bubble.
@@ -2407,7 +2407,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
       if (gateKind === 'leak') {
         // A card on screen speaks for itself: the fallback's "anything else?"
         // beside a choice still waiting asked for more at the wrong moment
-        // (C4).
+        // (seen on a device).
         reply = proposedSomething ? '' : leakFallback;
         replyLeakUnfixed = true;
       } else {
@@ -2580,7 +2580,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   async function offerCombinedFactSplit(): Promise<string | null> {
     if (moreOptionsMode || terminalReason === 'transport-error') return null;
     // Never while a question is waiting: the split card used to land under
-    // "Which Porto did you mean?" before the move itself was settled (C1).
+    // "Which Porto did you mean?" before the move itself was settled.
     // The resumed turn that answers the question offers it instead.
     if (terminalReason === 'awaiting-user' || turn.pendingChoice !== null) return null;
     const kinds = skillsLoaded.map((id) => routeKindFromSkill(id));

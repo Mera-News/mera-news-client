@@ -230,7 +230,7 @@ export interface ArticlePipelineConfig {
   /** Cloud model used for scoring + reason generation. */
   model: string;
   // --- Second-pass FEED verifier (validated 2026-07-16 multistage experiment,
-  //     "Design A2 — tuned"; see CLOUD_FEED_VERIFIER_SYSTEM_PROMPT) -----------
+  //     tuned design; see CLOUD_FEED_VERIFIER_SYSTEM_PROMPT) -----------
   /** Enable the second-pass FEED verifier. A precision pass over only the
    *  first-pass FEED candidates (raw ≥ discardFloor) that demotes clear false
    *  positives out of FEED. Default ON — adopted from the experiment (+7.2pt
@@ -320,8 +320,8 @@ export interface TopicGenConfig {
    * regime.
    *
    * NOTE: the top-up sends a combo-only prompt, i.e. the same shape that failed
-   * at 2048 in generation. It has not been probed yet — see the plan's
-   * follow-ups.
+   * at 2048 in generation. It has not been probed yet; probing it is an
+   * open follow-up.
    */
   cloudThinkingMaxTokens: number;
   /**
@@ -345,7 +345,7 @@ export interface TopicGenConfig {
 /**
  * Deterministic math-relevance engine constants (— `scoring-engine/`).
  *
- * Property names use the plan's UPPER_SNAKE identifiers verbatim (W_*, P_*,
+ * Property names use the scoring design's UPPER_SNAKE identifiers verbatim (W_*, P_*,
  * HP_MULT, POP_SAT, HEADLINE_*) so the config surface reads 1:1 against
  * the scoring design. Every value is a SEED to be tuned against
  * `eval:golden`; config.test.ts pins each literal so drift fails loudly. These
@@ -582,10 +582,10 @@ export const DEFAULT_HARNESS_CONFIG: HarnessConfig = {
     // affinity component weights (positives sum to ≈ 1.0 at full saturation).
     // Rebalance: W_TOPIC 0.42→0.32, the freed 0.10 → W_BREADTH.
     // freshness decay removed (W_FRESH 0.08 deleted). The remaining
-    // seven positive weights are RENORMALIZED proportionally (÷0.92, the pre-A2
+    // seven positive weights are RENORMALIZED proportionally (÷0.92, the pre-rebalance
     // positive sum) so full-saturation affinity stays ≈1.0 and no borderline
-    // article slips under the 0.3 render gate from a ~0.08-raw drop. Pre-A2 →
-    // post-A2: 0.32→0.348, 0.10→0.109, 0.20→0.217, 0.08→0.087, 0.05→0.054,
+    // article slips under the 0.3 render gate from a ~0.08-raw drop. Before →
+    // after: 0.32→0.348, 0.10→0.109, 0.20→0.217, 0.08→0.087, 0.05→0.054,
     // 0.07→0.076, 0.10→0.109 (3dp; the seven sum to exactly 1.000).
     W_TOPIC: 0.348,
     W_BREADTH: 0.109,

@@ -168,7 +168,7 @@ export interface AgentTurnState {
    * The QUESTION ITSELF, not just that there was one.
    *
    * A boolean is enough to stop the agent asking twice and useless for reading
-   * the answer. Measured on G3: "Mostly the older road bridges over the Douro"
+   * the answer. Measured in an evaluation run: "Mostly the older road bridges over the Douro"
    * followed "you work on bridge inspections. Is that correct?" and routed to
    * `facts/interest` instead of `facts/profession`; "Try P" followed "a sister
    * in Porto! Let me save that for you." Both are answers whose referent the
@@ -202,7 +202,7 @@ export interface AgentTurnState {
    * The place a chip tap resolved, carried across the turns that RESUME the
    * skill which asked. Without it a resumed residence turn looked the city up
    * again, found the same ambiguity and asked the same question a second time
-   * (the audit's B2 took four confirmations for one move). Cleared on any turn
+   * (one audited move took four confirmations). Cleared on any turn
    * that is not a resume.
    */
   confirmedPlace: Place | null;
@@ -473,7 +473,7 @@ export interface AgentTurnResult {
     | 'no-proposal'
     /** The route leg produced no `load_skill` call, and still none after its
      *  format-error retries. The turn ends VISIBLY rather than as a settled
-     *  turn that silently did nothing, which is how 90 of 308 G2d route legs
+     *  turn that silently did nothing, which is how 90 of 308 evaluation route legs
      *  ended. */
     | 'no-route';
   /** Tool names the model invented, e.g. `add_fact`. Empty on a clean turn. */

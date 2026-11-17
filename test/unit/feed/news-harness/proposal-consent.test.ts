@@ -1,4 +1,4 @@
-// proposal-consent.test.ts — the PROPOSAL-level consent rule (G1).
+// proposal-consent.test.ts — the PROPOSAL-level consent rule.
 //
 // `chooseOne` is a property of the CARD, so the action-level guard inside
 // executeProposalActions cannot see it; this predicate is the single definition

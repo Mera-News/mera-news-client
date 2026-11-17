@@ -4,8 +4,8 @@
  *
  * ============================================================================
  * THIS FILE IS ONE OF TWO COPIES. THEY MUST MOVE TOGETHER.
- *   server (canonical): mera-server/libs/mera-shared/src/related-sort/
- *   app:                mera-app/lib/algorithms/
+ *   server (canonical): mera-news-data-server/libs/mera-shared/src/related-sort/
+ *   client:             mera-news-client/lib/algorithms/
  * See the banner in `geo-language-priority.ts` for why. The comments below are
  * the SPECIFICATION of this ordering, not commentary — they are what makes the
  * two copies checkable against each other. Do not trim them.

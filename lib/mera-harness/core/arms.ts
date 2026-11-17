@@ -45,7 +45,7 @@ export interface AgentArm {
    *  like `routerPrompt`: it never rewrites the shipped text, it follows it. */
   routerAddendum?: string;
   /** How a fact's topics are made. Absent means 'isolated+combo', which ships
-   *  (F1/F3): one isolated call per fact, then the deferred combination
+   *  one isolated call per fact, then the deferred combination
    *  pass. 'current' is the flow before it: a fact-only half and a combo half
    *  in one batch, with a location line and the other facts. The topic corpus
    *  runner reads this; the app does not. */
@@ -124,8 +124,8 @@ const ONESHOT_PROD: AgentArm = {
 /**
  * THE BEFORE, as an arm rather than as an older run.
  *
- * Everything in phase 2 is a bug fix, so it all landed unconditionally and
- * `baseline` is now the FIXED configuration. Comparing it against G2d would be
+ * Every later change is a bug fix, so it all landed unconditionally and
+ * `baseline` is now the FIXED configuration. Comparing it against an earlier run would be
  * a cross-run comparison, and NEAR latency swings roughly fourfold by time of
  * day, so a cross-run latency or cost number says as much about the hour as
  * about the change.
@@ -148,7 +148,7 @@ const PRE_ENFORCEMENT: AgentArm = {
 };
 
 /**
- * SEVERAL SUBJECTS IN ONE TURN (audit B1, release group G3). OFF by default:
+ * SEVERAL SUBJECTS IN ONE TURN. OFF by default:
  * it ships only after the corpus comparison against `baseline` passes.
  *
  * "I'm 34 and work as a product manager in Berlin. I moved here from Bangalore"
@@ -168,10 +168,10 @@ This section overrides the two-subjects tie-break above. When the message states
 };
 
 /**
- * THE TOPIC FLOW CONTROL (F6). The owner's rule, fixed before the run: the
+ * THE TOPIC FLOW CONTROL. The owner's rule, fixed before the run: the
  * isolated topics' share with no content word from any other fact must be at
  * least 95% and higher than this arm's first-pass share; guards are combo
- * topics naming the fact's subject, S7 near-duplicates at most 10%, ladder
+ * topics naming the fact's subject, near-duplicates within a set at most 10%, ladder
  * coverage not worse, and `error` checked on every row.
  */
 export const TOPICS_CURRENT_ARM_ID = 'topics-current';
@@ -267,7 +267,7 @@ export function routeEnforcementFor(arm: AgentArm): 'off' | 'on' {
   return arm.routeEnforcement ?? 'on';
 }
 
-/** Absent means OFF: one skill per turn is what ships until G3 is switched on. */
+/** Absent means OFF: one skill per turn is what ships until the multi-subject arm is switched on. */
 export function multiSubjectFor(arm: AgentArm): 'off' | 'on' {
   return arm.multiSubject ?? 'off';
 }

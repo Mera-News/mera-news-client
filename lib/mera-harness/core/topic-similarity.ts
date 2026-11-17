@@ -121,7 +121,7 @@ function subjectWords(text: string): string[] {
 /**
  * True when `topic` names `fact`'s own subject: a shared subject word, or a
  * shared 5-letter stem ("vegetarian" / "Vegetarian", "commuter" / "Commutes").
- * Used to keep a combination topic about its fact (F6) and to keep an
+ * Used to keep a combination topic about its fact and to keep an
  * isolated call's dedupe list free of other facts' subjects.
  */
 export function namesFact(topic: string, fact: string): boolean {

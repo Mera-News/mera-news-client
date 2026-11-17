@@ -1,4 +1,4 @@
-// No skill turn ends silent (A2). The owner's "it understands, shows the tool calls and
+// No skill turn ends silent. The owner's "it understands, shows the tool calls and
 // just stops": an acknowledgement, a few tool rows, then no reply, no card and no ending sentence.
 // Each case below is a staging row replayed leg for leg through the real loop.
 import {

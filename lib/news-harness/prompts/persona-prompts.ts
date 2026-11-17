@@ -51,7 +51,7 @@ import { render } from '../../harnesses/template';
 export type FilterToolsVariant = 'full' | 'compact' | 'off';
 
 /**
- * DEEP MODE question bank (item 17) — used in place of the standard
+ * DEEP MODE question bank, used in place of the standard
  * `EXAMPLE_QUESTIONS` when the user turns "Deeper questions" on.
  *
  * REPLACES rather than extends, and that is a hard budget requirement, not a
@@ -413,12 +413,12 @@ export function buildPersonaUpdateStaticPrompt(params: {
    *  Chosen by measurement per turn (planPersonaPrompt); `off` reproduces the
    *  earlier prompt exactly. Defaults to `full`. */
   filterTools?: FilterToolsVariant;
-  /** item 17 — swap in the deeper question bank. Applies to BOTH paths (the
+  /** Swap in the deeper question bank. Applies to BOTH paths (the
    *  bank is smaller than the standard one, so LOCAL stays inside budget). */
   deepMode?: boolean;
   /** False On this phone: no runCalibration tool and no line about it. Default true. */
   canCalibrate?: boolean;
-  /** item 13 — the user's "Web search in chat" toggle. CLOUD-only prose, and
+  /** The user's "Web search in chat" toggle. CLOUD-only prose, and
    *  only when ON: an off toggle must cost zero prompt tokens. */
   webSearch?: boolean;
   /** Experiment arm. Omitted or 'baseline' returns the shipped prompt BYTE FOR
@@ -577,7 +577,7 @@ export const CLOUD_TOPIC_GENERATION_SYSTEM_PROMPT = CLOUD_BASE_SLOTS["topic-gen/
 export const CLOUD_FACT_COMBO_TOPIC_GENERATION_SYSTEM_PROMPT = CLOUD_BASE_SLOTS["topic-gen/cloud-fact-combo-topic-generation-system-prompt"];
 
 /**
- * THE DEFERRED COMBINATION PASS (F3). Topic generation per fact is
+ * THE DEFERRED COMBINATION PASS. Topic generation per fact is
  * isolated; the topics that exist only because two facts sit side by side
  * come from this pass, which runs once per fact after a Profile chat that
  * changed facts closes (cloud only), over the fact plus up to 25 supporting

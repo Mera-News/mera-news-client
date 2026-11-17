@@ -1,4 +1,4 @@
-// The forcedOfferClosing arm (E2EE tool steps item 11), driven through the real loop with
+// The forcedOfferClosing arm, driven through the real loop with
 // a scripted model. The arm is OFF in production: this proves the wiring for when it flips,
 // and that off is byte-identical to baseline.
 import fs from 'node:fs';

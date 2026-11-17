@@ -192,7 +192,7 @@ describe('what is never offered', () => {
   });
 });
 
-describe('dismissal is final and keyed as the plan says', () => {
+describe('dismissal is final and keyed on the normalised text', () => {
   it('a dismissed topic stays gone, on the normalised text, even if the row was minted again', () => {
     const [first] = detectFollowInstead(flooded());
     const id = followInsteadProposal(first, { label: 'Katseye', searchText: 'katseye' }, BLANK).id;

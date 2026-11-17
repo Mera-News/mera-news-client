@@ -14,7 +14,7 @@ import { DEFAULT_HARNESS_CONFIG, type HarnessConfig } from '../core/config';
 
 // --- Band (the ONE relevance ladder) --------------------------------------
 //
-// relevance v3, §2: there used to be TWO independent ladders. `bucketOf` below
+// There used to be TWO independent ladders. `bucketOf` below
 // (0.4 / 0.6 / 0.8 / 1.0) fed Dashboard section viability, while the card pill
 // and the feed ordering read a SECOND set of cutoffs
 // (0.53 / 0.77 / 1.0) declared in lib/feed-ordering/priority-order.ts and

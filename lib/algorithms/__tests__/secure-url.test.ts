@@ -1,4 +1,4 @@
-// secure-url — the https-only guard for article URLs (item 16, defence in
+// secure-url — the https-only guard for article URLs (defence in
 // depth). The server already excludes insecure articles from every serving
 // path; these cases pin the behaviour for rows ALREADY on the device.
 

@@ -3,7 +3,7 @@
  * alongside ISO-3166 alpha-2 country codes.
  *
  * MIRROR, NOT AN IMPORT. This is a deliberate copy of
- * `mera-server/libs/mera-shared/src/enrichment/supranational-codes.ts` — the
+ * `mera-news-data-server/libs/mera-shared/src/enrichment/supranational-codes.ts` — the
  * two repos share no `node_modules` and this file must stay RN-free / import
  * nothing outside `lib/news-harness/`, so the vocabulary is duplicated rather
  * than reached across repos. Keep the two lists in sync by hand; this is a

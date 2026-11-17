@@ -28,7 +28,7 @@
 //
 // ── A generic category mints NOTHING (not a keyword fallback) ───────────────
 // The first cut of this gate degraded a generic category to a KEYWORD filter,
-// and QA caught it (F4): tapping "This category" on a "News"-category article
+// and QA caught it: tapping "This category" on a "News"-category article
 // produced an Activity entry `Suppressed: News` and a filter row literally
 // labelled "News". That is strictly worse than the structured filter being
 // refused — `keyword` is a normalized SUBSTRING scan over title + description +
@@ -95,7 +95,7 @@ export function categoryStem(category: string | null | undefined): string {
  * an empty value and for the generic "news" family.
  *
  * A false here means the caller must mint NOTHING — NOT a keyword filter on the
- * same text (see the F4 note in the header). The option then hides itself,
+ * same text (see the note in the header). The option then hides itself,
  * because `isInertActionLeaf` drops an action leaf that resolves to no actions.
  */
 export function isDiscriminatingCategory(category: string | null | undefined): boolean {

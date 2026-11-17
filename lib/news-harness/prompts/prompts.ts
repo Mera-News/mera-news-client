@@ -223,7 +223,7 @@ function cleanWhy(raw: string): string {
  *
  * DESIGN NOTE (for humans — do NOT explain to the model): validated 2026-07-16
  * against the golden-labeled 1000-article prod run (multistage experiment,
- * "Design A2 — tuned"). Two stable runs lifted FEED precision 73.2%→80.4% and
+ * tuned design). Two stable runs lifted FEED precision 73.2%→80.4% and
  * cut unrelated(EXCLUDE)-in-FEED 19→13 for +3.8% tokens, at a small recall cost
  * (78.5%→~76%). This is the GENERALIZED form of that experiment's persona-
  * hardcoded VERIFIER2_SYSTEM: every rule now references the [User facts] block

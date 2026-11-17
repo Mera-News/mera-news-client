@@ -594,7 +594,7 @@ describe('enqueueOrphanedReasons: one note per story', () => {
   });
 });
 
-describe('cold-start predicate (P7d isFeedCold)', () => {
+describe('cold-start predicate (isFeedCold)', () => {
   const scoreDonor = async (id = 'donor') => {
     await seedArticles([id]);
     await saveScoringResult(id, { relevance: 0.8, reason: '', reasonSkipped: false });
@@ -639,11 +639,11 @@ describe('cold-start predicate (P7d isFeedCold)', () => {
   });
 });
 
-// The P7d "Knob 1" cold-start partial (dispatch a >=10-row partial only on a
+// The former "Knob 1" cold-start partial (dispatch a >=10-row partial only on a
 // cold feed) is gone: MIN_DISPATCH is 5, so every chunk that knob would have
 // caught now dispatches on the fast path regardless of feed warmth. These tests
 // pin the replacement invariant — warmth no longer affects dispatch at all.
-describe('dispatch floor is warmth-independent (replaces P7d Knob 1)', () => {
+describe('dispatch floor is warmth-independent (replaces Knob 1)', () => {
   it('dispatches a >= MIN_DISPATCH batch on a COLD feed with no staleness escape', async () => {
     gateway({}, { pendingPolls: 99 });
     expect(await pipeline.isFeedCold()).toBe(true); // cold: no scored donors
@@ -677,7 +677,7 @@ describe('dispatch floor is warmth-independent (replaces P7d Knob 1)', () => {
   });
 });
 
-describe('cold-start poll latency (P7d Knob 2)', () => {
+describe('cold-start poll latency (Knob 2)', () => {
   // Stale oldest → the single-id partial dispatches via the staleness escape, giving us one
   // waiting-relevance batch to poll.
   async function oneWaitingBatch() {
@@ -1206,9 +1206,9 @@ describe('headlines in the ordinary queue + chunk-size round trip', () => {
     }
   });
 
-  it('decodes a pre-P4b batch (no persisted size) with the standard size', async () => {
+  it('decodes an older batch (no persisted size) with the standard size', async () => {
     // Strip the field from the persisted record — exactly the shape a batch submitted by a
-    // PRE-P4b build rehydrates with while still in flight.
+    // OLDER build rehydrates with while still in flight.
     const batchIds = await decodeSecondBatch(async () => {
       expect((await batches())[1].scoreChunkSize).toBe(MIN_DISPATCH);
       await patchBatch(1, (b) => {
@@ -1305,7 +1305,7 @@ describe('enqueueUnscoredEligible — story-grouping gate routing', () => {
 });
 
 // ---------------------------------------------------------------------------
-// bgsubmit: idempotency keys and staleness
+// Background submit: idempotency keys and staleness
 // ---------------------------------------------------------------------------
 
 describe('idempotency key', () => {

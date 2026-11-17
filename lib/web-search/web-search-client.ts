@@ -1,5 +1,5 @@
 // Web search — the app's ONLY client for the inference gateway's
-// `POST /v1/web-search` endpoint (item 13), in both of its shapes: `searchWeb`
+// `POST /v1/web-search` endpoint, in both of its shapes: `searchWeb`
 // for one query, `searchWebBatch` for several in a single request.
 //
 // WHAT LEAVES THE DEVICE: the query string, and nothing else. No facts, no

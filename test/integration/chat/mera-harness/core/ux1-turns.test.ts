@@ -80,7 +80,7 @@ const RESIDENT: AgentPersona = {
   facts: [{ id: 'home', statement: 'Lives in Amsterdam, North Holland, Netherlands, EU', attribute: 'location: residence' }],
 };
 
-describe('B1 (G1 part): ask_choice ends the turn, not the leg', () => {
+describe('ask_choice ends the turn, not the leg', () => {
   it('a save placed after the question in the same leg still reaches the tool', async () => {
     const h = harness([
       res({ content: 'Berlin, one moment.', toolCalls: [tc('load_skill', { id: 'facts/origin' })] }),
@@ -105,7 +105,7 @@ describe('B1 (G1 part): ask_choice ends the turn, not the leg', () => {
   });
 });
 
-describe('B13: a facts turn ends with an offer', () => {
+describe('a facts turn ends with an offer', () => {
   it('the last leg is the forced offer, even when the turn walks to the cap', async () => {
     const h = harness([
       res({ content: 'The Champions League.', toolCalls: [tc('load_skill', { id: 'facts/interest' })] }),
@@ -144,7 +144,7 @@ describe('B13: a facts turn ends with an offer', () => {
   });
 });
 
-describe('B14: the acknowledgement is never the reply', () => {
+describe('the acknowledgement is never the reply', () => {
   it('planning narration from the route leg reaches neither bubble', async () => {
     const h = harness([
       res({
@@ -369,7 +369,7 @@ describe('a combined origin-and-home fact is offered its split once', () => {
   });
 });
 
-describe('F7 ruling: a typed reply while a card waits', () => {
+describe('a typed reply while a card waits', () => {
   it('a plain no resumes the question and is read as a no', async () => {
     const state = createAgentState(RESIDENT);
     state.turn.lastQuestion = 'Want me to add the Champions League?';
@@ -396,9 +396,9 @@ describe('F7 ruling: a typed reply while a card waits', () => {
   });
 });
 
-// Batch 3 device captures (C1, C3, C4).
+// Device captures (third batch).
 describe('batch 3 captures', () => {
-  it('C1: marks only the route leg for streaming to the user', async () => {
+  it('marks only the route leg for streaming to the user', async () => {
     const flags: (boolean | undefined)[] = [];
     const h = harness([
       res({ content: 'Porto.', toolCalls: [tc('load_skill', { id: 'facts/origin' })] }),
@@ -410,7 +410,7 @@ describe('batch 3 captures', () => {
     expect(flags).toEqual([true, false]);
   });
 
-  it('C1: the combined-fact split waits until the question is answered', async () => {
+  it('the combined-fact split waits until the question is answered', async () => {
     const COMBINED: AgentPersona = {
       surface: 'CONFIG', languageName: 'English',
       facts: [{ id: 'c1', statement: 'Expat from India living in Nieuw West, Amsterdam', attribute: COMBINED_ORIGIN_KEY }],
@@ -425,7 +425,7 @@ describe('batch 3 captures', () => {
     expect(h.saves).toEqual([]);
   });
 
-  it('C3: a reply saying it is already on file gets no forced offer', async () => {
+  it('a reply saying it is already on file gets no forced offer', async () => {
     const onFile: AgentPersona = {
       surface: 'CONFIG', languageName: 'English',
       facts: [{ id: 'e1', statement: 'Follows EU regulation', attribute: 'topics: general interests' }],
@@ -442,7 +442,7 @@ describe('batch 3 captures', () => {
     expect(out.replyRetries).toBe(0);
   });
 
-  it('C3: a fact already on file is never offered again, even in other words', async () => {
+  it('a fact already on file is never offered again, even in other words', async () => {
     const onFile: AgentPersona = {
       surface: 'CONFIG', languageName: 'English',
       facts: [{ id: 'e1', statement: 'Follows the EU regulation.', attribute: 'topics: general interests' }],
@@ -457,7 +457,7 @@ describe('batch 3 captures', () => {
     expect(out.reProposals).toBe(1);
   });
 
-  it('C4: an acknowledgement narrating how it read the message is dropped', async () => {
+  it('an acknowledgement narrating how it read the message is dropped', async () => {
     const h = harness([
       res({ content: 'I read that as answering the Porto question, but the word does not fit.', toolCalls: [tc('load_skill', { id: 'facts/origin' })] }),
       res({ content: 'Got it, from India.' }),
@@ -468,9 +468,9 @@ describe('batch 3 captures', () => {
   });
 });
 
-// Batch 4 device captures (C1, C4).
+// Device captures (fourth batch).
 describe('batch 4 captures', () => {
-  it('C1: two readings of the same new home are ONE card', async () => {
+  it('two readings of the same new home are ONE card', async () => {
     const h = harness([
       res({ content: 'Porto.', toolCalls: [tc('load_skill', { id: 'facts/residence' })] }),
       res({
@@ -490,7 +490,7 @@ describe('batch 4 captures', () => {
     expect(out.reProposals).toBe(1);
   });
 
-  it('C1: a second home offered on a later leg is dropped', async () => {
+  it('a second home offered on a later leg is dropped', async () => {
     const h = harness([
       res({ content: 'Porto.', toolCalls: [tc('load_skill', { id: 'facts/residence' })] }),
       res({ toolCalls: [tc('saveExtractedFacts', { extracted_user_information: [{ statement: 'Lives in Porto, Portugal, EU', questionnaire_attribute: CANONICAL_LOCATION_KEY }] })] }),
@@ -501,7 +501,7 @@ describe('batch 4 captures', () => {
     expect(h.saves.flat().map((e) => e.statement)).toEqual(['Lives in Porto, Portugal, EU']);
   });
 
-  it('C4: a replaced leak beside a card does not ask for more', async () => {
+  it('a replaced leak beside a card does not ask for more', async () => {
     const leak = "I'll extract the fact about their residence from your message.";
     const h = harness([
       res({ content: 'India.', toolCalls: [tc('load_skill', { id: 'facts/origin' })] }),
@@ -515,7 +515,7 @@ describe('batch 4 captures', () => {
   });
 });
 
-// Batch 5 device capture (C1): "I moved to Porto" beside "Lives in
+// Device capture (fifth batch): "I moved to Porto" beside "Lives in
 // Berlin..." produced a plain Add card, which would leave two homes.
 describe('a move replaces the current home', () => {
   const BERLIN_HOME: AgentPersona = {
@@ -671,7 +671,7 @@ describe('districts, typos and the place the user named', () => {
     expect(out.reply).toBe('Porto Santo is an island in Madeira.');
   });
 
-  it('D13a: a place matched through an alias keeps the user\'s term first', async () => {
+  it('a place matched through an alias keeps the user\'s term first', async () => {
     const h = harness(
       [
         res({ content: 'Porto Santo.', toolCalls: [tc('load_skill', { id: 'facts/residence' })] }),
@@ -686,7 +686,7 @@ describe('districts, typos and the place the user named', () => {
     ]);
   });
 
-  it('D13b: an invented rung is removed and the user\'s term restored in a relative\'s fact', async () => {
+  it('an invented rung is removed and the user\'s term restored in a relative\'s fact', async () => {
     const h = harness(
       [
         res({ content: 'Porto Santo.', toolCalls: [tc('load_skill', { id: 'facts/origin' })] }),
@@ -1261,7 +1261,7 @@ describe('stop-showing-card: a stopped interest gets no invented card', () => {
     expect(line).toContain('Never say it is done or all set');
   });
 
-  // F7: a typed yes or no resumes the question; the tap rule would contradict it.
+  // A typed yes or no resumes the question; the tap rule would contradict it.
   it.each([['answeredYesTo'], ['answeredNoTo']])('a waiting fact card leaves the tap rule out on %s', (key) => {
     const line = buildStateLine({
       routeKind: null, resolvedPlaces: null, similarFactCount: null, answerPending: false, resolvedChoiceText: null,

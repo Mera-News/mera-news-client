@@ -228,7 +228,7 @@ export function formatShowCount(c: FeedShowCount, format: (n: number) => string)
 
 /** Whether the picks/not-read divider is true: at least one tail card still
  *  SHOWS an article Mera has not read. Tail rows that Mera read stay in place
- *  for the session (R3), so once every one of them is read the divider goes.
+ *  for the session, so once every one of them is read the divider goes.
  *  `shown` is the article a card shows (feed-row-display's
  *  `displayedSuggestionOf`), never the possibly stale list item. */
 export function showsNotReadDivider(

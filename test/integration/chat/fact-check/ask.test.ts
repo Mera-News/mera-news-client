@@ -205,7 +205,7 @@ describe('the retention of the checked article', () => {
 
   it('a failed keep never fails the ask or degrades its outcome', async () => {
     serveChecks({ ask: () => checkRow() });
-    // R23: one failing call on a real object; the real client swallows it.
+    // One failing call on a real object; the real client swallows it.
     const keep = jest.spyOn(retention, 'keepArticleForFactCheck').mockRejectedValueOnce(new Error('disk full'));
 
     const outcome = await requestFactCheck('a1', 'T');

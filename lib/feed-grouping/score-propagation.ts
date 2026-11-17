@@ -21,7 +21,7 @@
  * story-impression service and the pure story-grouping utility, and has no edge
  * back into scoring.)
  *
- * ALREADY-READ GATE (relevance v3 §3): before any grouping or election,
+ * ALREADY-READ GATE: before any grouping or election,
  * `gateUnscoredForScoring` drops candidates that re-serve a story the user
  * already TAPPED OPEN and writes them terminal `already_read`. Feed-sync
  * hydration screens the same way one step earlier (never inserting the row at

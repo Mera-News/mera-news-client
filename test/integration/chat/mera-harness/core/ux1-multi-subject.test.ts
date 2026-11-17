@@ -1,4 +1,4 @@
-// B1 (release group G3): several subjects in one turn, behind the
+// Several subjects in one turn, behind the
 // `multi-subject` arm. OFF by default; these pin both the arm and the control.
 
 import { createAgentState, runAgentTurn, type AgentPersona } from '@/lib/mera-harness/core/core';

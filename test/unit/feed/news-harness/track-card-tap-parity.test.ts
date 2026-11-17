@@ -1,4 +1,4 @@
-// track-card-tap-parity.test.ts — A15: the cloud prompts and the on-device
+// track-card-tap-parity.test.ts — the cloud prompts and the on-device
 // pending line tell the model the SAME thing about a follow card, so the two
 // engines cannot drift apart on whether the user picks one or several.
 // The cloud SYSTEM prompts are deliberately not carriers: the wording there
@@ -24,7 +24,7 @@ const trackCard: StagedProposal = {
   })),
 };
 
-describe('follow card wording parity (A15)', () => {
+describe('follow card wording parity', () => {
   it.each([
     ['cloud follow pending line', () => buildFollowStoryContext({ nowMs: 0, proposal: trackCard })],
     [

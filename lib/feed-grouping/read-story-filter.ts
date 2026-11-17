@@ -1,5 +1,5 @@
 /**
- * Already-READ story exclusion — the pre-scoring gate (relevance v3 §3).
+ * Already-READ story exclusion — the pre-scoring gate.
  *
  * THE PROBLEM (user report, corroborated on a live device 2026-08-05): stories
  * the user already TAPPED OPEN keep coming back into the feed. Today's only

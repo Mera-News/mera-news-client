@@ -7,7 +7,7 @@ import type { PersonaScoringContext, PersonaLocationSnapshot } from '@/lib/news-
 
 const cfg = DEFAULT_HARNESS_CONFIG.scoringEngine;
 const NOW = 1_700_000_000_000;
-// Round-3 A2 removed freshness decay — pubDate no longer affects the score.
+// The scoring rework removed freshness decay — pubDate no longer affects the score.
 // These are kept only to exercise the (now score-neutral) pubDateMs field.
 const OLD = NOW - 100 * 3_600_000;
 const FRESH = NOW - 1 * 3_600_000;

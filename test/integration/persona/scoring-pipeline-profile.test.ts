@@ -1,4 +1,4 @@
-// route1 P8b: a scoring run is bound to ONE model profile (provider, model, key) chosen from the
+// A scoring run is bound to ONE model profile (provider, model, key) chosen from the
 // scoring lane at creation. Submits use that profile; when it goes down, unsent batches go into a
 // new run on the next profile (never encrypted to another key), and the lane's outage is shown
 // instead of an endless "Analyzing relevance".

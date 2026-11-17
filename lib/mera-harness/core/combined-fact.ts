@@ -3,8 +3,8 @@
 // Origin and residence used to be composed into ONE fact ("Expat from India
 // living in Amsterdam, Netherlands, EU") under its own key. That fact carried
 // the user's home without the home key, so a later move replaced the
-// residence fact and left the combined one naming the old city (the audit's
-// B3), and an origin turn could replace the real residence fact with it.
+// residence fact and left the combined one naming the old city (an audit
+// found it), and an origin turn could replace the real residence fact with it.
 // Owner ruling: stop combining. Existing combined facts get ONE offer to split.
 
 /** The key every combined fact was written under (`facts/origin.md`). */

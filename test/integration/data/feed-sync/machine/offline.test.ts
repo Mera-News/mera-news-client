@@ -1,4 +1,4 @@
-// Going offline mid-run and coming back, and the wake lock (B1.4) around it: the real network store
+// Going offline mid-run and coming back, and the wake lock around it: the real network store
 // is flipped while the run is held at a network-dependent stage (a held persona or hydrate
 // response), and the machine parks, drops its lock, and resumes. expo-keep-awake is the observed
 // native edge.

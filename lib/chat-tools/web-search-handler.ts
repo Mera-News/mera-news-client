@@ -1,4 +1,4 @@
-// `webSearch` — the chat tool behind the "Web search in chat" toggle (item 13).
+// `webSearch` — the chat tool behind the "Web search in chat" toggle.
 //
 // TWO GATES, both load-bearing, and they guard different failures:
 //

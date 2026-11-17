@@ -1,6 +1,6 @@
 // feed-select/ownership — pure fact-ownership + display-bucket cores.
 // RN-free: no DB/store imports; consumes plain projections. Ported from the
-// deleted sections.test.ts in Round-3 C3 (the ownership + bucketOf cases).
+// deleted sections.test.ts (the ownership + bucketOf cases).
 
 import {
   resolveOwningFact,

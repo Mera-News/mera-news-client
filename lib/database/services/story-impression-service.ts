@@ -92,7 +92,7 @@ export async function getAll(): Promise<StoryImpressionModel[]> {
 }
 
 /**
- * OPENS-ONLY seen set (USER DECISION, master plan §41c + addendum A2.3): a story
+ * OPENS-ONLY seen set (owner decision): a story
  * counts as "seen" ONLY when it was explicitly OPENED/read (`opened=true`), NEVER
  * on a mere impression. This one set feeds BOTH:
  *   (a) swipe-deck exclusion — the deck drops any suggestion whose article_id OR
@@ -201,7 +201,7 @@ export async function getOpenedSeenBreakdown(
 
 /**
  * Snapshotted normalized titles of OPENED rows only — the title-Jaccard dedup
- * fallback (addendum A2.2) for when a fresh suggestion has neither a matching
+ * fallback for when a fresh suggestion has neither a matching
  * article_id nor a stable_cluster_id in `getOpenedSeenSet()`. The store compares
  * a candidate's normalized title against these via `titleJaccard ≥
  * TITLE_JACCARD_PROPAGATION_THRESHOLD` (0.55); fail-open (no match ⇒ not seen).

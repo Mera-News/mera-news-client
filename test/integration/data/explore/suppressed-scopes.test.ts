@@ -30,7 +30,7 @@ describe('getSuppressedScopeIds', () => {
         expect(await getSuppressedScopeIds()).toEqual(['country:IND', 'country:FRA']);
     });
 
-    // A restore writes the backed-up row verbatim, so a pre-navx device brings its old city and
+    // A restore writes the backed-up row verbatim, so a device from before the tab redesign brings its old city and
     // region entries back. They must vanish on read, with no migration.
     it('drops legacy city and region entries seeded the way a restore writes them', async () => {
         await setSetting(KEY, JSON.stringify(['city:IND:mumbai', 'country:IND', 'region:FRA:bretagne']));

@@ -54,7 +54,7 @@ const WORKED_EXAMPLE = [
   'Schengen entry rules',
 ];
 
-describe('S7 gate liveness', () => {
+describe('near-duplicate gate liveness', () => {
   // THE POINT OF THIS TEST. A near-duplicate gate measured AFTER a
   // near-duplicate filter can be a check that cannot fail. It is live only
   // because the filter acts at 0.75 and never on subsets while the detector

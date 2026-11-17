@@ -320,7 +320,7 @@ export async function revertChange(changeLogId: string): Promise<boolean> {
     case ACTION_NAMES.ADD_SUPPRESSION: {
       const targetId = requireTargetId(action, row.id);
       // Undoing a HARD add retires the filter, so its casualties must come
-      // back — the mirror of the purge the add performed (D12c).
+      // back — the mirror of the purge the add performed.
       sweepInput.hardFilter = await suppressionWasHard(targetId);
       await suppressionService.retireSuppression(targetId);
       break;

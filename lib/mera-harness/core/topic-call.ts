@@ -117,7 +117,7 @@ const LEGACY_EMPTY_RETRY_NUDGE =
 export function topicSkillForAttribute(attribute: string | null | undefined): string {
   const words = (attribute ?? '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
   const has = (...w: string[]) => words.some((x) => w.includes(x));
-  // ORDER IS MEANING (F6, measured): family before location ("family:
+  // ORDER IS MEANING (measured): family before location ("family:
   // parents location" is a relative's), expat and origin before residence
   // ("expat in country of residence" is the expat status), languages before
   // origin ("background: languages" returned [] from origin 6 of 6). A home
@@ -151,7 +151,7 @@ export function buildTopicUserMessage(p: GenerateTopicsParams): string {
     lines.push(`Attribute: ${escapeUntrusted(p.fact.questionnaireAttribute, 120)}`);
   }
   if (p.fact.places) lines.push(`Place: ${escapeUntrusted(p.fact.places, 200)}`);
-  // A DEDUPE LIST, NOT CONTEXT (F6, measured): the model read the list as
+  // A DEDUPE LIST, NOT CONTEXT (measured): the model read the list as
   // facts about the person, and a school fact whose list held "Poland news"
   // came back with six Poland school topics. So this fact's own topics are
   // listed only when they name this fact, and the block says what it is.

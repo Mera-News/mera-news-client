@@ -145,7 +145,7 @@ describe('buildStoryScopePrompt', () => {
   });
 });
 
-describe('story-scope label copy (F34)', () => {
+describe('story-scope label copy', () => {
   it('keeps the word "scope" out of the label the user reads', () => {
     expect(STORY_SCOPE_SYSTEM_PROMPT).toContain('never use the word "scope" in it');
   });

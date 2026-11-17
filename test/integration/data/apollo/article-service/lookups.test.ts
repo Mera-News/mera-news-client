@@ -185,7 +185,7 @@ describe('getArticleById', () => {
         expect(await ArticleService.getArticleById('art-1')).toBeNull();
     });
 
-    // A check is shown only to the device that asked for it (navx): the article query must never
+    // A check is shown only to the device that asked for it: the article query must never
     // carry one another reader asked for.
     it('never selects a fact check on the article', async () => {
         const sent = recordOps();

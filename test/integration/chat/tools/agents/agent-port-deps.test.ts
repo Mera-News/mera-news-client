@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 afterEach(() => server.events.removeAllListeners());
 
-// ux1 C1: every leg's text streamed into the acknowledgement bubble.
+// Every leg's text streamed into the acknowledgement bubble.
 describe('makeAgentDeps streams only the leg the loop marks', () => {
   it('forwards deltas for streamToUser legs only, and sends the other legs as one envelope', async () => {
     server.use(...mockGateway(() => 'hi'));
@@ -142,7 +142,7 @@ describe('hindifix A: explainMera through the device port', () => {
   });
 });
 
-describe('ux2 D10: web search through the device port', () => {
+describe('web search through the device port', () => {
   it('offers webSearch while the setting is on and runs it on the device: one gateway search per query', async () => {
     await setWebSearchInChat(true);
     const deps = makeAgentDeps('what is porto santo', jest.fn());

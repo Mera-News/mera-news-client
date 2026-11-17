@@ -84,7 +84,7 @@ describe('the router prompt practises what it preaches', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The reply gate detectors, against the FROZEN G4 corpus.
+// The reply gate detectors, against a FROZEN evaluation corpus.
 //
 // Every string here is a real final reply from the 2026-09-18 run, already
 // cleaned the way the loop cleans it. Classified by hand from the run, not by

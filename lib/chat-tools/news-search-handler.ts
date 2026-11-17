@@ -1,5 +1,5 @@
 // `searchNews` — the chat tool that pulls REAL articles from Mera's own index
-// into a conversation (item 12b).
+// into a conversation.
 //
 // Server contract: `searchNews(query: String!, limit: Int): [NewsSearchHit!]!`,
 // guarded and metered-EXEMPT, capped at 25 server-side. The hit deliberately

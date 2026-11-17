@@ -44,7 +44,7 @@ describe('chat-phase orders', () => {
     }
   });
 
-  it('puts `webSearch` last: it runs BETWEEN model calls (ux2 D10)', () => {
+  it('puts `webSearch` last: it runs BETWEEN model calls', () => {
     // Published by the device port after the leg that asked for it, so it must
     // outrank whatever that leg showed; the next call's 'reset' clears it.
     expect(CLOUD_PHASE_ORDER[CLOUD_PHASE_ORDER.length - 1]).toBe('webSearch');

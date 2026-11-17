@@ -249,7 +249,7 @@ describe('ingestFeedbackRequests', () => {
             });
         };
 
-        it('DATA-U16a-1: no drawer row is created for an entry that never reached the state row', async () => {
+        it('no drawer row is created for an entry that never reached the state row', async () => {
             spyLogger();
             failOneStateWrite();
             await ingestFeedbackRequests([req(A)], NOW);

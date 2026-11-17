@@ -596,7 +596,7 @@ describe('propagateToUnscoredSiblings', () => {
 });
 
 // ===========================================================================
-// gateUnscoredForScoring: already-read exclusion (relevance v3 §3)
+// gateUnscoredForScoring: already-read exclusion
 // ===========================================================================
 
 describe('gateUnscoredForScoring: already-read exclusion', () => {

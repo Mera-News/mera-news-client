@@ -115,7 +115,7 @@ const TOOL_GUIDE = `## Your tools
  *        No row matches: answer briefly and stop.
  *
  * With the catch-all stranded, "no row matches" was reachable on every turn,
- * and 90 of 308 route legs in G2d took it: prose, `finish_reason: stop`, no
+ * and 90 of 308 evaluation route legs took it: prose, `finish_reason: stop`, no
  * skill, a turn that looks settled and did nothing. Those legs were the model
  * obeying the prompt.
  *
@@ -127,7 +127,7 @@ const TOOL_GUIDE = `## Your tools
  * The four-line procedure that shipped before router.md was wired up, kept
  * VERBATIM as the `pre-enforcement` control arm's value.
  *
- * Its step 3 is the sentence 90 of 308 G2d route legs obeyed. It is preserved
+ * Its step 3 is the sentence 90 of 308 evaluation route legs obeyed. It is preserved
  * rather than deleted because a before/after needs a before, and the before has
  * to be the thing that was actually measured, not a cleaned-up version of it.
  */

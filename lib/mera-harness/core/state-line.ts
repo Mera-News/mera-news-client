@@ -147,7 +147,7 @@ export function buildStateLine(input: StateLineInput): string {
       + 'the user can still answer them.'
       // A FACT CARD APPLIES ONLY ON A TAP. Said only when no proposal card
       // waits (that branch carries its own rule) and no typed yes or no
-      // resumes a question (F7): "ok" beside a fact card got "All set", which
+      // resumes a question: "ok" beside a fact card got "All set", which
       // nothing on screen had done.
       + (input.pendingCard || input.cardThisTurn || input.answeredYesTo || input.answeredNoTo
         ? ''

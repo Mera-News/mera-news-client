@@ -494,7 +494,7 @@ export interface MatchedTopicMeta {
 }
 
 /** Serialize matched-topic entries into the stored matched_topics_json shape.
- *  Shared by the insert path and the P7e existing-row backfill so both write the
+ *  Shared by the insert path and the existing-row backfill so both write the
  *  identical format. */
 export function buildMatchedTopicsJson(matched: MatchedTopicMeta[]): string {
   return JSON.stringify(
@@ -509,7 +509,7 @@ export function buildMatchedTopicsJson(matched: MatchedTopicMeta[]): string {
 /** True when a stored matched_topics_json holds no topics (null, empty string,
  *  or a JSON empty array) — the marker of a row persisted via the legacy
  *  topics-empty fallback. Unparseable non-empty values are treated as present so
- *  the P7e backfill never clobbers real data. */
+ *  the backfill never clobbers real data. */
 export function isMatchedTopicsJsonEmpty(json: string | null | undefined): boolean {
   if (!json) return true;
   try {

@@ -131,7 +131,7 @@ const ASSESSMENTS = new Set(['supported', 'disputed', 'unsupported', 'unverifiab
 
 /**
  * Words that flip a verdict when they appear BEFORE it. Copied from
- * `mera-server/libs/mera-shared/src/fact-check/gemini-fact-check.service.ts`
+ * the server's Gemini fact-check service
  * so the two implementations cannot drift apart while both exist.
  */
 const NEGATIONS = new Set([

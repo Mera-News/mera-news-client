@@ -347,7 +347,7 @@ export function resolveUserLocationFact<T extends UserLocationCandidate>(
 }
 
 /**
- * DEPRECATE (F1): no app path calls this any more; every topic run is a
+ * DEPRECATED: no app path calls this any more; every topic run is a
  * queued, isolated job through the skill core. Kept only because
  * harness-local/scripts/test-news-harness-persona-management.ts imports it;
  * delete together with that script's migration.

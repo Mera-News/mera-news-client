@@ -1,4 +1,4 @@
-// §8 structural assertions for lib/database/migrations.ts
+// Structural assertions for lib/database/migrations.ts
 // Pure data — no WatermelonDB native runtime needed.
 // schemaMigrations() returns { sortedMigrations, minVersion, maxVersion, validated }
 
@@ -376,7 +376,7 @@ describe('specific migration versions', () => {
   });
 });
 
-// ── P7b: v37/v41 rewritten additively (no more drop/recreate of the cache) ──
+// ── v37/v41 rewritten additively (no more drop/recreate of the cache) ──
 describe('article_suggestions additive migrations (v37 / v41)', () => {
   const byVersion = new Map(migList.map((m) => [m.toVersion, m]));
 
@@ -503,13 +503,13 @@ describe('article_suggestions additive migrations (v37 / v41)', () => {
   });
 });
 
-// ── P7b: CONVERGENCE — the migration chain reproduces schema.ts exactly ──────
+// ── CONVERGENCE — the migration chain reproduces schema.ts exactly ──────
 //
 // Reconstruct each table's column set purely from the migration steps
 // (last create_table for the table ∪ every later add_columns for it) and assert
 // set-equality (name + isOptional + isIndexed) with lib/database/schema.ts.
 //
-// This protects the critical invariant behind the P7b rewrite: every possible
+// This protects the critical invariant behind the additive rewrite: every possible
 // device start version (≤v33, v34-36, old-destructive-v37..v40, v41+) must end
 // with the IDENTICAL column set, and NO path may add the same column twice — a
 // duplicate ALTER would throw and brick DB setup. The additivity check below
@@ -660,7 +660,7 @@ describe('v51 adds fact_checks additively and touches nothing else', () => {
 
 // ── v52: per-claim identity, ADDITIVE ONLY ──────────────────────────────────
 // `fact_checks` is the one table in this database whose contents cannot be
-// re-fetched: after the pivot the whole check runs on the device and the server
+// re-fetched: the whole check now runs on the device and the server
 // pipeline that used to hold a cross-user copy is switched off. A DROP+recreate
 // here is not a re-sync, it is permanent loss — strictly worse than the v37/v41
 // incident that only emptied a rebuildable feed.

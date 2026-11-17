@@ -241,7 +241,7 @@ const ACTIONABLE_EVENT_TYPES = new Set([
 ]);
 
 /**
- * The "signedSoftmaxMax" of §2.2 with a sharp temperature → the single
+ * The "signedSoftmaxMax" combiner with a sharp temperature → the single
  * strongest-magnitude matched topic dominates (sign preserved). A solo topic
  * returns its own value; adding a weaker topic never lowers the result
  * (monotone), and a strongly-negative learned topic wins over a weaker positive

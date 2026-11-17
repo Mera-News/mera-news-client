@@ -26,10 +26,10 @@ const trackProposal = (labels: string[]): StagedProposal => ({
   })),
 });
 
-// F34: the model wrote "tracking scope" at the user. The line it writes
+// The model wrote "tracking scope" at the user. The line it writes
 // beside the card is fixed, and the word is banned, in the prompt and in the
 // cloud tool description alike.
-describe('follow-story card copy (F34)', () => {
+describe('follow-story card copy', () => {
   it('asks for the fixed line and bans "scope" in the local prompt', () => {
     const prompt = buildFollowStorySystemPrompt({ needsToolFormat: true });
     expect(prompt).toContain('"Pick the story to follow below."');

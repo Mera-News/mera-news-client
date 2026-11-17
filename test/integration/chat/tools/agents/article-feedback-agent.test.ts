@@ -536,7 +536,7 @@ describe('executeTool: applyProposal / cancelProposal', () => {
     });
   });
 
-  // --- G1: a SINGLE-SELECT card may only be resolved by a tap ---
+  // --- A SINGLE-SELECT card may only be resolved by a tap ---
   //
   // Regression: applyProposal used to hand the executor `proposal.actions` wholesale, so a typed
   // "yes" against a 3-pill proposeTrack card minted three topics AND three followed stories.

@@ -85,7 +85,7 @@ export async function persistAndLinkV2Suggestions(
   const toInsert = deduped.filter((a) => !existingById.has(a._id));
 
   // Updates to already-persisted rows: a changed cluster membership and/or the
-  // P7e matched-topics backfill. Each field is optional and applied only when
+  // Matched-topics backfill. Each field is optional and applied only when
   // set, so an unchanged cluster is left alone while topics are healed and vice
   // versa.
   const existingUpdates: {
@@ -111,7 +111,7 @@ export async function persistAndLinkV2Suggestions(
       hasUpdate = true;
     }
 
-    // P7e: heal rows persisted during the topics-empty window. The legacy
+    // Heal rows persisted during the topics-empty window. The legacy
     // fallback persisted matched_topics_json = null, so section ownership
     // orphaned every article to "Also for you" (sticky, since a re-sync only
     // ever touched clusterMembershipsJson). When we now have persona matched

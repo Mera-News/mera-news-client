@@ -6,7 +6,7 @@
 // mutation path that commits persona changes without going through that seam,
 // so it silently ran no sweeps at all — block "cricket", watch the feed purge,
 // then undo the filter from the Activity screen and the purged articles were
-// gone forever, inside the very 48h window D12c exists to protect. Two call
+// gone forever, inside the very 48h window the un-exclude path exists to protect. Two call
 // sites, one decision, no shared owner: that is the drift that produced the bug.
 //
 // THE TRICK that keeps them from drifting again: a revert needs the MIRROR of

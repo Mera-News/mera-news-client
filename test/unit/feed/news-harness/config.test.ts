@@ -339,7 +339,7 @@ describe('DEFAULT_HARNESS_CONFIG.scoringEngine', () => {
   });
 
   it('pins topic weighting + popularity saturation', () => {
-    // Round-3 A2 removed the freshness knees (FRESH_FULL/DECAY/MID/OLD).
+    // The scoring rework removed the freshness knees (FRESH_FULL/DECAY/MID/OLD).
     expect(e.HP_MULT).toBe(1.25);
     expect(e.POP_SAT).toBe(32);
   });

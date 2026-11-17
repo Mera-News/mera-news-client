@@ -44,7 +44,7 @@ export async function waitFor(cond: () => boolean | Promise<boolean>, what: stri
 }
 
 /**
- * Holds calls into the machine's fetch step (race ordering, R23b): a held call waits on its promise,
+ * Holds calls into the machine's fetch step (race ordering): a held call waits on its promise,
  * then calls the real step through, or throws a network failure with `fail`. Holding at the step
  * rather than on the wire matters: Apollo dedups identical in-flight queries and aborts a request at
  * 30s, so a held request would be joined by, or retried under, a second run. One spy per test:

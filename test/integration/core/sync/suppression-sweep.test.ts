@@ -1,7 +1,7 @@
 // suppression-sweep: hard "not interested" filters are RETROACTIVE.
 //
 // Real persona snapshot, real article_suggestions rows on the in-memory DB, real feed-order and
-// For You stores. The delicate part is D12b: eviction from the Feed tab removes EXACTLY the ids the
+// For You stores. The delicate part is the mute purge: eviction from the Feed tab removes EXACTLY the ids the
 // sweep marked and nothing inferred (tombstone contagion). On the un-exclude side a row blocked by
 // two filters stays excluded until BOTH are gone.
 import { batchMarkExcluded } from '@/lib/database/services/article-suggestion-scoring-writes';

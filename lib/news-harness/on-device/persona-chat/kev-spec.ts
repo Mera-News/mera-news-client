@@ -78,7 +78,7 @@ const INTENT_LABEL_KEYS: Partial<Record<PersonaIntent, string>> = {
  */
 const SAME_ACT: Partial<Record<PersonaIntent, PersonaIntent>> = { thanks_or_ack: 'question_or_chat', repeats_saved_fact: 'share_new_fact' };
 
-/** shortcut: the plan's fixed floor; every fact at or above it goes on the Remove / Keep card. Tune on dev. */
+/** shortcut: a fixed floor; every fact at or above it goes on the Remove / Keep card. Tune on dev. */
 export const DELETE_CARD_MIN_P = 0.25;
 /** The same window the single-call prompt shows. */
 const MAX_FACTS = 20;

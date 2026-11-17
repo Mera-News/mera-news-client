@@ -85,7 +85,7 @@ interface PipelineScoreRow {
   finalRawScore: number | null;
   bucketedScore: number | null;
   bucket: ScoreBucketName | null;
-  /** raw score >= discardFloor (the plan's "kept" definition). */
+  /** raw score >= discardFloor (the "kept" definition). */
   kept: boolean;
   reason: string | null;
   matchedTopics: string[];

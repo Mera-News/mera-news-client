@@ -229,7 +229,7 @@ function fetchWithTimeout(
   );
 }
 
-/** Deadline options for the OS background task (bgsubmit). `signal` aborts the
+/** Deadline options for the OS background task. `signal` aborts the
  *  JWT wait, the limiter wait and the request; `singleAttempt` drops the
  *  retries. Both default off, so every existing caller is unchanged. */
 export interface AttestationFetchOptions {

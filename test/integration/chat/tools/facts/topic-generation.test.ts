@@ -1,4 +1,4 @@
-// Topic generation for a saved fact: one queued, isolated `topic_gen` job per fact (ux2 F1),
+// Topic generation for a saved fact: one queued, isolated `topic_gen` job per fact,
 // cloud or on-device, and the user-initiated retry. The inference queue is NOT started unless a
 // test says so, so the rows enqueued are what is asserted.
 import { addFact, getFacts, getTopicsStatus } from '@/lib/database/services/fact-service';

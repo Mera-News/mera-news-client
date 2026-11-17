@@ -95,7 +95,7 @@ export interface PipelineBatch {
    *  `BatchWithJudge` cast). False/absent ⇒ the legacy backstop relevance→reasons
    *  path. */
   judgeMode?: boolean;
-  /** P4b: the chunk size the `score:N` relevance calls were ACTUALLY built with
+  /** The chunk size the `score:N` relevance calls were ACTUALLY built with
    *  at submit — 5 for every batch now; 3 on an all-TOP-HEADLINE batch persisted
    *  by a build before headlines joined the ordinary queue. The decoder rebuilds the `score:N` →
    *  candidate join by re-chunking `candidateIds`, so it must use this size and
@@ -134,7 +134,7 @@ export interface PipelineBatch {
   suppressPenaltyMap?: Record<string, number>;
   /** Reset at each phase submit. */
   submittedAt?: number;
-  /** bgsubmit idempotency. The literal `Idempotency-Key` last sent for this
+  /** Background-submit idempotency. The literal `Idempotency-Key` last sent for this
    *  batch (`${runId}:${batchId}:{rel|r}:${keyGen}`), resent VERBATIM on a
    *  retry, never rebuilt. Written in a CAS immediately BEFORE the POST, so a
    *  process killed after the gateway's 202 but before the requestId was saved

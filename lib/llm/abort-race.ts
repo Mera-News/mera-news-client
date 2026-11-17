@@ -1,4 +1,4 @@
-// Deadline plumbing for the OS background task (bgsubmit).
+// Deadline plumbing for the OS background task.
 //
 // The friction: the background run has ONE hard deadline, but several awaits on
 // its path take no AbortSignal (`getJwtToken`, the rate limiter's `acquire`).

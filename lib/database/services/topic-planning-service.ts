@@ -121,7 +121,7 @@ export async function generateMoreAndWait(
   return { mode: 'queued', added: Math.max(0, (await getByFact(factId)).length - before) };
 }
 
-/** T9 is the staging proof. Off, the sweep still retries and settles; it removes nothing. */
+/** Stays off until proven on staging. Off, the sweep still retries and settles; it removes nothing. */
 const AUTO_DELETE_ENABLED = false;
 /** Whether the empty line may tell the reader Mera will remove this fact. While
  *  removal is off nothing says it will happen. */

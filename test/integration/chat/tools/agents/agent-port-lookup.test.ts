@@ -66,7 +66,7 @@ describe('lookupPlaceWithFallback over the server', () => {
     expect(sent).toEqual(['Nieuw-West Amsterdam', 'Amsterdam']);
   });
 
-  it('ux2 D1: returns the words the fallback match did not use', async () => {
+  it('returns the words the fallback match did not use', async () => {
     servePlaces({ amsterdam: [row('Amsterdam')] });
     const out = await lookupPlaceWithFallback({ query: 'niew west Amsterdam' });
     expect(out).toMatchObject({ status: 'resolved', unmatched: 'niew west' });
@@ -88,7 +88,7 @@ describe('lookupPlaceWithFallback over the server', () => {
     expect(sent).toEqual(['Newcastle', 'Newcastle']);
   });
 
-  it('ux2 D13: an alias match carries the user term, a name match does not', async () => {
+  it('an alias match carries the user term, a name match does not', async () => {
     const vila = row('Vila Baleira', 'PT', ['vila baleira', 'porto santo'], 'Madeira');
     servePlaces({ 'porto santo': [vila], amsterdam: [row('Amsterdam')] });
 
@@ -130,7 +130,7 @@ describe('lookupPlaceWithFallback over the server', () => {
   });
 });
 
-// ux1 C1: "Porto" offered Porto Alegre, Port-au-Prince and Porto Velho, because the real Porto
+// "Porto" offered Porto Alegre, Port-au-Prince and Porto Velho, because the real Porto
 // ranked fourth by population and was cut at three.
 describe('the place named exactly survives the candidate cap', () => {
   const portoRows = (): Record<string, Row[]> => ({
@@ -212,7 +212,7 @@ describe('an EXACT alias beats a prefix match', () => {
   });
 });
 
-// ux1 batch 5: the model was told "no existing residence fact" while "Lives in Berlin..." was on
+// The model was told "no existing residence fact" while "Lives in Berlin..." was on
 // file, because similarity to "I moved to Porto" is zero.
 describe('find_similar_facts always shows the current home on a residence lookup', () => {
   const HOME_KEY = 'location: neighborhood/area, city, and country (preserve specifics)';

@@ -181,7 +181,7 @@ export async function batchMarkScoreFailed(
 }
 
 /**
- * The un-exclude direction (D12c): send rows back to `unscored` so the next
+ * The un-exclude direction: send rows back to `unscored` so the next
  * scoring pass treats them as new. Used ONLY by the sweep that runs when a hard
  * filter is retired, and only for rows the sweep has already re-screened
  * against every still-active hard filter. Scores are cleared so a stale 0 can

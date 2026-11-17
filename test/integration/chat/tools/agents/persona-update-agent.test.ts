@@ -454,7 +454,7 @@ describe('executeTool', () => {
       expect(result.sideEffects?.proposalResolved).toBeUndefined();
     });
 
-    // G1: the floating-chat store holds ONE global proposal, shared with the article / follow-story
+    // The floating-chat store holds ONE global proposal, shared with the article / follow-story
     // surfaces. This agent's own proposeChanges cannot set choose_one today, so this guard is
     // defence in depth: the sibling call site shipped without it and applied every alternative.
     it('refuses a SINGLE-SELECT proposal it did not stage: the topic is untouched', async () => {

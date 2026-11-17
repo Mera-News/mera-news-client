@@ -4,9 +4,9 @@
 // lib/mera-harness/core did not exist yet, and its header promised to collapse
 // into a re-export the moment it did. It has, so it did.
 //
-// WHY A RE-EXPORT AND NOT A SECOND DECLARATION. Three plans once carried three
-// spellings of the same result field, which is the divergence review round 1
-// caught (B1). A mirrored type is that bug with extra steps: it typechecks
+// WHY A RE-EXPORT AND NOT A SECOND DECLARATION. Three documents once carried three
+// spellings of the same result field, which is the divergence a review
+// caught. A mirrored type is that bug with extra steps: it typechecks
 // against itself, drifts silently, and only fails when a real call disagrees
 // with it at run time. core/types.ts is the contract; the eval consumes it.
 //
