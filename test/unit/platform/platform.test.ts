@@ -7,6 +7,7 @@ import { hapticLight } from '@/lib/platform/haptics';
 import { canTranslateIntoLanguage } from '@/lib/platform/translation';
 import { env } from '@/lib/platform/env';
 import { getJwtToken } from '@/lib/platform/auth';
+import { infer, inferStream, resetContext } from '@/lib/platform/on-device-model';
 
 function host(over: Partial<PlatformHost> = {}): PlatformHost {
   return { env: {}, appState: { currentState: 'active', addEventListener: () => ({ remove() {} }) }, ...over } as PlatformHost;
@@ -47,4 +48,16 @@ it('uses the documented default for an optional member the host leaves out', asy
   registerPlatform(host());
   await expect(hapticLight()).resolves.toBeUndefined();
   expect(canTranslateIntoLanguage('nl')).toBe(false);
+});
+
+it('fails as a rejected promise on a host without on-device models, and resetContext resolves', async () => {
+  registerPlatform(host());
+  await expect(resetContext()).resolves.toBeUndefined();
+  let call: Promise<unknown> | undefined;
+  expect(() => {
+    call = infer({ prompt: 'x' });
+  }).not.toThrow();
+  await expect(call).rejects.toThrow('The host has no on-device models');
+  const stream = inferStream({ prompt: 'x' });
+  await expect(stream.next()).rejects.toThrow('The host has no on-device models');
 });

@@ -222,6 +222,16 @@ export interface PlatformHost {
   showDialog?(options: DialogOptions): Promise<boolean>;
   hapticLight?(): Promise<void>;
 
+  /**
+   * The phone's own models. Left out, every call fails as a rejected promise and resetContext
+   * resolves. A host that supplies them must:
+   * - raise errors that carry a `code` the queue reads (`ERR_AFM_BUSY` defers a job,
+   *   `ERR_STRUCTURED_OUTPUT` means the model answered but never fit the schema);
+   * - refuse ranking work (`decide`) while the app is in the background, with `ERR_AFM_BUSY`;
+   * - do the whole structured read inside `inferStructured`: skip prose and code fences, cut
+   *   arrays to `maxItems`, check the schema (`readStructured` in lib/mera-protocol-toolkit does
+   *   all three), retry once, then throw `ERR_STRUCTURED_OUTPUT`.
+   */
   onDeviceModel?: OnDeviceModel;
 
   recordForeground?(at: number): Promise<void>;
