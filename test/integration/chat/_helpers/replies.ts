@@ -1,6 +1,6 @@
 // Building model replies for a scripted gateway responder, and reading a decrypted call.
 //
-// Tools travel as TEXT inside the envelope (lib/llm/text-tool-protocol.ts, format 'xml'), so a
+// Tools travel as TEXT inside the envelope (lib/harnesses/text-tool-protocol.ts, format 'xml'), so a
 // scripted model "calls a tool" by writing the same <tool_call> XML the app parses.
 import type { GatewayCall } from '@/test/helpers';
 
