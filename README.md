@@ -87,7 +87,11 @@ npm run test:integration   # jest, integration project
 npm run build              # compile lib/ to dist/lib
 npm run check:node         # build, then load the package under plain Node
 npm run harness:generate   # regenerate the prompt harness files
+npm run codegen            # regenerate lib/generated/graphql-types.ts from schema.gql
 ```
+
+`schema.gql` is a copy of the server's GraphQL schema. To target your own server, replace it with
+your server's schema and run `npm run codegen`.
 
 ## License
 

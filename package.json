@@ -10,8 +10,10 @@
   },
   "files": [
     "lib",
+    "!lib/**/__tests__",
     "dist",
-    "types"
+    "types",
+    "schema.gql"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -21,7 +23,8 @@
     "build": "babel lib --out-dir dist/lib --extensions .ts --copy-files --no-copy-ignored --ignore \"lib/**/__tests__/**\"",
     "check:node": "npm run build && node --test test/node/loads.node-test.cjs",
     "harness:generate": "tsx lib/harnesses/generate.ts",
-    "skills:generate": "tsx lib/harnesses/generate.ts"
+    "skills:generate": "tsx lib/harnesses/generate.ts",
+    "codegen": "graphql-codegen"
   },
   "dependencies": {
     "@cospired/i18n-iso-languages": "^4.2.0",
@@ -51,6 +54,8 @@
     "@babel/plugin-transform-private-methods": "^7.29.7",
     "@babel/plugin-transform-private-property-in-object": "^7.29.7",
     "@babel/preset-typescript": "^7.29.0",
+    "@graphql-codegen/cli": "^7.4.6",
+    "@graphql-codegen/typescript": "^6.1.2",
     "@nozbe/watermelondb": "^0.28.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.6",
