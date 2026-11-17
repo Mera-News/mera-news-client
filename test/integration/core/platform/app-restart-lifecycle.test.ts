@@ -54,6 +54,12 @@ test('whenForeground waits in the background and resolves on active', async () =
   await expect(wait).resolves.toBeUndefined();
 });
 
+test('whenForeground returns at once unless the app is in the background', async () => {
+  expect(await pending(whenForeground())).toBe(false);
+  setAppState('inactive');
+  expect(await pending(whenForeground())).toBe(false);
+});
+
 test('whenForeground resolves when its signal aborts', async () => {
   setAppState('background');
   const abort = new AbortController();
