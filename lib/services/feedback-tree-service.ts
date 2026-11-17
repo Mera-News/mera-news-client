@@ -15,7 +15,7 @@
 // swallowed — the cache/bundle already covers it.
 
 import { gql } from '@apollo/client';
-import client from '../apollo-client';
+import client from '../platform/apollo-client';
 import { getSetting, setSetting } from '../database/services/setting-service';
 import logger from '../logger';
 import {

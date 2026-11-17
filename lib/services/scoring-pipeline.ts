@@ -18,7 +18,7 @@
 // feed-sync) now routes through this pipeline; the legacy single-slot async-job
 // flow has been removed.
 
-import { AppState } from 'react-native';
+import { AppState } from '@/lib/platform/react-native';
 import logger from '@/lib/logger';
 import * as coldstartTimeline from '@/lib/diagnostics/coldstart-timeline';
 import { PROFILES, type Profile } from '@/lib/llm/profiles';

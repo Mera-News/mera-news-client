@@ -11,9 +11,9 @@
 import {
   buildContextJson,
   feedbackSubjectFromSuggestion,
-} from '@/components/custom/cards/feedback-subject';
-import { swipeCallbacks, type Verdict } from '@/components/custom/feed/swipe-callbacks';
-import i18n from '@/lib/i18n';
+} from '../tracking/feedback-subject';
+import { swipeCallbacks, type Verdict } from '@/lib/services/swipe-callbacks';
+import i18n from '@/lib/platform/i18n';
 import { recordVerdictFeedback } from '@/lib/database/services/article-feedback-service';
 import { getFeedbackTree } from '@/lib/services/feedback-tree-service';
 import logger from '@/lib/logger';

@@ -1,8 +1,8 @@
-import { AppState } from 'react-native';
+import { AppState } from '@/lib/platform/react-native';
 import { resetSlowRequests, useNetworkStore } from '@/lib/stores/network-store';
 import { useUserStore } from '@/lib/stores/user-store';
 import { useDatabaseStore } from '@/lib/stores/database-store';
-import { getJwtToken } from '@/lib/auth-client';
+import { getJwtToken } from '@/lib/platform/auth';
 import { wasJsRestartSync } from '@/lib/app-restart';
 import type { Job, TaskCondition, TaskDefinition, TriggerOutcome } from './scheduler-types';
 import { useSchedulerStore } from './scheduler-store';
@@ -224,7 +224,7 @@ class _AppScheduler {
   private _onRealActivation(): void {
     try {
       const { recordForeground } =
-        require('@/lib/background/bg-refresh-settings') as typeof import('@/lib/background/bg-refresh-settings');
+        require('@/lib/platform/bg-refresh-settings') as typeof import('@/lib/platform/bg-refresh-settings');
       recordForeground(Date.now()).catch(() => {
         // The next activation writes it again.
       });
@@ -235,7 +235,7 @@ class _AppScheduler {
       this.keychainMigrationStarted = true;
       try {
         const { runKeychainAccessibilityMigration } =
-          require('@/lib/utils/keychain-accessibility-migration') as typeof import('@/lib/utils/keychain-accessibility-migration');
+          require('@/lib/platform/keychain-accessibility-migration') as typeof import('@/lib/platform/keychain-accessibility-migration');
         void runKeychainAccessibilityMigration();
       } catch {
         // best-effort; it retries in the next process.
@@ -430,7 +430,7 @@ class _AppScheduler {
     // 401s re-trip the breaker. Lazy require to avoid an import cycle.
     try {
       const { onAppForeground } =
-        require('@/lib/auth-failure-breaker') as typeof import('@/lib/auth-failure-breaker');
+        require('@/lib/platform/auth') as typeof import('@/lib/platform/auth');
       onAppForeground();
     } catch {
       // best-effort
@@ -510,7 +510,7 @@ class _AppScheduler {
     // order: syncing BEFORE we know the session is alive just buys more 401s.
     try {
       const { onNetworkReconnect } =
-        require('@/lib/auth-failure-breaker') as typeof import('@/lib/auth-failure-breaker');
+        require('@/lib/platform/auth') as typeof import('@/lib/platform/auth');
       onNetworkReconnect();
     } catch {
       // best-effort

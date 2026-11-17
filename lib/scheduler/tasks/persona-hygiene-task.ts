@@ -5,7 +5,7 @@
 // produces cleanups it stores them and fires ONE `hygiene` notification whose
 // `review-hygiene` chip opens the dedicated review sheet.
 
-import { authClient } from '@/lib/auth-client';
+import { authClient } from '@/lib/platform/auth';
 import { runHygieneSweep } from '@/lib/database/services/hygiene-service';
 import { AppScheduler } from '../AppScheduler';
 import { backgroundWorkIsIdle } from '../background-idle';

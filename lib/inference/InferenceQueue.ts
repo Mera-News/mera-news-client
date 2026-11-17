@@ -2,7 +2,7 @@
 // Runs queued on-device LLM jobs one at a time. The toolkit's llama lock is the only serialiser of
 // llama.rn; pause/resume only gives chat priority over queued jobs.
 
-import { AppState } from 'react-native';
+import { AppState } from '@/lib/platform/react-native';
 
 import {
   dequeueJob,

@@ -13,7 +13,7 @@ import * as steps from './feed-sync-steps';
 import { classifyError, publishSyncError, publishSyncStatus } from './feed-sync-status';
 import type { BackgroundSyncHooks, FeedSyncState } from './feed-sync-types';
 import { InvalidTransitionError, NETWORK_DEPENDENT_STATES } from './feed-sync-types';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from '@/lib/platform/keep-awake';
 
 const KEEP_AWAKE_TAG = 'mera-feed-sync';
 

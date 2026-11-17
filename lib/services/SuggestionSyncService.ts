@@ -15,7 +15,7 @@ import { runBackgroundCycle } from '@/lib/background/run-inference-handler';
 import { useForYouStore } from '@/lib/stores/for-you-store';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from '@/lib/platform/keep-awake';
 
 const KEEP_AWAKE_TAG = 'mera-scoring-pass';
 

@@ -8,11 +8,11 @@
 // submit/notify orchestration — was removed once every trigger moved to the
 // pipeline; only these stateless primitives survive.)
 
-import { fetch as expoFetch } from 'expo/fetch';
-import * as Sentry from '@sentry/react-native';
+import { fetch as expoFetch } from '@/lib/platform/fetch';
+import * as Sentry from '@/lib/platform/sentry';
 import logger from '@/lib/logger';
 import * as coldstartTimeline from '@/lib/diagnostics/coldstart-timeline';
-import { getJwtToken } from '@/lib/auth-client';
+import { getJwtToken } from '@/lib/platform/auth';
 import { decryptContent, NoCredentialError, type SigningAlgo } from '@/lib/e2ee/e2ee-service';
 import { batchMarkReasonSkipped } from '@/lib/database/services/article-suggestion-scoring-writes';
 import { type ScoringCandidate } from '@/lib/database/services/article-suggestion-reads';
