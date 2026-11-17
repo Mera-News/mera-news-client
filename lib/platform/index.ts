@@ -198,6 +198,15 @@ export interface PlatformHost {
   getLocales(): Locale[];
 
   auth: Auth;
+  /**
+   * The GraphQL client the package's services query. The services only leave a breadcrumb when a
+   * query fails, so the host's client owns error handling, or a failure goes silent:
+   * - capture every GraphQL error, except a code listed in the operation's
+   *   `context.expectedErrorCodes`, which gets a breadcrumb only;
+   * - unless the operation sets `context.noSyncStatus`, report a failure to the feed's sync status
+   *   while the app is in the foreground;
+   * - report a 401 to the host's session breaker (the same signal as `auth.recordAuthFailure`).
+   */
   apolloClient: ApolloClient;
   createDatabaseAdapter(options: SQLiteAdapterOptions): DatabaseAdapter;
 
