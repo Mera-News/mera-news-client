@@ -19,7 +19,7 @@
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --selectProjects integration --maxWorkers=2",
     "build": "babel lib --out-dir dist/lib --extensions .ts --copy-files --no-copy-ignored --ignore \"lib/**/__tests__/**\"",
-    "check:node": "npm run build && node --test test/node/",
+    "check:node": "npm run build && node --test test/node/loads.node-test.cjs",
     "harness:generate": "tsx lib/harnesses/generate.ts",
     "skills:generate": "tsx lib/harnesses/generate.ts"
   },
