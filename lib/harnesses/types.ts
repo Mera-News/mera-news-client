@@ -5,7 +5,7 @@
 import type { Lane } from '../llm/router/lanes';
 
 export interface HarnessParams {
-  /** The text-tool wire format the prompts are written for (cloud: lib/llm/text-tool-protocol). */
+  /** The text-tool wire format the prompts are written for (cloud: ./text-tool-protocol). */
   toolFormat: string;
   /** False forces a chat turn's `enable_thinking` off whatever the caller asks; true leaves the caller's choice.
    *  Chat only, as the old session-fallback rule was: batch and job callers keep their own flag. */

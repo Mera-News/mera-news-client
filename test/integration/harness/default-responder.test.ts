@@ -1,7 +1,7 @@
 // The default gateway responder's scripted paths decode with the app's own parsers, so the e2e
 // lane's sign-in (one "I follow ..." fact in onboarding) and chat flow can rely on them.
 import { parseTopics } from '@/lib/mera-harness';
-import { parseToolCallsFromText } from '@/lib/llm/text-tool-protocol';
+import { parseToolCallsFromText } from '@/lib/harnesses/text-tool-protocol';
 import { defaultResponder, type GatewayCall } from '@/test/helpers';
 
 const call = (messages: GatewayCall['messages'], route: GatewayCall['route'] = 'chat'): GatewayCall => ({
