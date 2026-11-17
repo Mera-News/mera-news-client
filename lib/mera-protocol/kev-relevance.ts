@@ -4,7 +4,7 @@
 // step in between two articles.
 
 import logger from '@/lib/logger';
-import { decide } from '@/lib/mera-protocol-toolkit';
+import { decide } from '@/lib/platform/on-device-model';
 import { resolveCountryName } from '@/lib/news-harness/article-pipeline/scoring';
 import type { RelevanceScorer } from '@/lib/news-harness/scoring-engine/run-stage';
 

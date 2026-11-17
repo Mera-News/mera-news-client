@@ -10,7 +10,7 @@ import { completeLocalStructured } from '../llm/completeLocal';
 import type { RealTopicGenInputs } from '@/lib/news-harness/persona-management/topic-generation';
 import { buildTopicGenPrompt, TOPIC_GEN_SYSTEM } from '@/lib/news-harness/on-device/topic-gen/prompt';
 import { promptBudgetTokens } from '@/lib/news-harness/on-device/shared';
-import { contextSize, getTextEngine } from '../mera-protocol-toolkit';
+import { contextSize, getTextEngine } from '../platform/on-device-model';
 import { topicGenSchema, type TopicGenReply } from '@/lib/news-harness/on-device/topic-gen/schema';
 import { topicsFromReply } from '@/lib/news-harness/on-device/topic-gen/parse';
 import { DEFAULT_HARNESS_CONFIG } from '@/lib/news-harness/core/config';
