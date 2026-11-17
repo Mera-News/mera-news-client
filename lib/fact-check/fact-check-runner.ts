@@ -72,6 +72,7 @@
 
 import type { WireMessage } from '../llm/cloudComplete';
 import type { UntrustedText } from '@/lib/news-harness/prompts/untrusted-text';
+import { SYNTHESIS_SYSTEM } from '@/lib/news-harness/fact-check/synthesis-prompt';
 import { MAX_QUERY_CHARS, type WebSearchResult } from '../web-search/web-search-client';
 
 /**
@@ -247,40 +248,6 @@ export function buildSearchQueries(claim: string, articleTitle?: string | null):
   }
   return out.slice(0, 3);
 }
-
-// ───────────────────────────────────────────────────────────────────────────
-// Synthesis prompt — Loki's verify stage, widened to our vocabulary
-// ───────────────────────────────────────────────────────────────────────────
-
-const SYNTHESIS_SYSTEM = [
-  'You assess ONE claim against numbered search results, for a news reader.',
-  '',
-  'Decide, for the claim and for each sub-assertion inside it, whether the evidence',
-  'SUPPORTS it, REFUTES it, or is IRRELEVANT to it. Reason from the evidence only.',
-  '',
-  'HARD RULES.',
-  '1. Use ONLY the numbered evidence below. You have no other knowledge of this story.',
-  '2. If the evidence does not settle the claim, say so — "unverifiable" is a correct,',
-  '   expected answer and is far better than a guess. Most news is never fact-checked.',
-  '3. Never cite a source that is not in the numbered list. Cite by NUMBER only.',
-  '4. Do not describe the claim as true or false because it sounds plausible.',
-  '',
-  'Reply with ONE JSON object and nothing else:',
-  '{',
-  '  "verdict": "supported" | "disputed" | "unsupported" | "mixed" | "unverifiable",',
-  '  "summary": "2-3 plain sentences for a reader: what the sources actually say.",',
-  '  "claims": [',
-  '    { "claim": "one sub-assertion, restated plainly",',
-  '      "assessment": "supported" | "disputed" | "unsupported" | "unverifiable",',
-  '      "note": "one sentence citing the evidence numbers that decided it" }',
-  '  ],',
-  '  "citations": [1, 3]',
-  '}',
-  '',
-  'verdict meanings: supported = the evidence backs it; disputed = sources disagree;',
-  'unsupported = the evidence contradicts it; mixed = parts hold and parts do not;',
-  'unverifiable = the evidence does not settle it. At most 4 entries in "claims".',
-].join('\n');
 
 /**
  * The synthesis prompt.

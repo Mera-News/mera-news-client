@@ -22,7 +22,7 @@ import { isCombinedOriginFact, isLocationKey, isRelationalStatement, loadSkill, 
 import { findSimilarFacts } from '../database/services/fact-similarity-service';
 import { PLACE_CANDIDATE_LIMIT, lookupPlace, searchPlaces } from '../place-service';
 import { cloudChatStream, type WireMessage } from '../llm/cloudComplete';
-import { REQUIRED_TOOL_REASK } from '../llm/text-tool-protocol';
+import { REQUIRED_TOOL_REASK } from '@/lib/harnesses/text-tool-protocol';
 import { stepKindForTool, type PhaseSignal } from '@/lib/services/chat-phase';
 import type { LiveTool } from '@/lib/llm/chat-phase-store';
 import { CHAT_MAX_OUTPUT_TOKENS } from '../llm/constants';

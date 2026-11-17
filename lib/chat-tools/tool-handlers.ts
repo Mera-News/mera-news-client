@@ -56,7 +56,7 @@ export async function handleExplainMera(
 ): Promise<Record<string, unknown>> {
   const { MERA_EXPLAINER_SECTIONS, PLAN_SIZES_TOKEN } =
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('./mera-explainer-content') as typeof import('./mera-explainer-content');
+    require('@/lib/news-harness/prompts/mera-explainer-content') as typeof import('@/lib/news-harness/prompts/mera-explainer-content');
   const availableTopics = Object.keys(MERA_EXPLAINER_SECTIONS);
 
   const requested = args.topics;

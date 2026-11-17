@@ -12,6 +12,7 @@ import { isOnDeviceDeferrable } from '../inference/job-defer';
 import logger from '../logger';
 import { buildSubscriptionReadPrompt } from '../news-harness/on-device/subscription-read/prompt';
 import { parseSubscriptionRead } from '../news-harness/on-device/subscription-read/parse';
+import { SUBSCRIPTION_READ_SYSTEM_PROMPT as SYSTEM_PROMPT } from '@/lib/news-harness/subscription-read/prompt';
 import { useMeraProtocolStore } from '../stores/mera-protocol-store';
 import { getScoringLlmPort } from './stage-scoring';
 
@@ -29,26 +30,6 @@ const suggestionsCollection = database.get<ArticleSuggestionModel>('article_sugg
 
 /** Cap per run. This is background polish, not the reason the sync exists. */
 const MAX_READS_PER_RUN = 10;
-
-/**
- * The body is PAYWALLED and we never fetch it. The model sees the headline,
- * the English description and the enrichment we already hold, and the prompt
- * says so explicitly so the output cannot drift into summarising an article it
- * was never shown.
- */
-const SYSTEM_PROMPT = [
-  'You compare how two news outlets covered the same story.',
-  '',
-  'You are given a headline and a short description from a publication the reader subscribes to.',
-  'You have NOT been given the full article, and you never will be: it is behind a paywall.',
-  'Write one or two plain sentences on what that outlet emphasises about this story.',
-  '',
-  'Rules:',
-  '- Never claim or imply you read the full article.',
-  '- Never invent a detail that is not in the text you were given.',
-  '- If the text is too thin to say anything useful, reply with exactly: SKIP',
-  '- No preamble, no quotation marks, no headings. Just the sentences.',
-].join('\n');
 
 function buildPrompt(sibling: ArticleSuggestionModel, anchorTitle: string | null): string {
   const lines = [
