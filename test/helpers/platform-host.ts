@@ -63,7 +63,15 @@ export function setNetInfo(state: Partial<NetInfoState>): void {
 // --- The host ----------------------------------------------------------------------------------
 
 const i18n = i18next.createInstance();
-void i18n.init({ lng: 'en', fallbackLng: 'en', resources: { en: { translation: {} } }, initAsync: false });
+// escapeValue false, as in the app: quotes in an interpolated value stay quotes. A test that asserts
+// interpolated copy adds the exact strings it needs to testHost.i18n in a beforeEach; others assert keys.
+void i18n.init({
+  lng: 'en',
+  fallbackLng: 'en',
+  resources: { en: { translation: {} } },
+  interpolation: { escapeValue: false },
+  initAsync: false,
+});
 
 const graphqlEndpoint = () => process.env.EXPO_PUBLIC_GRAPHQL_SERVER_ENDPOINT ?? 'http://127.0.0.1:8790';
 
