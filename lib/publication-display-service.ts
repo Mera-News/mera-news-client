@@ -12,7 +12,7 @@
 // and the database), so a card test never touches the network.
 
 import { gql } from '@apollo/client';
-import client from '@/lib/apollo-client';
+import client from '@/lib/platform/apollo-client';
 import logger from '@/lib/logger';
 import { getSetting, setSetting } from '@/lib/database/services/setting-service';
 import { useAppLanguageStore } from '@/lib/stores/app-language-store';

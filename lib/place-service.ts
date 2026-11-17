@@ -1,6 +1,6 @@
 import { gql } from '@apollo/client';
 import countries from 'i18n-iso-countries';
-import client from './apollo-client';
+import client from '@/lib/platform/apollo-client';
 import type { Place } from './generated/graphql-types';
 import logger from './logger';
 // Imported for its `registerLocale(en)` side effect, which the alpha-2 name

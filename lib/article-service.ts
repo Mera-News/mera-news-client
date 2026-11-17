@@ -1,5 +1,5 @@
 import { gql, type DocumentNode } from '@apollo/client';
-import client from './apollo-client';
+import client from '@/lib/platform/apollo-client';
 import {
     ArticleClusterMemberships,
     ArticleIdsForTopicsResponse,

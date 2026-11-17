@@ -37,7 +37,7 @@ import {
 import { inferenceQueue } from '../inference/InferenceQueue';
 import { useMeraProtocolStore } from '../stores/mera-protocol-store';
 import { ProcessingMode } from '../generated/graphql-types';
-import type { FeedbackSubject } from '../../components/custom/cards/feedback-subject';
+import type { FeedbackSubject } from './feedback-subject';
 import type { ForYouSuggestion } from '../stores/for-you-store';
 import logger from '../logger';
 

@@ -26,7 +26,7 @@
 // `{ ok: false, kind }` so callers never need a try/catch of their own.
 
 import { gql } from '@apollo/client';
-import client from '@/lib/apollo-client';
+import client from '@/lib/platform/apollo-client';
 import logger from '@/lib/logger';
 import type { NewsSearchHit } from '@/lib/generated/graphql-types';
 import { isNotSubscribedError } from '@/lib/subscription/not-subscribed-error';

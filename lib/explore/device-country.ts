@@ -5,7 +5,7 @@
 // 'US'), falling back to 'US' when the OS reports no region — matching the
 // app's existing default-locale behaviour.
 
-import { getLocales } from 'expo-localization';
+import { getLocales } from '@/lib/platform/localization';
 
 const FALLBACK_ALPHA2 = 'US';
 

@@ -1,5 +1,5 @@
 import { gql } from '@apollo/client';
-import client from './apollo-client';
+import client from '@/lib/platform/apollo-client';
 import { OnboardingStage, ProcessingMode } from './generated/graphql-types';
 import logger from './logger';
 

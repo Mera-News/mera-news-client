@@ -18,7 +18,7 @@
 // server: the only thing sent is the answer the reader chose to submit.
 
 import { gql } from '@apollo/client';
-import client from '@/lib/apollo-client';
+import client from '@/lib/platform/apollo-client';
 import logger from '@/lib/logger';
 import { serverLocaleFor } from '@/lib/publication-display-service';
 import { useNetworkStore } from '@/lib/stores/network-store';

@@ -46,7 +46,7 @@ import {
   type PriorityFacts,
   type SeenTier,
 } from '@/lib/feed-ordering/priority-order';
-import { notePendingMode } from '@/components/custom/cards/note-pending-mode';
+import { notePendingMode } from './note-pending-mode';
 import { ArticleSuggestionStatus } from '@/lib/database/article-suggestion-status';
 import { isMutedPublication, rankedRelevance, type RankingContext } from '@/lib/feed-ordering/publication-tags';
 import type { CardStateRecord } from '@/lib/stores/feed-order-store';
