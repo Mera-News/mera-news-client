@@ -10,28 +10,12 @@ import { getTrackedStoryById, trackStory } from '@/lib/database/services/tracked
 import { startTopicGeneration } from '@/lib/chat-tools/tool-handlers';
 import { inferenceQueue, __setJobHandlerForTests } from '@/lib/inference/InferenceQueue';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
-import { setAppState, testHost } from '@/test/helpers';
+import { setAppState } from '@/test/helpers';
 import { installLlama, llamaCalls } from '@/test/integration/chat/_helpers';
 import { cleanup, driveDone, driveUntil, enqueueJob, jobRow, jobRows, prepare, setMode, tick, untilJob } from './kit';
 
 /** Drives until the row carries a deferral or failure message. */
 const untilMessage = (id: string) => driveUntil(async () => !!(await jobRow(id))?.errorMessage, `job ${id} message`, 10_000);
-
-/** The built-in model reports busy and unavailable as errors carrying a code; the scripted model puts the code in the message. */
-function codeErrors(): void {
-  const model = testHost.onDeviceModel!;
-  testHost.onDeviceModel = {
-    ...model,
-    infer: (params) =>
-      model.infer(params).catch((e: Error) => {
-        throw Object.assign(e, { code: e.message });
-      }),
-    inferStructured: <T>(params: Parameters<typeof model.inferStructured>[0]) =>
-      model.inferStructured<T>(params).catch((e: Error) => {
-        throw Object.assign(e, { code: e.message });
-      }),
-  };
-}
 
 beforeEach(async () => {
   installLlama(['ok']);
@@ -82,7 +66,6 @@ describe('busy and unavailable defer, never fail', () => {
       await driveDone(startTopicGeneration([{ id: fact.id, statement: 'Plays chess' }]));
       const [job] = await jobRows('topic_gen');
       installLlama({ tokens: [], error: code });
-      codeErrors();
 
       await inferenceQueue.start();
       await untilMessage(job.id);
@@ -107,7 +90,6 @@ describe('busy and unavailable defer, never fail', () => {
     const fact = await driveDone(pendingFact('Plays chess'));
     await driveDone(startTopicGeneration([{ id: fact.id, statement: 'Plays chess' }]));
     installLlama({ tokens: [], error: 'ERR_AFM_CONTEXT' });
-    codeErrors();
 
     await inferenceQueue.start();
     const [job] = await jobRows('topic_gen');
@@ -118,7 +100,6 @@ describe('busy and unavailable defer, never fail', () => {
   it('busy on a tracked-story migrate: the job waits with no attempt spent, the story stays legacy, then migrates', async () => {
     const story = await driveDone(trackStory({ articleId: 'a1', title: 'Floods hit Assam', originSurface: 'feed' }));
     installLlama({ tokens: [], error: 'ERR_AFM_BUSY' });
-    codeErrors();
     const id = await enqueueJob('tracked_story_migrate', { trackedStoryId: story.id, titles: ['Floods hit Assam'] });
 
     await inferenceQueue.start();

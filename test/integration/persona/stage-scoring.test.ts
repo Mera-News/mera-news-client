@@ -46,11 +46,12 @@ import {
   gatewayCalls,
   mockGateway,
   server,
-  testHost,
+  setAppState,
   useFakeClock,
   type GatewayCall,
   type GatewayResponder,
 } from '@/test/helpers';
+import { SUBSCRIPTION_READ_SYSTEM } from '@/lib/news-harness/on-device/subscription-read/prompt';
 import { decideCalls, installDecide, installLlama, llamaCalls } from '@/test/integration/chat/_helpers/llama';
 import { resetChatModules } from '@/test/integration/chat/_helpers';
 
@@ -234,6 +235,27 @@ describe('on-device relevance - Kev', () => {
     expect(llamaCalls()).toHaveLength(0);
   });
 
+  it('a busy from Kev stops the stage instead of scoring, so the batch stays unscored', async () => {
+    installLlama([]);
+    const [c] = await seedAndLoad(['a']);
+    setAppState('background');
+    try {
+      await expect(run(computeAndScoreForCandidates([c]))).rejects.toMatchObject({ code: 'ERR_AFM_BUSY' });
+      expect(decideCalls()).toHaveLength(0);
+    } finally {
+      setAppState('active');
+    }
+  });
+
+  it('the local port completes the subscription read as plain text: no schema to quote its SKIP', async () => {
+    installLlama(['SKIP']);
+
+    const out = await run(getScoringLlmPort().complete({ systemPrompt: 's', prompt: 'p', maxTokens: 10, temperature: 0 }));
+
+    expect(out).toBe('SKIP');
+    expect(llamaCalls()[0]).toMatchObject({ kind: 'infer', messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'p' }] });
+    expect(decideCalls()).toHaveLength(0);
+  });
 });
 
 // ===========================================================================
@@ -843,6 +865,23 @@ describe('runSubscriptionReadStage', () => {
 
   describe('on device: its own prompt and reader', () => {
     const reads = (reply: string) => installLlama([reply]);
+    const call = () => llamaCalls()[0];
+    const userOf = () => call().messages.find((m) => m.role === 'user')?.content ?? '';
+
+    it('sends the on-device instruction and the outlet\'s fields', async () => {
+      reads('Leads with the coalition talks.');
+      await subscribe();
+      await seedStory();
+
+      await run(runSubscriptionReadStage());
+
+      expect(call().messages.find((m) => m.role === 'system')?.content).toBe(SUBSCRIPTION_READ_SYSTEM);
+      expect(userOf()).toContain('The reader is looking at this story: Cabinet falls over nitrogen plan');
+      expect(userOf()).toContain('Their subscribed outlet: Het Parool');
+      expect(userOf()).toContain('Its headline: Coalition talks collapse');
+      expect(userOf()).toContain('Its description: The coalition failed to agree on nitrogen limits.');
+      expect(call().kind).toBe('infer');
+    });
 
     // A small model dresses its SKIP up. Each of these must be stamped like a bare SKIP, or the
     // row shows the word to the reader or is re-asked on every sync.
@@ -873,15 +912,6 @@ describe('runSubscriptionReadStage', () => {
     describe('on the built-in model', () => {
       it('stops on busy: no row is stamped and the next row is never asked', async () => {
         installLlama({ tokens: [], error: 'ERR_AFM_BUSY' });
-        // The built-in model reports busy as an error carrying a code; the scripted model puts the code in the message.
-        const model = testHost.onDeviceModel!;
-        testHost.onDeviceModel = {
-          ...model,
-          infer: (params) =>
-            model.infer(params).catch((e: Error) => {
-              throw Object.assign(e, { code: e.message });
-            }),
-        };
         await subscribe();
         await seedStory(['a', 'b']);
 

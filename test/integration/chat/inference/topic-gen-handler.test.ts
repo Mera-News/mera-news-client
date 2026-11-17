@@ -27,24 +27,12 @@ import { ACTION_NAMES } from '@/lib/news-harness/persona-management/action-names
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { AppScheduler } from '@/lib/scheduler/AppScheduler';
-import { gatewayCalls, mockGateway, server, testHost } from '@/test/helpers';
+import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { installLlama, llamaCalls } from '@/test/integration/chat/_helpers';
 import { cleanup, driveDone, driveUntil, jobRow, jobRows, prepare, untilJob, watchBodies, setMode } from './kit';
 
 const HOME = 'location: neighborhood/area, city, and country (preserve specifics)';
 const JOB = 'Works as a paediatric nurse';
-
-/** The built-in model reports busy and unavailable as errors carrying a code; the scripted model puts the code in the message. */
-function codeErrors(): void {
-  const model = testHost.onDeviceModel!;
-  testHost.onDeviceModel = {
-    ...model,
-    inferStructured: <T>(params: Parameters<typeof model.inferStructured>[0]) =>
-      model.inferStructured<T>(params).catch((e: Error) => {
-        throw Object.assign(e, { code: e.message });
-      }),
-  };
-}
 
 beforeEach(async () => {
   useMeraProtocolStore.getState().setModelState('downloaded');
@@ -632,7 +620,6 @@ describe('on-device: the local engine, isolated too', () => {
     const fact = await pendingFact(JOB, 'profession: job role and industry');
     await setMode('on-device');
     installLlama({ tokens: [], error: 'ERR_AFM_GUARDRAIL' });
-    codeErrors();
 
     const out = await run({ factId: fact.id, factStatement: JOB, useCloud: false });
 
@@ -645,7 +632,6 @@ describe('on-device: the local engine, isolated too', () => {
     const fact = await pendingFact(JOB, 'profession: job role and industry');
     await setMode('on-device');
     installLlama({ tokens: [], error: 'ERR_AFM_BUSY' });
-    codeErrors();
 
     await expect(run({ factId: fact.id, factStatement: JOB, useCloud: false })).rejects.toMatchObject({ code: 'ERR_AFM_BUSY' });
   });

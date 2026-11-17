@@ -1,6 +1,11 @@
 // Scripted on-device models: the test host's `onDeviceModel`. Text calls (infer, inferStream,
 // inferStructured) answer from installLlama's script; Kev's decide() answers from installDecide.
 //
+// It keeps the host contract the client reads: an error that names a native code (`ERR_AFM_BUSY`)
+// carries it as `code`; Kev refuses with ERR_AFM_BUSY while, or once, the app is in the background; a
+// structured reply that does not parse fails with ERR_STRUCTURED_OUTPUT. The host's own retry, fence
+// stripping and maxItems cut are not modelled: those are tested with the app.
+//
 //   beforeEach(() => { installLlama(['Hello', ' there.']); });
 //
 // Tokens are delivered one per macrotask (setImmediate, which the fake clock leaves real), so a
@@ -10,7 +15,14 @@ import { ProcessingMode } from '@/lib/generated/graphql-types';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { testHost } from '@/test/helpers';
 
+/** An error the way the native layer raises it: a message that is a code carries it as `code`. */
+function nativeError(message: string): Error {
+  return /^ERR_[A-Z_]+$/.test(message) ? Object.assign(new Error(message), { code: message }) : new Error(message);
+}
+
 export interface LlamaCall {
+  /** Which entry point took the call. */
+  kind: 'infer' | 'stream' | 'structured';
   /** The prompt as chat messages: the system prompt (when given), then the prompt. */
   messages: { role: string; content: string }[];
   params: Record<string, unknown>;
@@ -70,11 +82,13 @@ export function installDecide(script: DecideScript | ((call: DecideCall) => Deci
   state.decideScript = typeof script === 'function' ? script : () => script;
 }
 
+const inBackground = (): boolean => testHost.appState.currentState === 'background';
+
 const nextTick = (ms?: number) => new Promise<void>((r) => (ms ? setTimeout(r, ms) : setImmediate(r)));
 
-function startCall(system: string | undefined, prompt: string, params: Record<string, unknown>) {
+function startCall(kind: LlamaCall['kind'], system: string | undefined, prompt: string, params: Record<string, unknown>) {
   const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
-  const call: LlamaCall = { messages, params, stopped: false, delivered: [] };
+  const call: LlamaCall = { kind, messages, params, stopped: false, delivered: [] };
   state.calls.push(call);
   const raw = state.script(call);
   return { call, script: Array.isArray(raw) ? { tokens: raw } : raw };
@@ -95,14 +109,14 @@ async function* tokens(call: LlamaCall, s: Exclude<LlamaScript, string[]>, signa
       await new Promise<void>((r) => signal.addEventListener('abort', () => r()));
       stop();
     }
-    if (s.error && !call.stopped) throw new Error(s.error);
+    if (s.error && !call.stopped) throw nativeError(s.error);
   } finally {
     signal?.removeEventListener('abort', stop);
   }
 }
 
-async function complete(system: string | undefined, prompt: string, params: Record<string, unknown>) {
-  const { call, script } = startCall(system, prompt, params);
+async function complete(kind: LlamaCall['kind'], system: string | undefined, prompt: string, params: Record<string, unknown>) {
+  const { call, script } = startCall(kind, system, prompt, params);
   for await (const _ of tokens(call, script)) {
     // delivered is recorded by the generator
   }
@@ -111,26 +125,33 @@ async function complete(system: string | undefined, prompt: string, params: Reco
 
 const fakeModel: OnDeviceModel = {
   async infer(params) {
-    const { text, truncated } = await complete(params.systemPrompt, params.prompt, params);
+    const { text, truncated } = await complete('infer', params.systemPrompt, params.prompt, params);
     return { output: text, tokensUsed: text.length, latencyMs: 0, truncated };
   },
   inferStream(params, signal) {
-    const { call, script } = startCall(params.systemPrompt, params.prompt, params);
+    const { call, script } = startCall('stream', params.systemPrompt, params.prompt, params);
     return tokens(call, script, signal);
   },
   async inferStructured<T>(params: Parameters<OnDeviceModel['inferStructured']>[0]): Promise<T> {
-    const { text } = await complete(params.system, params.prompt, params);
-    return JSON.parse(text) as T;
+    const { text } = await complete('structured', params.system, params.prompt, params);
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw nativeError('ERR_STRUCTURED_OUTPUT');
+    }
   },
   async decide(request) {
+    if (inBackground()) throw nativeError('ERR_AFM_BUSY');
     const call: DecideCall = { request: request as DecideCall['request'] };
     state.decideCalls.push(call);
     await nextTick();
     if (state.gpuFailed) throw new Error(KEV_GPU_FAILED);
     const answer = state.decideScript(call);
+    // The app left during the call: the host refuses its result, whatever the model did.
+    if (inBackground()) throw nativeError('ERR_AFM_BUSY');
     if ('error' in answer) {
       if (answer.error === KEV_GPU_FAILED) state.gpuFailed = true;
-      throw new Error(answer.error);
+      throw nativeError(answer.error);
     }
     const answers: Record<string, unknown> = {};
     if ('choices' in answer) {

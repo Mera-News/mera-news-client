@@ -18,21 +18,9 @@ import { handleStoryHeadlineJob, storyHeadlineDedupeKey } from '@/lib/inference/
 import { handleTrackedStoryMigrateJob, trackedStoryMigrateDedupeKey } from '@/lib/inference/handlers/tracked-story-migrate-handler';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { STORY_SCOPE_SYSTEM } from '@/lib/news-harness/on-device/story-scope/prompt';
-import { gatewayCalls, mockGateway, server, testHost } from '@/test/helpers';
+import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { installLlama, llamaCalls } from '@/test/integration/chat/_helpers';
 import { cleanup, driveDone, prepare, tick, untilJob, watchBodies, setMode } from './kit';
-
-/** The built-in model reports busy and unavailable as errors carrying a code; the scripted model puts the code in the message. */
-function codeErrors(): void {
-  const model = testHost.onDeviceModel!;
-  testHost.onDeviceModel = {
-    ...model,
-    inferStructured: <T>(params: Parameters<typeof model.inferStructured>[0]) =>
-      model.inferStructured<T>(params).catch((e: Error) => {
-        throw Object.assign(e, { code: e.message });
-      }),
-  };
-}
 
 beforeEach(async () => {
   useMeraProtocolStore.getState().setModelState('downloaded');
@@ -317,8 +305,20 @@ describe('tracked_story_migrate', () => {
     const [call] = llamaCalls();
     expect(call.messages.find((m) => m.role === 'system')?.content).toBe(STORY_SCOPE_SYSTEM);
     expect(call.messages.find((m) => m.role === 'user')?.content).toContain(`1. ${TITLES[0]}`);
+    expect(call.kind).toBe('structured');
     expect(call.params).toMatchObject({ maxTokens: 128, temperature: 0.3 });
     expect(call.params.schema).toMatchObject({ required: ['label', 'search'] });
+  });
+
+  it('on-device: output that does not fit the schema leaves the story legacy', async () => {
+    const story = await legacyStory();
+    await setMode('on-device');
+    installLlama(['sorry, I cannot help with that']);
+
+    const out = await driveDone(handleTrackedStoryMigrateJob({ trackedStoryId: story.id, titles: TITLES }));
+
+    expect(out).toEqual({ ok: false });
+    expect(await unmigrated(story)).toEqual({ topicId: null, topicText: null, headline: null });
   });
 
   it('on-device: a blank field falls back to the other; both blank leaves the story legacy', async () => {

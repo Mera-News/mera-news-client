@@ -7,7 +7,7 @@ import { ProcessingMode } from '@/lib/generated/graphql-types';
 import logger from '@/lib/logger';
 import * as pipeline from '@/lib/services/scoring-pipeline';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
-import { getReadHold, isReadHeld, READ_HOLD_KEY, resetReadHold } from '@/lib/subscription/read-hold';
+import { getReadHold, isReadHeld, READ_HOLD_KEY, resetReadHold, setReadHold } from '@/lib/subscription/read-hold';
 import { server, setAppState, testHost } from '@/test/helpers';
 import { setReadMeter } from '@/test/mock-backend/gateway/state';
 import {
@@ -198,6 +198,21 @@ describe('the foreground poller under the read hold', () => {
     expect(reads.mock.calls.length).toBeLessThan(5);
     expect(isReadHeld()).toBe(true);
     reads.mockRestore();
+    await wrapUp();
+  });
+
+  // The app ends the hold on a plan rise (its billing reads call setReadHold({ resetAt: null })).
+  it('a cleared hold wakes the parked poller, which resubmits batch 0 with the same key', async () => {
+    await heldInForeground();
+    await waitFor(() => false, 2_000);
+    const keyBefore = (await batches())[0].idemKey;
+    setReadMeter({ resetAt: null });
+
+    await setReadHold({ resetAt: null });
+
+    expect(Date.now()).toBeLessThan(RESET);
+    expect(await waitFor(firstWaiting, 10_000)).toBe(true);
+    expect((await batches())[0]).toMatchObject({ phase: 'waiting-relevance', attempt: 0, idemKey: keyBefore });
     await wrapUp();
   });
 

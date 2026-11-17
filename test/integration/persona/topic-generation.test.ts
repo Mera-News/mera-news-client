@@ -14,7 +14,7 @@ import { countTokens } from '@/lib/news-harness/on-device/shared';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { gatewayCalls, testHost } from '@/test/helpers';
-import { installLlama, llamaCalls, type LlamaCall } from '@/test/integration/chat/_helpers/llama';
+import { decideCalls, installLlama, llamaCalls, type LlamaCall } from '@/test/integration/chat/_helpers/llama';
 import { resetChatModules } from '@/test/integration/chat/_helpers';
 
 jest.setTimeout(30_000);
@@ -29,17 +29,6 @@ beforeEach(() => {
 
 const userOf = (c: LlamaCall) => c.messages.find((m) => m.role === 'user')?.content ?? '';
 const systemOf = (c: LlamaCall) => c.messages.find((m) => m.role === 'system')?.content ?? '';
-/** The built-in model reports busy and unavailable as errors carrying a code; the scripted model puts the code in the message. */
-function codeErrors(): void {
-  const model = testHost.onDeviceModel!;
-  testHost.onDeviceModel = {
-    ...model,
-    inferStructured: <T>(params: Parameters<typeof model.inferStructured>[0]) =>
-      model.inferStructured<T>(params).catch((e: Error) => {
-        throw Object.assign(e, { code: e.message });
-      }),
-  };
-}
 const inputs = (over: Partial<Parameters<typeof generateTopicsForFact>[0]> = {}) => ({
   factStatement: 'Works in AI',
   userLocation: null,
@@ -113,6 +102,8 @@ describe('generateTopicsForFact: the request', () => {
     expect(userOf(call)).toMatch(/Generate 10 topics\.$/);
     expect(call.params).toMatchObject({ maxTokens: 1024, temperature: 0.3 });
     expect(call.params.schema).toMatchObject({ type: 'object', required: ['topics'], properties: { topics: { type: 'array', maxItems: 10 } } });
+    expect(call.kind).toBe('structured');
+    expect(decideCalls()).toHaveLength(0);
   });
 
   it('sends the fact alone: no other facts and no location line (no combination pass on this phone)', async () => {
@@ -143,6 +134,12 @@ describe('generateTopicsForFact: the request', () => {
     expect(userOf(llamaCalls()[0])).toContain('Do NOT repeat these existing topics:\n- old topic');
   });
 
+  it('a reply that does not fit the schema throws: an error is never an empty answer', async () => {
+    installLlama(['not valid json']);
+
+    await expect(generateTopicsForFact(inputs())).rejects.toThrow();
+  });
+
   it('throws when the call fails for good (a refusal, not busy)', async () => {
     installLlama({ tokens: [], error: 'ERR_AFM_GUARDRAIL' });
 
@@ -155,6 +152,19 @@ describe('generateTopicsForFact: the request', () => {
 // ===========================================================================
 
 describe('generateTopicsForFact on the built-in model', () => {
+  it('asks through the structured entry point with the {topics} schema', async () => {
+    installLlama(['{"topics": ["Chess openings", "Chess tournaments"]}']);
+
+    expect(await generateTopicsForFact(inputs({ factStatement: 'Plays chess' }))).toEqual(['Chess openings', 'Chess tournaments']);
+
+    const [call] = llamaCalls();
+    expect(llamaCalls()).toHaveLength(1);
+    expect(call.kind).toBe('structured');
+    expect(systemOf(call)).toBe(TOPIC_GEN_SYSTEM);
+    expect(call.params.schema).toMatchObject({ required: ['topics'] });
+    expect(decideCalls()).toHaveLength(0);
+  });
+
   it('a long exclusion list is cut to fit the model input: own topics first, one call, topics back', async () => {
     // Gemini Nano refuses 4000 input tokens or more, and that refusal is not deferrable: an uncut
     // list of every declined topic would fail this fact on every retry.
@@ -175,7 +185,6 @@ describe('generateTopicsForFact on the built-in model', () => {
 
   it.each(['ERR_AFM_BUSY', 'ERR_AFM_UNAVAILABLE'] as const)('%s reaches the caller, so the queue defers the job', async (code) => {
     installLlama({ tokens: [], error: code });
-    codeErrors();
 
     await expect(generateTopicsForFact(inputs())).rejects.toMatchObject({ code });
     expect(llamaCalls()).toHaveLength(1);

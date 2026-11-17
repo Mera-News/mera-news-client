@@ -50,7 +50,6 @@ import {
   mockGateway,
   server,
   setAppState,
-  testHost,
   useFakeClock,
   type GatewayCall,
   type GatewayResponder,
@@ -1014,9 +1013,26 @@ describe('processAllUnscored - on-device pass', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  // The app goes to the background during the second decide: iOS refuses the GPU work and the call
-  // fails with -3.
+  it('decides every article before the first note', async () => {
+    installLocal();
+    queue();
+    await seed(['a', 'b', 'c']);
+
+    expect(await run(processAllUnscored(undefined, 2))).toBe(3);
+
+    const firstNote = events.findIndex((e) => e.startsWith('note:'));
+    const lastDecide = events.map((e) => e.startsWith('decide:')).lastIndexOf(true);
+    expect(lastDecide).toBeGreaterThanOrEqual(2);
+    expect(lastDecide).toBeLessThan(firstNote);
+    expect(events.filter((e) => e.startsWith('note:'))).toHaveLength(3);
+    const rows = await stored();
+    expect(rows.a.reason).toBe('Local note on story a.');
+  });
+
+  // The app goes to the background during the second decide: iOS refuses the GPU work. That call
+  // either returns unwritten output or fails with -3; the host turns both into a busy.
   it.each([
+    ['returns', { scores: { rel: 3 } }],
     ['fails', { error: KEV_GPU_FAILED }],
   ] as const)('the app leaving the screen while Kev ranks (the call %s) leaves the rest unscored, never on the math score, and the next pass ranks them', async (_how, answer) => {
     installLocal();
@@ -1596,15 +1612,6 @@ describe('retryMissingReasons - on-device path', () => {
       installLlama((call) =>
         localUserOf(call).includes('Story top saga') ? ['Local note on story top.'] : { tokens: [], error: 'ERR_AFM_BUSY' },
       );
-      // The built-in model reports busy as an error carrying a code; the scripted model puts the code in the message.
-      const model = testHost.onDeviceModel!;
-      testHost.onDeviceModel = {
-        ...model,
-        infer: (params) =>
-          model.infer(params).catch((e: Error) => {
-            throw Object.assign(e, { code: e.message });
-          }),
-      };
       await seedOwed(['top'], {}, 1);
       await seedOwed(['mid'], {}, 0.8);
       await seedOwed(['low'], {}, 0.6);
