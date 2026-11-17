@@ -21,7 +21,8 @@
 //
 // Cache-bust marker (bump when env values change): 2026-08-13a (Intercom keys added)
 
-import * as Sentry from '@sentry/react-native';
+import * as Sentry from '@/lib/platform/sentry';
+import { env } from '@/lib/platform/env';
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value) {
@@ -48,17 +49,17 @@ function requireEnv(name: string, value: string | undefined): string {
 
 export const INFERENCE_ENDPOINT = requireEnv(
   'INFERENCE_ENDPOINT',
-  process.env.EXPO_PUBLIC_INFERENCE_ENDPOINT,
+  env.EXPO_PUBLIC_INFERENCE_ENDPOINT,
 );
 
 export const AUTH_ENDPOINT = requireEnv(
   'AUTH_ENDPOINT',
-  process.env.EXPO_PUBLIC_AUTH_ENDPOINT,
+  env.EXPO_PUBLIC_AUTH_ENDPOINT,
 );
 
 export const GRAPHQL_SERVER_ENDPOINT = requireEnv(
   'GRAPHQL_SERVER_ENDPOINT',
-  process.env.EXPO_PUBLIC_GRAPHQL_SERVER_ENDPOINT,
+  env.EXPO_PUBLIC_GRAPHQL_SERVER_ENDPOINT,
 );
 
 // Optional dev-only flag — absence means "off", which is the safe production
@@ -72,7 +73,7 @@ export const GRAPHQL_SERVER_ENDPOINT = requireEnv(
 // (submitInferenceJob.ts) statically unreachable in release — it can never
 // ship enabled, only run in a dev bundle.
 export const DUMP_QUERIES_ENABLED =
-  __DEV__ && process.env.EXPO_PUBLIC_DUMP_QUERY_FOR_DEBUGGING === 'true';
+  __DEV__ && env.EXPO_PUBLIC_DUMP_QUERY_FOR_DEBUGGING === 'true';
 
 // RevenueCat public SDK keys. Optional (not requireEnv): subscriptions degrade
 // gracefully — when unset, configureRevenueCat() no-ops and the paywall isn't
@@ -82,11 +83,11 @@ export const DUMP_QUERIES_ENABLED =
 // time so this module stays free of react-native imports (it loads extremely
 // early, before any native module is mockable in tests).
 export const REVENUECAT_API_KEY: string =
-  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY || '';
+  env.EXPO_PUBLIC_REVENUECAT_API_KEY || '';
 export const REVENUECAT_IOS_KEY: string =
-  process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
+  env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
 export const REVENUECAT_ANDROID_KEY: string =
-  process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '';
+  env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '';
 
 // Intercom keys for the in-app support Messenger. Optional (not requireEnv) for
 // the same reason as the RevenueCat trio above: support degrades to a mailto:
@@ -99,11 +100,11 @@ export const REVENUECAT_ANDROID_KEY: string =
 // react-native imports (it loads extremely early, before any native module is
 // mockable in tests).
 export const INTERCOM_APP_ID: string =
-  process.env.EXPO_PUBLIC_INTERCOM_APP_ID || '';
+  env.EXPO_PUBLIC_INTERCOM_APP_ID || '';
 export const INTERCOM_IOS_KEY: string =
-  process.env.EXPO_PUBLIC_INTERCOM_IOS_KEY || '';
+  env.EXPO_PUBLIC_INTERCOM_IOS_KEY || '';
 export const INTERCOM_ANDROID_KEY: string =
-  process.env.EXPO_PUBLIC_INTERCOM_ANDROID_KEY || '';
+  env.EXPO_PUBLIC_INTERCOM_ANDROID_KEY || '';
 
 // Google OAuth client ids, for the Drive backup provider. Optional (not
 // requireEnv) for the same reason as the two groups above: a build without them
@@ -118,9 +119,9 @@ export const INTERCOM_ANDROID_KEY: string =
 // ANDROID id: that client is matched implicitly by package name plus SHA-1
 // signing certificate and its id is never passed to the SDK.
 export const GOOGLE_WEB_CLIENT_ID: string =
-  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+  env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 export const GOOGLE_IOS_CLIENT_ID: string =
-  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+  env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
 
 // Dev-only override for the mandatory-update gate. The gate skips in dev builds
 // by default so the team isn't locked out while the server's min-version floor
@@ -128,7 +129,7 @@ export const GOOGLE_IOS_CLIENT_ID: string =
 // Same `__DEV__ &&` interlock as above: this is only ever consulted in dev — a
 // release build runs the gate unconditionally regardless of this value.
 export const FORCE_UPDATE_CHECK_IN_DEV =
-  __DEV__ && process.env.EXPO_PUBLIC_FORCE_UPDATE_IN_DEV === 'true';
+  __DEV__ && env.EXPO_PUBLIC_FORCE_UPDATE_IN_DEV === 'true';
 
 // Dev-only: show the article screen's extracted metadata panel (places,
 // entities, event type). Owner decision: readers never see it, so there is no
@@ -136,4 +137,4 @@ export const FORCE_UPDATE_CHECK_IN_DEV =
 // locally. Same `__DEV__ &&` interlock: false in every release bundle (an EAS
 // build or an OTA), whatever the variable was at bundle time.
 export const SHOW_EXTRACTED_METADATA =
-  __DEV__ && process.env.EXPO_PUBLIC_SHOW_EXTRACTED_METADATA_IN_DEV === 'true';
+  __DEV__ && env.EXPO_PUBLIC_SHOW_EXTRACTED_METADATA_IN_DEV === 'true';

@@ -13,7 +13,7 @@
 // before it ever reaches this file), which is why every function here is a
 // straight transport concern.
 
-import { getJwtToken } from '../auth-client';
+import { getJwtToken } from '../platform/auth';
 import { INFERENCE_ENDPOINT } from '../config/endpoints';
 import * as gatewayRateLimiter from '../llm/gateway-rate-limiter';
 import logger from '../logger';

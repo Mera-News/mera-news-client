@@ -21,7 +21,7 @@ import { useAppLanguageStore } from '../../stores/app-language-store';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { chatRunsInCloud } from '../chat-cloud';
 import { ProcessingMode } from '../../generated/graphql-types';
-import { SUPPORTED_LANGUAGES } from '../../translation-service';
+import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import {
   buildPersonaContext,
   buildPersonaSystemPrompt,

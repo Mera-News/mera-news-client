@@ -28,7 +28,7 @@ import logger from '../../logger';
 import { useAppLanguageStore } from '../../stores/app-language-store';
 import { useFloatingChatStore } from '../../stores/floating-chat-store';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
-import { SUPPORTED_LANGUAGES } from '../../translation-service';
+import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import type { IAgent, ToolDefinition, ToolExecutionResult } from '../types';
 
 export class FollowStoryAgent implements IAgent {

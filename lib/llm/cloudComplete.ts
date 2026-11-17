@@ -5,7 +5,7 @@
 // fails, the call fails and the user sees an error.
 
 import { departureMark, whenForeground } from '../app-restart';
-import { AppState } from 'react-native';
+import { AppState } from '@/lib/platform/react-native';
 import { assertCloudAllowed, OnDeviceModeError, type CloudPurpose } from './on-device-gate';
 import {
   decryptContent,

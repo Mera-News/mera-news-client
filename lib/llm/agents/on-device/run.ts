@@ -2,10 +2,10 @@
 // flows read it, and one structured call sized to the engine's window.
 
 import { completeLocalStructured } from '../../completeLocal';
-import { contextSize, decide } from '../../../mera-protocol-toolkit';
+import { contextSize, decide } from '../../../platform/on-device-model';
 import type { JsonSchema } from '../../../mera-protocol-toolkit/core/structured-json';
 import { getFacts } from '../../../database/services/fact-service';
-import i18n from '../../../i18n';
+import i18n from '../../../platform/i18n';
 import logger from '../../../logger';
 import { resolveDeleteTargets } from '../../../mera-harness/core/fact-normalise';
 import type { MoreOptionsRequest } from '../../../chat-session/engine';
@@ -17,7 +17,7 @@ import {
   type ChatTurn,
 } from '../../../news-harness/on-device/shared';
 import { useAppLanguageStore } from '../../../stores/app-language-store';
-import { SUPPORTED_LANGUAGES } from '../../../translation-service';
+import { SUPPORTED_LANGUAGES } from '../../../supported-languages';
 import type { ConversationMessage, ToolExecutionResult } from '../../types';
 import { ON_DEVICE_CHAT_ROUTE, type OnDeviceChatFlow, type OnDeviceChatRoute } from './routes';
 

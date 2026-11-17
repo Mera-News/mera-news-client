@@ -3,11 +3,11 @@
 // 502 handling, and the stream handle a streaming body hands to its reader.
 // Imports none of cloudComplete / routed-send / chat-response.
 
-import { fetch as expoFetch } from 'expo/fetch';
+import { fetch as expoFetch } from '@/lib/platform/fetch';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { departureMark, whenForeground } from '../app-restart';
 import { bytesToHex } from '../e2ee/e2ee-crypto';
-import { getJwtToken, invalidateJwtCache } from '../auth-client';
+import { getJwtToken, invalidateJwtCache } from '../platform/auth';
 import logger from '../logger';
 import * as gatewayRateLimiter from './gateway-rate-limiter';
 import { retryAfterMs } from '../algorithms/retry-after';

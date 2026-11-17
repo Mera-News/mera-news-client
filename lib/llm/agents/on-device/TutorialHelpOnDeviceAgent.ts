@@ -1,6 +1,6 @@
 // On-device tutorial help: plain streamed text, no tools.
 
-import { inferStream } from '../../../mera-protocol-toolkit';
+import { inferStream } from '../../../platform/on-device-model';
 import { createThinkStripper } from '../../../algorithms/think-strip';
 import { ON_DEVICE_CHAT_MAX_TOKENS } from '../../../news-harness/on-device/shared';
 import {

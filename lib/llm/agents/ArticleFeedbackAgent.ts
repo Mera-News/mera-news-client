@@ -25,7 +25,7 @@ import { useAppLanguageStore } from '../../stores/app-language-store';
 import { useFloatingChatStore } from '../../stores/floating-chat-store';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { chatRunsInCloud } from '../chat-cloud';
-import { SUPPORTED_LANGUAGES } from '../../translation-service';
+import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import { isTracked } from '../../database/services/tracked-story-service';
 import { isSubjectTracked } from '../../tracking/track-actions';
 import { handleWebSearch } from '../../chat-tools/web-search-handler';
@@ -47,14 +47,14 @@ import {
   proposalRequiresUserChoice,
   userTapOnlyRefusal,
 } from '../../news-harness/core/proposals';
-import i18n from '../../i18n';
+import i18n from '../../platform/i18n';
 import type {
   ActiveSuppressionView,
   FactCheckSubject,
   SuggestionFeedbackContext,
   TrackFeedbackSubject,
 } from '../../news-harness/core/types';
-import type { FeedbackSubject } from '../../../components/custom/cards/feedback-subject';
+import type { FeedbackSubject } from '../../tracking/feedback-subject';
 import type { IAgent, ToolDefinition, ToolExecutionResult } from '../types';
 
 /**

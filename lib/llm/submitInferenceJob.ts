@@ -5,7 +5,7 @@
 // (lib/services/scoring-pipeline.ts) owns all job state; this module is
 // stateless and just performs one authenticated submit.
 
-import { fetch as expoFetch } from 'expo/fetch';
+import { fetch as expoFetch } from '@/lib/platform/fetch';
 import logger from '@/lib/logger';
 import * as coldstartTimeline from '@/lib/diagnostics/coldstart-timeline';
 import { withRetry } from '@/lib/utils/retry';
@@ -25,10 +25,10 @@ import {
   NoCredentialError,
   type E2EEContext,
 } from '@/lib/e2ee/e2ee-service';
-import { getJwtToken, invalidateJwtCache } from '@/lib/auth-client';
-import { recordAuthFailure } from '@/lib/auth-failure-breaker';
+import { getJwtToken, invalidateJwtCache } from '@/lib/platform/auth';
+import { recordAuthFailure } from '@/lib/platform/auth';
 import * as pako from 'pako';
-import { Directory, File, Paths } from 'expo-file-system';
+import { devDump } from '@/lib/platform/host';
 import { INFERENCE_ENDPOINT, DUMP_QUERIES_ENABLED } from '@/lib/config/endpoints';
 import {
   isReadHeld,
@@ -550,18 +550,12 @@ function computeSharedSystem(calls: BatchCall[]): string | null {
 }
 
 /**
- * DEV-ONLY: dump the plaintext (pre-encryption) prompts to a timestamped .md
- * file under the app's document directory. Pull with:
- *   xcrun simctl get_app_container booted com.mera.news data
- * then copy out `Documents/prompt-dumps/*.md`. Gitignored at project root
- * under `prompt-dumps/` so you can also stash them there while iterating.
+ * DEV-ONLY: hand the plaintext (pre-encryption) prompts to the host as a
+ * timestamped .md file (`devDump`); the host decides where it lands.
  */
 async function dumpPromptsForDev(calls: BatchCall[]): Promise<void> {
-  const dir = new Directory(Paths.document, 'prompt-dumps');
-  if (!dir.exists) dir.create({ intermediates: true });
-
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const file = new File(dir, `${ts}-calls-${calls.length}.md`);
+  const fileName = `${ts}-calls-${calls.length}.md`;
 
   const parts: string[] = [
     `# Inference job — ${new Date().toISOString()}`,
@@ -587,9 +581,8 @@ async function dumpPromptsForDev(calls: BatchCall[]): Promise<void> {
     parts.push('');
   }
 
-  file.create();
-  file.write(parts.join('\n'));
-  logger.info(`${TAG} [dev] dumped prompts → ${file.uri}`);
+  devDump(fileName, parts.join('\n'));
+  logger.info(`${TAG} [dev] dumped prompts → ${fileName}`);
 }
 
 export function bytesToHex(bytes: Uint8Array): string {

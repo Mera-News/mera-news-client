@@ -4,7 +4,7 @@
 // class stays untouched. Route 'kev': Kev decides, the built-in model
 // writes; 'single' is one built-in call.
 
-import type { FeedbackSubject } from '../../../../components/custom/cards/feedback-subject';
+import type { FeedbackSubject } from '../../../tracking/feedback-subject';
 import {
   ARTICLE_FEEDBACK_SCHEMA,
   articleFeedbackInstructions,

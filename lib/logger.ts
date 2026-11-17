@@ -1,5 +1,6 @@
-import * as Sentry from '@sentry/react-native';
-import { AppState } from 'react-native';
+import * as Sentry from '@/lib/platform/sentry';
+import { AppState } from '@/lib/platform/react-native';
+import { env } from '@/lib/platform/env';
 
 type LogLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
 
@@ -163,7 +164,7 @@ export function classifySuppression(
 
   try {
     const { isRequestTimeoutError } =
-      require('./apollo-fetch') as typeof import('./apollo-fetch');
+      require('./platform/apollo-fetch') as typeof import('./platform/apollo-fetch');
     // Only OUR marked 30s abort, never a bare AbortError: Apollo aborts on
     // unsubscribe with the same shape, and that is a cancellation (already
     // handled above). A synchronous property read of AppState.currentState,
@@ -194,7 +195,7 @@ function isTransientSafely(error: Error): boolean {
 function recordAuthFailureSafely(): void {
   try {
     const { recordAuthFailure } =
-      require('./auth-failure-breaker') as typeof import('./auth-failure-breaker');
+      require('./platform/auth') as typeof import('./platform/auth');
     recordAuthFailure();
   } catch {
     // best-effort — the breaker may not be available (e.g. in unit tests)
@@ -447,7 +448,7 @@ const logger = {
   debug(message: string, context?: LogContext): void {
     // Only print to console when explicitly opted in — debug is chatty and
     // otherwise floods the dev console on every tick/batch.
-    if (__DEV__ && process.env.EXPO_PUBLIC_VERBOSE_LOGS === 'true') {
+    if (__DEV__ && env.EXPO_PUBLIC_VERBOSE_LOGS === 'true') {
       if (context !== undefined) {
         console.debug('[Debug]', message, context);
       } else {

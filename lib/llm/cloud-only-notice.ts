@@ -4,20 +4,20 @@
 // on-device-gate.ts. The i18n instance is required lazily (lib/i18n pulls the
 // OS translator's native module at load).
 
-import { showDialog } from '../dialog';
+import { showDialog } from '../platform/dialog';
 import { cloudAllowed, type CloudPurpose } from './on-device-gate';
 
 /** The shared body line, in the reader's language. */
 export function cloudOnlyNoticeText(): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const i18n = (require('../i18n') as typeof import('../i18n')).default;
+  const i18n = (require('../platform/i18n') as typeof import('../platform/i18n')).default;
   return i18n.t('chat.cloudOnlyNotice');
 }
 
 /** The dialog (one OK button). Resolves once it is dismissed. */
 export async function showCloudOnlyNotice(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const i18n = (require('../i18n') as typeof import('../i18n')).default;
+  const i18n = (require('../platform/i18n') as typeof import('../platform/i18n')).default;
   await showDialog({
     title: i18n.t('meraProtocol.title'),
     body: cloudOnlyNoticeText(),

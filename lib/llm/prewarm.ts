@@ -16,7 +16,7 @@
 // prewarm simply means the first real turn pays the original cost.
 
 import { create } from 'zustand';
-import { getJwtToken } from '../auth-client';
+import { getJwtToken } from '../platform/auth';
 import logger from '../logger';
 import { useCloudChatStore } from '../stores/cloud-chat-store';
 import { useUserStore } from '../stores/user-store';

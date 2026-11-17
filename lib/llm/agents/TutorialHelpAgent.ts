@@ -29,7 +29,7 @@ import {
 import logger from '../../logger';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { useAppLanguageStore } from '../../stores/app-language-store';
-import { SUPPORTED_LANGUAGES } from '../../translation-service';
+import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import type { IAgent, ToolDefinition, ToolExecutionResult } from '../types';
 
 export class TutorialHelpAgent implements IAgent {

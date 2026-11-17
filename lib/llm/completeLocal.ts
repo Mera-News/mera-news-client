@@ -3,8 +3,8 @@
 // The built-in models emit no reasoning trace and never report a truncated
 // reply, so the reply is the answer.
 
-import { infer as localInfer, inferStructured, type JsonSchema, type TextEngine } from '../mera-protocol-toolkit';
-import type { InferenceLabel } from '../mera-protocol-toolkit/core/inference-stats';
+import { infer as localInfer, inferStructured, type JsonSchema, type TextEngine } from '../platform/on-device-model';
+import type { InferenceLabel } from '../platform/on-device-model';
 
 export interface LocalCompleteRequest {
   systemPrompt: string;

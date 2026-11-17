@@ -53,7 +53,8 @@
 // stay static: both are universally available, and departures need `AppState`.
 
 import { useEffect } from 'react';
-import { AppState, DevSettings, type AppStateStatus } from 'react-native';
+import { AppState, DevSettings, type AppStateStatus } from '@/lib/platform/react-native';
+import { env } from '@/lib/platform/env';
 
 import logger from '@/lib/logger';
 
@@ -377,7 +378,7 @@ export function autoReloadDisabled(): boolean {
 export function captureResumeSpot(): unknown {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { captureSpot } = require('@/lib/navigation/resume-spot');
+    const { captureSpot } = require('@/lib/platform/resume-spot');
     return captureSpot() ?? null;
   } catch (err) {
     logger.captureException(err, { tags: { module: 'app-restart', method: 'captureResumeSpot' } });
@@ -460,7 +461,7 @@ let restartInFlight = false;
  * blocked, what blocked it.
  */
 function restartDebugEnabled(): boolean {
-  return process.env.EXPO_PUBLIC_RESTART_DEBUG === 'true';
+  return env.EXPO_PUBLIC_RESTART_DEBUG === 'true';
 }
 
 /** Why a restart for `reason` cannot happen now, or null if it can. */
@@ -482,7 +483,7 @@ function blockedRoute(): string | null {
   // absolute. It mirrors the live route for exactly this kind of non-React read.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getCurrentPathname } = require('@/lib/nav-state');
+    const { getCurrentPathname } = require('@/lib/platform/nav-state');
     const pathname: string = getCurrentPathname();
     if (isRestartBlockedRoute(pathname)) return pathname;
   } catch {
@@ -511,7 +512,7 @@ export function routeBlocksRestart(): boolean {
  * flag can never act there.
  */
 export function devRestoreTestEnabled(): boolean {
-  return __DEV__ && process.env.EXPO_PUBLIC_DEV_RESTORE_TEST === '1';
+  return __DEV__ && env.EXPO_PUBLIC_DEV_RESTORE_TEST === '1';
 }
 
 /**
@@ -528,7 +529,7 @@ export function restartIsAvailable(): boolean {
   if (__DEV__) return devRestoreTestEnabled();
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Updates = require('expo-updates');
+    const Updates = require('@/lib/platform/updates');
     return Boolean(Updates.isEnabled);
   } catch {
     return false;
@@ -648,7 +649,7 @@ export async function requestRestart(reason: RestartReason, opts?: { spot?: unkn
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Updates = require('expo-updates');
+    const Updates = require('@/lib/platform/updates');
     await Updates.reloadAsync();
   } catch (err) {
     restartInFlight = false;

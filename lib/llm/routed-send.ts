@@ -8,7 +8,7 @@
 // FIRST failure surfaces (the head's, as the old fallback did: a later profile must never mask
 // the real error), so callers see the same errors they always did.
 
-import { AppState } from 'react-native';
+import { AppState } from '@/lib/platform/react-native';
 import { departureMark } from '../app-restart';
 import { authFetch, takeStreamHandle, type ChatTurn, type CloudCallOptions } from './gateway-fetch';
 import { OnDeviceModeError } from './on-device-gate';

@@ -7,7 +7,7 @@
 
 import { gql } from '@apollo/client';
 import { create } from 'zustand';
-import client from '@/lib/apollo-client';
+import client from '@/lib/platform/apollo-client';
 
 export interface ReadingPlans {
     readonly starter: number;

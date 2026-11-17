@@ -22,7 +22,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { randomBytes } from '@noble/ciphers/utils.js';
 
-import { getJwtToken } from '../auth-client';
+import { getJwtToken } from '../platform/auth';
 import logger from '../logger';
 import { withRetry } from '../utils/retry';
 import { retryAfterMs } from '../algorithms/retry-after';
