@@ -24,7 +24,7 @@ import {
   assertNoCleartextToolFields,
   toTextToolMessages,
   type TextToolDefinition,
-} from './text-tool-protocol';
+} from '@/lib/harnesses/text-tool-protocol';
 import * as gatewayRateLimiter from './gateway-rate-limiter';
 import { estimateTokens } from '../algorithms/estimate-tokens';
 import type { BatchCall } from './types';

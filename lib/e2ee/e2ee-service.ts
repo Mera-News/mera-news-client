@@ -27,7 +27,7 @@ import logger from '../logger';
 import { withRetry } from '../utils/retry';
 import { retryAfterMs } from '../algorithms/retry-after';
 import * as gatewayRateLimiter from '../llm/gateway-rate-limiter';
-import { assertNoCleartextToolFields } from '../llm/text-tool-protocol';
+import { assertNoCleartextToolFields } from '@/lib/harnesses/text-tool-protocol';
 import { linkedAbort, raceSignal } from '../llm/abort-race';
 import { getCachedAttestation, isKeyVerified, markKeyVerified, setCachedAttestation } from './e2ee-cache';
 import type { E2EEProvider } from './provider';

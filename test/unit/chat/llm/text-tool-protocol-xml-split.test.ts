@@ -4,7 +4,7 @@ import {
   parseToolCallsFromText,
   type ParsedToolCall,
   type TextToolDefinition,
-} from '@/lib/llm/text-tool-protocol';
+} from '@/lib/harnesses/text-tool-protocol';
 
 const TOOLS: TextToolDefinition[] = [
   {

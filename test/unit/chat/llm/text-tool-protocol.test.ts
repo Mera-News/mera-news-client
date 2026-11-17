@@ -8,7 +8,7 @@ import {
   renderToolsBlock,
   toTextToolMessages,
   type TextToolDefinition,
-} from '@/lib/llm/text-tool-protocol';
+} from '@/lib/harnesses/text-tool-protocol';
 
 const TOOL: TextToolDefinition = {
   type: 'function',

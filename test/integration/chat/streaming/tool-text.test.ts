@@ -7,7 +7,7 @@
 // lib/llm/__tests__/cloudComplete.test.ts > cloudChatStream.
 import { SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, type SseEvent } from '@/lib/llm/cloudComplete';
-import { FORBIDDEN_TOOL_KEYS } from '@/lib/llm/text-tool-protocol';
+import { FORBIDDEN_TOOL_KEYS } from '@/lib/harnesses/text-tool-protocol';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import {
   captureChatBodies,

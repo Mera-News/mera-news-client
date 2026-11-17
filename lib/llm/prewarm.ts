@@ -22,6 +22,7 @@ import { useCloudChatStore } from '../stores/cloud-chat-store';
 import { useUserStore } from '../stores/user-store';
 import { chatRunsInCloud } from './chat-cloud';
 import { cloudComplete } from './cloudComplete';
+import { READINESS_PING_PROMPT, READINESS_PING_SYSTEM } from '@/lib/news-harness/readiness-ping/prompt';
 import { attestProfile } from './provider-e2ee';
 import { profilesToPreattest, refreshRouting } from './router';
 
@@ -122,8 +123,8 @@ async function pingModel(): Promise<void> {
     // A plain reply, not a tool call: the app sends tools as text inside the
     // sealed envelope, so a tool leg would only make the ping bigger.
     const reply = await cloudComplete({
-      systemPrompt: 'Reply with the single word "ready" and nothing else.',
-      prompt: 'ping',
+      systemPrompt: READINESS_PING_SYSTEM,
+      prompt: READINESS_PING_PROMPT,
       route: 'chat-tools',
       maxTokens: 8,
       temperature: 0,

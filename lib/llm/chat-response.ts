@@ -10,7 +10,7 @@ import {
   APP_TOOL_FORMAT,
   createToolCallStreamParser,
   type TextToolDefinition,
-} from './text-tool-protocol';
+} from '@/lib/harnesses/text-tool-protocol';
 import { sseEvents } from '../algorithms/sse';
 import { readStoredTurn, turnReader, type TurnReader, type TurnResume } from './chat-turn';
 import {
