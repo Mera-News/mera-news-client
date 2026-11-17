@@ -8,8 +8,6 @@ const ESM_PACKAGES = [
   '@noble',
   '@apollo',
   'graphql',
-  'msw',
-  '@mswjs',
   '@bundled-es-modules',
   '@open-draft',
   'until-async',

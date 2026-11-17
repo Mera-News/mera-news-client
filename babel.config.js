@@ -8,6 +8,9 @@ module.exports = {
     // shadows the getter the decorator installs.
     ['@babel/plugin-proposal-decorators', { legacy: true }],
     ['@babel/plugin-transform-class-properties', { loose: true }],
+    // Loose class properties need the private members loose too (msw's classes use them).
+    ['@babel/plugin-transform-private-methods', { loose: true }],
+    ['@babel/plugin-transform-private-property-in-object', { loose: true }],
     '@babel/plugin-transform-modules-commonjs',
     ['module-resolver', { root: ['./'], alias: { '@': './' } }],
   ],
