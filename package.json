@@ -1,0 +1,66 @@
+{
+  "name": "mera-news-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The logic behind Mera News without its interface: data models, services, stores, scheduler, scoring, chat and the model harnesses.",
+  "license": "AGPL-3.0-only",
+  "author": "Mera Labs B.V.",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "lib",
+    "dist",
+    "types"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integration --maxWorkers=2",
+    "build": "babel lib --out-dir dist/lib --extensions .ts --copy-files --no-copy-ignored --ignore \"lib/**/__tests__/**\"",
+    "check:node": "npm run build && node --test test/node/",
+    "harness:generate": "tsx lib/harnesses/generate.ts",
+    "skills:generate": "tsx lib/harnesses/generate.ts"
+  },
+  "dependencies": {
+    "@cospired/i18n-iso-languages": "^4.2.0",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "i18n-iso-countries": "^7.14.0"
+  },
+  "peerDependencies": {
+    "@apollo/client": "^4.3.5",
+    "@nozbe/watermelondb": "^0.28.0",
+    "graphql": "^16.11.0",
+    "i18next": "^26.5.12",
+    "react": ">=19",
+    "rxjs": "^7.8.2",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@apollo/client": "^4.3.5",
+    "@babel/cli": "^7.29.0",
+    "@babel/core": "^7.29.0",
+    "@babel/plugin-proposal-decorators": "^7.29.0",
+    "@babel/plugin-transform-class-properties": "^7.29.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.29.0",
+    "@babel/preset-typescript": "^7.29.0",
+    "@nozbe/watermelondb": "^0.28.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "~19.3.0",
+    "babel-jest": "~30.5.2",
+    "babel-plugin-module-resolver": "^5.0.3",
+    "graphql": "^16.11.0",
+    "i18next": "^26.5.12",
+    "jest": "~30.5.2",
+    "msw": "2.15.0",
+    "react": "19.3.0",
+    "rxjs": "^7.8.2",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "zustand": "^5.0.16"
+  }
+}
