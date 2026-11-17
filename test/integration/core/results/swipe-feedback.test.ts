@@ -78,7 +78,7 @@ beforeEach(() => {
     'translation',
     {
       swipeFeed: {
-        chatHandoffDislike: "I didn't like this story: {{- path}}.",
+        chatHandoffDislike: "I didn't like this story: {{path}}.",
         chatHandoffDislikeNoPath: "I didn't like this story. Help me get fewer like it.",
       },
     },
