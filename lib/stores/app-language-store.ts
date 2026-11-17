@@ -8,7 +8,7 @@ import {
 } from '@/lib/database/services/translation-cache-service';
 import { clearTranslationFailuresFor, setLateTranslationSink } from '@/lib/platform/translation';
 import { SUPPORTED_LANGUAGES } from '@/lib/supported-languages';
-import { bumpTranslationEpoch } from '@/lib/translation-queue';
+import { bumpTranslationEpoch } from '@/lib/platform/translation';
 import { applyLanguage } from '@/lib/platform/i18n';
 
 const APP_LANGUAGE_KEY = 'app_language';
