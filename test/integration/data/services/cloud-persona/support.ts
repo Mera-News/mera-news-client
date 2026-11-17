@@ -14,7 +14,7 @@ import { __resetRouterForTests as resetModelFallback } from '@/lib/llm/router';
 import { __resetOnDeviceGateForTests } from '@/lib/llm/on-device-gate';
 import logger from '@/lib/logger';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
-import { authState, secureStoreDump, testHost, toastCalls, type GatewayCall, type GatewayReply } from '@/test/helpers';
+import { advanceUntil, authState, secureStoreDump, testHost, toastCalls, type GatewayCall, type GatewayReply } from '@/test/helpers';
 
 export const MIN = 60_000;
 export const HOUR = 3_600_000;
@@ -59,10 +59,7 @@ export function spyOnNotifications() {
     /** The options each notified toast was called with. */
     calls: () => toastCalls.map((c) => c.opts),
     /** The host shows each toast after the inbox row is written, so a test that expects `n` waits for them. */
-    async until(n: number): Promise<void> {
-      const { setTimeout: realTimeout } = jest.requireActual<typeof import('timers')>('timers');
-      for (let i = 0; i < 200 && toastCalls.length < n; i++) await new Promise((r) => realTimeout(r, 5));
-    },
+    until: (n: number): Promise<void> => advanceUntil(() => toastCalls.length >= n),
     restore: () => {},
   };
 }
