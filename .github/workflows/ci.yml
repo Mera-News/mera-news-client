@@ -28,7 +28,11 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
+      # @nozbe/sqlite@3.46.0 (pulled in by WatermelonDB) declares no license field. It ships the
+      # SQLite 3.46.0 amalgamation unchanged, and SQLite is in the public domain (the "blessing"
+      # header in sqlite3.c), so it is excluded by exact version.
       - name: Production dependency licenses
         run: >
           npx --yes license-checker-rseidelsohn@4.4.2 --production --excludePrivatePackages
-          --onlyAllow "MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;Zlib;CC0-1.0;BlueOak-1.0.0"
+          --excludePackages "@nozbe/sqlite@3.46.0"
+          --onlyAllow "MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;Zlib;(MIT AND Zlib);CC0-1.0;BlueOak-1.0.0"
