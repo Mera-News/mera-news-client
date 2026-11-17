@@ -10,6 +10,7 @@ import { useForYouStore } from '@/lib/stores/for-you-store';
 import { getPipeline } from '@/lib/database/services/scoring-pipeline-store';
 import { countAllTopics } from '@/lib/database/services/topic-service';
 import { useNetworkStore } from '@/lib/stores/network-store';
+import { submitScoringForBackground } from '@/lib/services/scoring-pipeline';
 import { advanceUntilDone, defaultResponder, gatewayCalls, mockGateway, server, testHost } from '@/test/helpers';
 import { ids, makeCtx, seedInterest, tick, serveHydrate, servePersona, spyOnExport, type HydrateServe, type TestCtx } from '../steps/support';
 
@@ -236,3 +237,29 @@ export const currentRunId = async (): Promise<string | null> => (await getPipeli
 /** A 24-hex id whose first four bytes are `ms` as seconds: what the background fetch filters on. */
 export const oid = (n: number, ms = Date.now()): string =>
   Math.floor(ms / 1000).toString(16).padStart(8, '0') + n.toString(16).padStart(16, '0');
+
+/**
+ * Hooks for a background run. The host decides how a background diff is cut to its fetch budget;
+ * these pass it through unchanged, so a test of the budget belongs with the host.
+ */
+export function backgroundHooks(
+  opts: { submit?: boolean; now?: number; maxBatches?: number; shapeDiff?: BackgroundSyncHooks['shapeDiff'] } = {},
+) {
+  const now = opts.now ?? Date.now();
+  const calls = { refresh: 0, submitted: [] as string[][], postsAtSubmit: [] as number[] };
+  const hooks: BackgroundSyncHooks = {
+    shapeDiff: opts.shapeDiff ?? ((diff) => diff),
+    submit:
+      opts.submit === false
+        ? null
+        : async (articleIds) => {
+            calls.submitted.push(articleIds);
+            calls.postsAtSubmit.push(gatewayCalls('job').length);
+            await submitScoringForBackground({ deadlineAt: now + 60_000, articleIds, maxBatches: opts.maxBatches ?? 3 });
+          },
+    refreshStore: async () => {
+      calls.refresh += 1;
+    },
+  };
+  return { hooks, calls, now };
+}
