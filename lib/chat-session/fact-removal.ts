@@ -3,7 +3,7 @@
 // the chat closed the fact waits, untouched and with no model call, for the
 // reader's tap on "See what to save instead".
 
-import { openMeraChat } from '@/components/custom/mera-button/open-mera-chat';
+import { openMeraChat } from './open-mera-chat';
 import { chatMayRemoveFact, patchMetadata, removeFailedChatFact } from '@/lib/database/services/fact-service';
 import { TOPICS_ASK_REMOVAL } from '@/lib/database/services/topic-generation-status-service';
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';

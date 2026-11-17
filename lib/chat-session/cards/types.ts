@@ -4,7 +4,7 @@
 // util, the ChatThread component, and the (parallel) data/store layer that
 // feeds it. Everything here is presentational — no data fetching, no stores.
 
-import { createContext, type ReactElement, type ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { StepKind } from '@/lib/services/chat-phase';
 import type { AgentTurnResult } from '@/lib/mera-harness';
 import type { ConversationMessage, StagedProposal } from '@/lib/llm/types';
@@ -404,10 +404,6 @@ export interface ComposerAction {
 }
 
 export type OnboardingPath = 'location' | 'profile' | 'follow' | 'about' | 'data';
-
-/** True inside the wizard's chat step. A context so CloudPersonaChat, between the
- *  step and the view, carries none of this. */
-export const OnboardingChatContext = createContext(false);
 
 // ---------------------------------------------------------------------------
 // ChatThread props

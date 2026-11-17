@@ -48,7 +48,7 @@ let moreOptionsInFlight = false;
 function createEngine(kind: EngineKind, agent: ChatAgent): ChatEngine<ChatAgent> {
     if (kind === 'cloud') {
         const { createCloudEngine } =
-            require('@/lib/hooks/useCloudPersonaChat') as typeof import('@/lib/hooks/useCloudPersonaChat');
+            require('./useCloudPersonaChat') as typeof import('./useCloudPersonaChat');
         return createCloudEngine(agent as IAgent) as ChatEngine<ChatAgent>;
     }
     const { createLocalEngine } = require('@/lib/llm/useLocalLLM') as typeof import('@/lib/llm/useLocalLLM');

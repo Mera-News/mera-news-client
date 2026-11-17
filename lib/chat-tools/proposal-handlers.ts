@@ -14,7 +14,7 @@ import { useFloatingChatStore } from '../stores/floating-chat-store';
 import { triggerTopicGeneration } from './tool-handlers';
 import { blockIfOnDevice } from '../llm/cloud-only-notice';
 import type { ProposalAction } from '../llm/types';
-import { submitFeatureRequest } from '../feedback';
+import { submitFeatureRequest } from '../platform/feedback';
 import { getAllByNormalizedText } from '../database/services/topic-service';
 import {
   applyPersonaAction,
@@ -22,7 +22,7 @@ import {
 } from '../database/services/persona-action-executor';
 import { ACTION_NAMES } from '../news-harness/persona-management/action-names';
 import { trackStoryWithProposal, syncFollowedStoryNow } from '../tracking/track-actions';
-import type { FeedbackSubject } from '../../components/custom/cards/feedback-subject';
+import type { FeedbackSubject } from '../tracking/feedback-subject';
 import logger from '../logger';
 
 /** Outcome of one executed proposal — richer than a bare count so the chat can

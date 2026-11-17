@@ -78,7 +78,7 @@ export async function handleSearchNews(
   // evaluation for every consumer of this agent, for a query that only runs on
   // a turn where the user actually asked about the news.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { default: client } = require('../apollo-client') as typeof import('../apollo-client');
+  const { default: client } = require('../platform/apollo-client') as typeof import('../platform/apollo-client');
 
   try {
     const { data } = await client.query<SearchNewsQueryResult>({

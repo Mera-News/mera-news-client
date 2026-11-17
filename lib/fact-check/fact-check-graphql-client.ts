@@ -32,7 +32,7 @@
  */
 
 import { gql } from '@apollo/client';
-import client from '../apollo-client';
+import client from '../platform/apollo-client';
 import logger from '../logger';
 import {
     getFactCheckForClaim,

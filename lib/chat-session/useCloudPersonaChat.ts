@@ -55,7 +55,7 @@ import {
   type CloudState,
   type ToolCallAccumulator,
 } from '@/lib/chat-session/cloud-engine-helpers';
-import { normaliseTrackText } from '@/components/custom/floating-chat/track-options';
+import { normaliseTrackText } from './cards/track-options';
 import type { ProposalAction } from '../news-harness/core/types';
 import { MUTATING_CHAT_TOOLS, scriptedRowIds } from '@/lib/chat-session/engine';
 import { withAppQuestion, withScriptedQuestion } from '@/lib/mera-harness/core/core';

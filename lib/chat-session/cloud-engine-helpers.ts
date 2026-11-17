@@ -11,7 +11,7 @@ import {
   normaliseTrackText,
   readCardOptions,
   readTrackOutcomes,
-} from '@/components/custom/floating-chat/track-options';
+} from './cards/track-options';
 import { useCloudChatStore } from '../stores/cloud-chat-store';
 import { useFloatingChatStore } from '../stores/floating-chat-store';
 import { unresolvedGroups } from '../chat-tools/fact-choice-resolution';
@@ -211,9 +211,9 @@ function parseToolArgs(raw: string): Record<string, unknown> {
 }
 
 /** Required lazily: lib/i18n pulls the OS translator's native module at load. */
-function i18nInstance(): typeof import('../i18n').default {
+function i18nInstance(): typeof import('../platform/i18n').default {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return (require('../i18n') as typeof import('../i18n')).default;
+  return (require('../platform/i18n') as typeof import('../platform/i18n')).default;
 }
 
 /** The fixed removal line, in the reader's language. */

@@ -39,7 +39,7 @@
 // first that you are not confusing the chat's claim picker with the server's
 // article check; they are different features now.
 
-import { hapticLight } from '../haptics';
+import { hapticLight } from '../platform/haptics';
 import { requestFactCheck } from './fact-check-graphql-client';
 import type { FactCheckKeepInput } from '../database/services/saved-article-suggestion-service';
 import type { ForYouSuggestion } from '../stores/for-you-store';

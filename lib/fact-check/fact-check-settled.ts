@@ -187,7 +187,7 @@ export async function noteFactCheckStored(
   const shownTitle = clip(articleTitle);
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { toastManager } = require('../toast-manager') as typeof import('../toast-manager');
+    const { toastManager } = require('../platform/toast') as typeof import('../platform/toast');
     await toastManager.showNotifiedToast({
       type: 'fact_check_done',
       source: 'fact-check',

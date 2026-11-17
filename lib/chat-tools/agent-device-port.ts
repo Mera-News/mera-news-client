@@ -32,7 +32,7 @@ import { handleWebSearch } from './web-search-handler';
 import { useMeraProtocolStore } from '../stores/mera-protocol-store';
 import { getFacts } from '../database/services/fact-service';
 import { useAppLanguageStore } from '../stores/app-language-store';
-import { SUPPORTED_LANGUAGES } from '../translation-service';
+import { SUPPORTED_LANGUAGES } from '../supported-languages';
 import { canonicalizeLanguageCode } from '../algorithms/language-codes';
 import { withReaderPhrase } from '../news-harness/on-device/follow-story/reader-phrase';
 import type { AgentPersona } from '@/lib/mera-harness';
