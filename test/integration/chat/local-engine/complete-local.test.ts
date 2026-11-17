@@ -3,7 +3,7 @@ import { activeHolds } from '@/lib/app-restart';
 import { completeLocal } from '@/lib/llm/completeLocal';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import '@/test/helpers';
-import { installLlama, llamaCalls, resetChatModules } from '@/test/integration/chat/_helpers';
+import { decideCalls, installLlama, llamaCalls, resetChatModules } from '@/test/integration/chat/_helpers';
 
 const ask = (extra: Partial<Parameters<typeof completeLocal>[0]> = {}) =>
   completeLocal({ systemPrompt: 'sys', prompt: 'user', ...extra });
@@ -22,6 +22,8 @@ describe('the built-in model writes the text', () => {
     await expect(ask()).resolves.toBe('hello world');
     unsub();
 
+    // The text goes to the built-in model only: Kev is never asked to write.
+    expect(decideCalls()).toHaveLength(0);
     expect(states).toEqual([]);
   });
 

@@ -12,6 +12,7 @@ import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';
 import '@/test/helpers';
 import {
+  decideCalls,
   installLlama,
   llamaCalls,
   resetChatModules,
@@ -155,6 +156,8 @@ describe('the wait line', () => {
     phases.stop();
 
     expect(phases.seen).toEqual(['devicePreparing', 'deviceThinking', 'released']);
+    // Kev is never asked to write: a text turn makes no decision call.
+    expect(decideCalls()).toHaveLength(0);
     expect(states).toEqual([]);
     expect(lastAssistant()?.content).toBe('Hello there.');
     expectNothingLeftTheDevice();
