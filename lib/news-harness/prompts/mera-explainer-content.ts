@@ -26,8 +26,8 @@
 // top-level import of this file anywhere.
 //
 // ── THREE HARD INVARIANTS, ENFORCED BY A BUILD-FAILING TEST ──
-// (see test/integration/chat/contracts/mera-explainer-content.test.ts, which regexes the
-//  RAW FILE TEXT — comments included, because this repository is published)
+// (a contract test regexes the RAW FILE TEXT, comments included, because this
+//  repository is published)
 //
 // 1. The licence label. Mera's licence is not OSI-approved; the stronger,
 //    freer-sounding label has a specific meaning and Mera does not meet it, so
@@ -47,8 +47,7 @@
 //    no control exists to switch one on. An earlier version of this file
 //    described such a setting, which is why the test now bans any affirmative
 //    mention of one.
-//    The layer IS being built (Mera Protocol Rules 2/3/5 are marked `Planned`
-//    in lib/mera-protocol-toolkit/mera_protocol.md). The ban is on presenting
+//    Such a layer may come later. The ban is on presenting
 //    it as a protection the user has NOW, not on the feature existing one day.
 //    When it ships, lift the ban here and in the test together.
 //

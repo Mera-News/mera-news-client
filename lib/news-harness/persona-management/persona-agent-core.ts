@@ -678,7 +678,7 @@ const FILTER_TOOL_NAMES: ReadonlySet<string> = new Set([
  * Declared HERE, next to the tool definition, because they are part of the
  * tool's contract: the model reads them out of the tool description and the
  * handler validates against them. The prose itself lives in
- * `lib/chat-tools/mera-explainer-content.ts`, which types its record as
+ * `lib/news-harness/prompts/mera-explainer-content.ts`, which types its record as
  * `Record<MeraExplainerTopicId, string>` — so a section added there without an
  * id here (or an id here with no section) is a compile error, and this file
  * still costs nothing at startup beyond the string array.
