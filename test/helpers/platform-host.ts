@@ -68,7 +68,7 @@ void i18n.init({ lng: 'en', fallbackLng: 'en', resources: { en: { translation: {
 const graphqlEndpoint = () => process.env.EXPO_PUBLIC_GRAPHQL_SERVER_ENDPOINT ?? 'http://127.0.0.1:8790';
 
 const apolloClient = new ApolloClient({
-  link: new HttpLink({ uri: () => graphqlEndpoint(), fetch: (input, init) => globalThis.fetch(input, init) }),
+  link: new HttpLink({ uri: () => `${graphqlEndpoint()}/graphql`, fetch: (input, init) => globalThis.fetch(input, init) }),
   cache: new InMemoryCache(),
 });
 
