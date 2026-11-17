@@ -452,7 +452,7 @@ export async function applyComboTopicsForFact(
 function hasLocalSessionCredential(): boolean {
   try {
     // Lazy: auth-client drags native modules into every importer's suite.
-    const { authClient } = require('../../auth-client') as typeof import('../../auth-client');
+    const { authClient } = require('../../platform/auth') as typeof import('../../platform/auth');
     const cookie = authClient.getCookie();
     return typeof cookie === 'string' && cookie.length > 0;
   } catch {

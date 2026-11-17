@@ -19,7 +19,7 @@
 import { getSetting, setSetting } from './setting-service';
 import { append as appendChangeLog } from './persona-change-log-service';
 import { cloudComplete } from '../../llm/cloudComplete';
-import { toastManager } from '../../toast-manager';
+import { toastManager } from '../../platform/toast';
 import logger from '../../logger';
 import { DEFAULT_HARNESS_CONFIG } from '../../news-harness/core/config';
 import {

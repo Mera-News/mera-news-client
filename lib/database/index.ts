@@ -1,5 +1,5 @@
 import { Database } from '@nozbe/watermelondb';
-import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
+import SQLiteAdapter from '@/lib/platform/sqlite-adapter';
 import logger from '../logger';
 
 import migrations from './migrations';

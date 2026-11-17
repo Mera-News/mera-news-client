@@ -12,8 +12,8 @@
 
 import { isOnDeviceMode } from '../../llm/on-device-gate';
 import logger from '../../logger';
-import { toastManager } from '../../toast-manager';
-import type { FeedbackSubject } from '../../../components/custom/cards/feedback-subject';
+import { toastManager } from '../../platform/toast';
+import type { FeedbackSubject } from '../../tracking/feedback-subject';
 import { syncFollowedStoryNow, trackStoryWithProposal } from '../../tracking/track-actions';
 import { ACTION_NAMES } from '../../news-harness/persona-management/action-names';
 import {

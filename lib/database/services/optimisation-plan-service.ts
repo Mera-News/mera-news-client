@@ -30,7 +30,7 @@ import { getAllTopicSnapshots, getAllByNormalizedText } from './topic-service';
 import { applyPersonaAction, type PersonaAction } from './persona-action-executor';
 import { cloudComplete } from '../../llm/cloudComplete';
 import { isOnDeviceMode } from '../../llm/on-device-gate';
-import { toastManager } from '../../toast-manager';
+import { toastManager } from '../../platform/toast';
 import logger from '../../logger';
 import { ACTION_NAMES, type ActionName } from '../../news-harness/persona-management/action-names';
 import {

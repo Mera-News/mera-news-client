@@ -11,6 +11,7 @@ import { pruneStaleVisits } from './services/publication-visit-service';
 import { useDatabaseStore } from '../stores/database-store';
 import { reconcileAppLanguageWithPersona } from '../language-sync';
 import logger from '../logger';
+import { hydrateHostState } from '../platform/host';
 
 export function hydrateAllStores(): Promise<void> {
   // Dynamic imports to avoid circular dependencies
@@ -22,11 +23,8 @@ export function hydrateAllStores(): Promise<void> {
   const { useAppStateStore } = require('../stores/app-state-store');
   const { useForYouPrefsStore } = require('../stores/for-you-prefs-store');
   const { useBlurImagesStore } = require('../stores/blur-images-store');
-  const { useDisplayPrefsStore } = require('../stores/display-prefs-store');
   const { useRelatedSortStore } = require('../stores/related-sort-store');
-  const { useTextScaleStore } = require('../stores/text-scale-store');
   const { useTutorialsStore } = require('../stores/tutorials-store');
-  const { useStartupTabStore } = require('../stores/startup-tab-store');
 
   // Paint-critical: load cached article_suggestions and push them to the
   // store first. No metadata, no expired-cleanup, no other-store gating.
@@ -56,36 +54,15 @@ export function hydrateAllStores(): Promise<void> {
     require('./services/publisher-source-names').hydratePublisherSourceNames(),
     useForYouPrefsStore.getState().hydrate(),
     useBlurImagesStore.getState().hydrate(),
-    useDisplayPrefsStore.getState().hydrate(),
     useRelatedSortStore.getState().hydrate(),
-    useTextScaleStore.getState().hydrate(),
     useTutorialsStore.getState().hydrate(),
-    useStartupTabStore.getState().hydrate(),
-    // Not a Zustand hydrate method: the memoised page-order load, the same
-    // promise the startup gate awaits before routing. Never rejects.
-    require('../navigation/page-order').loadPageOrders(),
-    // Not a Zustand hydrate method either: the Mera button's saved corner, so
-    // the button never paints in the default corner and then jumps. Never
-    // rejects.
-    require('@/components/custom/mera-button/corner').hydrateMeraButtonCorner(),
-    // The Feed's view (Continuous or Sectioned) and minimap rows, the same
-    // memoised load the startup gate awaits, so the Feed never opens in one
-    // view and jumps to the other. Never rejects.
-    require('@/components/custom/feed/feed-view-prefs').loadFeedViewPrefs(),
+    // The host's own state (its interface preferences, page orders, backup
+    // settings). Inside this allSettled so `ready` still flips after it.
+    hydrateHostState(),
     // Not a Zustand store: the gateway's daily reading hold (a settings row
     // mirrored in memory), loaded before any scoring path can ask
     // `isReadHeld()`. Never rejects.
     require('../subscription/read-hold').hydrateReadHold(),
-    // Not a Zustand store: a synchronous mirror of the backup preferences,
-    // read by the settings section and by the background task's guards.
-    require('../backup/backup-settings')
-      .hydrateBackupSettings()
-      // Reconcile the OS background task with the hydrated cadence. A
-      // registration can be lost (reinstall, restore, the system dropping it),
-      // and the only moment we know the cadence is right after this read.
-      // Deliberately not awaited into the result and never allowed to reject.
-      .then(() => require('../background/backup-task').syncBackupTaskRegistration())
-      .catch(() => undefined),
   ])
     .then((results) => {
       // One entry rejecting must not skip the rest of the chain or flip `ready`

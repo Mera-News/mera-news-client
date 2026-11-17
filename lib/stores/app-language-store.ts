@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import { getLocales } from 'expo-localization';
+import { getLocales } from '@/lib/platform/localization';
 import { getSetting, setSetting } from '@/lib/database/services/setting-service';
 import {
     loadTranslationCache,
     rememberTranslation,
     sweepTranslationCache,
 } from '@/lib/database/services/translation-cache-service';
-import { clearTranslationFailuresFor, setLateTranslationSink, SUPPORTED_LANGUAGES } from '@/lib/translation-service';
+import { clearTranslationFailuresFor, setLateTranslationSink } from '@/lib/platform/translation';
+import { SUPPORTED_LANGUAGES } from '@/lib/translation-service';
 import { bumpTranslationEpoch } from '@/lib/translation-queue';
-import { applyLanguage } from '@/lib/i18n';
+import { applyLanguage } from '@/lib/platform/i18n';
 
 const APP_LANGUAGE_KEY = 'app_language';
 
@@ -51,7 +52,7 @@ export function phoneLanguage(): string {
 function resolveDeviceLocale(): string {
     const code = phoneLanguage();
     if (code === 'en') return code;
-    const { canTranslateIntoLanguage } = require('@/lib/translation-service') as typeof import('@/lib/translation-service');
+    const { canTranslateIntoLanguage } = require('@/lib/platform/translation') as typeof import('@/lib/platform/translation');
     return canTranslateIntoLanguage(code) ? code : 'en';
 }
 

@@ -20,8 +20,8 @@
 
 import type { SigningAlgo } from '@/lib/e2ee/e2ee-service';
 import logger from '@/lib/logger';
-import { secureStore } from '@/lib/utils/secure-store-adapter';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureStore } from '@/lib/platform/secure-store';
+import AsyncStorage from '@/lib/platform/async-storage';
 import {
   deleteSetting,
   getSetting,

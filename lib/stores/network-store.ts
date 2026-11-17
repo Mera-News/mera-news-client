@@ -3,9 +3,9 @@ import logger from '@/lib/logger';
 import { AUTH_ENDPOINT } from '@/lib/config/endpoints';
 
 // NetInfo requires a native module that may not be available (e.g. Expo Go).
-let NetInfo: typeof import('@react-native-community/netinfo').default | null = null;
+let NetInfo: typeof import('@/lib/platform/netinfo').default | null = null;
 try {
-    NetInfo = require('@react-native-community/netinfo').default;
+    NetInfo = require('@/lib/platform/netinfo').default;
 } catch (err) {
     logger.captureException(err, { tags: { store: 'network-store', method: 'init' } });
 }

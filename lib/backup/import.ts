@@ -31,6 +31,16 @@ import { RESTORE_REPLACED_TABLES, isBackedUpSettingKey } from './allowlist';
 import { openBlob, type BlobSource } from './blob';
 import { SECTION_ROWS_KEY, SECTION_TABLE_KEY } from './export';
 import type { BackupHeader, RestoreRefusal } from './types';
+import appSchema from '../database/schema';
+
+/** Column names per table, from the LIVE schema, for the importer's drift check. */
+export function knownColumns(): Record<string, readonly string[]> {
+  const out: Record<string, readonly string[]> = {};
+  for (const [table, def] of Object.entries(appSchema.tables)) {
+    out[table] = Object.keys((def as { columns: Record<string, unknown> }).columns);
+  }
+  return out;
+}
 
 /** Rows per `batch()` call. Bounded so one write is never a huge allocation. */
 const WRITE_BATCH_ROWS = 500;
