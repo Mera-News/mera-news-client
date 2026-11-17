@@ -23,6 +23,28 @@ import {
   buildFollowStorySystemPrompt,
   getFollowStoryToolDefinitions,
 } from '@/lib/news-harness/follow-story';
+import { PLAN_SYSTEM_PROMPT } from '@/lib/news-harness/optimisation-plan/prompt';
+import { SYNTHESIS_SYSTEM } from '@/lib/news-harness/fact-check/synthesis-prompt';
+import { SUBSCRIPTION_READ_SYSTEM_PROMPT } from '@/lib/news-harness/subscription-read/prompt';
+import { READINESS_PING_PROMPT, READINESS_PING_SYSTEM } from '@/lib/news-harness/readiness-ping/prompt';
+import { MERA_EXPLAINER_SECTIONS, PLAN_SIZES_TOKEN } from '@/lib/news-harness/prompts/mera-explainer-content';
+import {
+  REQUIRED_TOOL_REASK,
+  renderToolsBlock,
+  toTextToolMessages,
+  type ProtocolMessageIn,
+  type TextToolDefinition,
+  type ToolFormat,
+} from '@/lib/harnesses/text-tool-protocol';
+import {
+  CALIBRATION_SYSTEM_PROMPT,
+  buildCalibrationCase,
+  buildCalibrationReport,
+  buildCalibrationUserMessage,
+} from '@/lib/news-harness/scoring-engine/calibration';
+import { STORY_SCOPE_SYSTEM_PROMPT, buildStoryScopePrompt } from '@/lib/news-harness/story-scope';
+import { buildPersonaSummaryPrompt } from '@/lib/news-harness/persona-summary/prompt';
+import { buildStoryHeadlinePrompt } from '@/lib/news-harness/story-headline/prompt';
 import type { KevMessage, KevPorts } from '@/lib/news-harness/on-device/kev';
 
 const SNAPSHOT = path.join(__dirname, 'prompt-hashes.json');
@@ -63,9 +85,79 @@ const ARTICLE = {
 };
 const USER_CONTEXT = '[User facts] Lives in Utrecht, Netherlands, Europe. Works as a nurse.';
 
+// The text tool protocol over a fixed conversation: two tools (one with an optional parameter), then
+// system, user, an assistant turn with a tool call, its result and a closing user turn.
+const TOOL_FORMATS: readonly ToolFormat[] = ['hermes', 'xml', 'xml-first', 'xml-first-soft', 'marker'];
+const TOOLS: TextToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'search_news',
+      description: 'Search recent news.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'What to look for' },
+          limit: { type: 'number', description: 'Optional result count' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'save_fact',
+      description: 'Save a fact about the user.',
+      parameters: { type: 'object', properties: { statement: { type: 'string' } }, required: ['statement'] },
+    },
+  },
+];
+const TOOL_CONVERSATION: ProtocolMessageIn[] = [
+  { role: 'system', content: 'You are Mera.' },
+  { role: 'user', content: 'Find rail strike news' },
+  {
+    role: 'assistant',
+    content: 'Looking that up.',
+    tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_news', arguments: '{"query":"rail strike","limit":3}' } }],
+  },
+  { role: 'tool', tool_call_id: 'c1', content: '{"results":[{"title":"Strike halts trains"}]}' },
+  { role: 'user', content: 'Thanks' },
+];
+const CALIBRATION_COMPS = {
+  topicComp: 0.5, breadthComp: 0.2, geoComp: 0.4, geoAlignment: 'local', entityComp: 0.1, eventComp: 0.3,
+  pubComp: 0.2, popComp: 0.1, affinity: 0.4, mathBase: 0.5, base: 0.5, negTopicPenalty: 0, suppressPenalty: 0,
+} as never;
+const SCOPE_TITLES = ['NS strike halts trains', 'Strike extended'];
+
 function cloudProducers(): Record<string, Producer> {
   const p: Record<string, Producer> = {};
   for (const name of CLOUD_CONSTANTS) p[`const:${name}`] = () => (prompts as Record<string, unknown>)[name];
+  const strays: Record<string, string> = {
+    PLAN_SYSTEM_PROMPT, SYNTHESIS_SYSTEM, SUBSCRIPTION_READ_SYSTEM_PROMPT, READINESS_PING_SYSTEM, READINESS_PING_PROMPT,
+    REQUIRED_TOOL_REASK, PLAN_SIZES_TOKEN, CALIBRATION_SYSTEM_PROMPT, STORY_SCOPE_SYSTEM_PROMPT,
+  };
+  for (const [name, value] of Object.entries(strays)) p[`const:${name}`] = () => value;
+  for (const [id, text] of Object.entries(MERA_EXPLAINER_SECTIONS)) p[`explainer:${id}`] = () => text;
+  for (const format of TOOL_FORMATS) {
+    for (const choice of ['auto', 'required'] as const) p[`toolsBlock:${format}/${choice}`] = () => renderToolsBlock(TOOLS, choice, format);
+    p[`toolMessages:${format}`] = () => toTextToolMessages(TOOL_CONVERSATION, TOOLS, 'auto', format);
+  }
+  p['calibrationUser'] = () =>
+    buildCalibrationUserMessage(
+      buildCalibrationReport([
+        buildCalibrationCase('a1', 0.4, 0.7, CALIBRATION_COMPS),
+        buildCalibrationCase('a2', 0.8, 0.5, CALIBRATION_COMPS, 'breaking'),
+        buildCalibrationCase('a3', 0.6, 0.6, CALIBRATION_COMPS),
+      ]),
+    );
+  p['storyScopeCloud'] = () => buildStoryScopePrompt(SCOPE_TITLES, NOW);
+  p['personaSummary'] = () =>
+    buildPersonaSummaryPrompt([
+      { factId: 'f1', statement: 'Lives in Utrecht, Netherlands', weight: 1, topicIds: ['t1'] },
+      { factId: 'f2', statement: 'Commutes by train', weight: 1, topicIds: [] },
+    ] as never);
+  p['storyHeadline'] = () => buildStoryHeadlinePrompt(SCOPE_TITLES);
 
   for (const surface of ['ONBOARDING', 'CONFIG'] as const)
     for (const mode of ['CLOUD', 'LOCAL'] as const)

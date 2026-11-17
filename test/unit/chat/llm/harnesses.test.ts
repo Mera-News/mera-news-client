@@ -12,7 +12,7 @@ import { resolveSlots } from '@/lib/harnesses/slots';
 import { CLOUD_BASE_SLOTS, DEVICE_BASE_SLOTS, HARNESS_SLOTS } from '@/lib/harnesses/slots.generated';
 import { QUIRKS } from '@/lib/harnesses/quirks';
 import { render, parseTemplate } from '@/lib/harnesses/template';
-import { APP_TOOL_FORMAT } from '@/lib/llm/text-tool-protocol';
+import { APP_TOOL_FORMAT } from '@/lib/harnesses/text-tool-protocol';
 import * as prompts from '@/lib/news-harness/prompts/prompts';
 import { NOTE_SYSTEM } from '@/lib/news-harness/on-device/notes/prompt';
 import { firstDifference } from '@/lib/mera-harness/skills/generate';
