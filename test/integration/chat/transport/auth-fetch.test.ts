@@ -19,7 +19,7 @@ import {
   msUntilNextGrant,
 } from '@/lib/llm/gateway-rate-limiter';
 import logger from '@/lib/logger';
-import { authState, gatewayCalls, mockGateway, server } from '@/test/helpers';
+import { authState, gatewayCalls, mockGateway, server, testHost } from '@/test/helpers';
 import {
   advanceUntil,
   CHAT_PATH,
@@ -99,14 +99,21 @@ describe('401 re-mint', () => {
   it('mints a fresh JWT ONCE and retries', async () => {
     server.use(...mockGateway((c) => (c.index === 0 ? { status: 401 } : 'ok')));
     const invalidationsBefore = authState.invalidations;
+    // The host mints a different token once its cache is invalidated, as the real session does.
+    testHost.auth.getJwtToken = async () => (authState.invalidations > invalidationsBefore ? 'fresh-jwt' : 'stale-jwt');
+    const bearers: (string | null)[] = [];
+    server.events.on('request:start', ({ request }) => {
+      if (new globalThis.URL(request.url).pathname === CHAT_PATH) bearers.push(request.headers.get('authorization'));
+    });
     const chat = watchRequests(CHAT_PATH);
 
     const res = await run(send());
 
     expect(res.status).toBe(200);
     expect(chat.count()).toBe(2);
-    // One re-mint after the 401: the cached JWT is invalidated exactly once.
+    // One re-mint after the 401: the cache is invalidated once and the retry carries the new token.
     expect(authState.invalidations - invalidationsBefore).toBe(1);
+    expect(bearers).toEqual(['Bearer stale-jwt', 'Bearer fresh-jwt']);
   });
 
   it('a 401 that survives the fresh JWT is returned, not looped', async () => {

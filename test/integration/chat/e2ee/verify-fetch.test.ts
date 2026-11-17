@@ -1,14 +1,11 @@
 // The Settings "Verify attestation" path: fetchAttestationForVerification (nonce'd, uncached) and the
 // verifier over the report the gateway mock serves.
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { gunzipSync } from 'zlib';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import { getJwtToken, invalidateJwtCache } from '@/lib/platform/auth';
 import { verifyAttestation, type VerificationReport } from '@/lib/algorithms/attestation-verify';
 import { clearAttestationCache, getCachedAttestation, setCachedAttestation } from '@/lib/e2ee/e2ee-cache';
 import {
   fetchAttestationForVerification,
+  fetchComposeFile,
   generateAttestationNonce,
   NoCredentialError,
   type ModelAttestation,
@@ -19,7 +16,6 @@ import { attestationRequests, authState, http, HttpResponse, server } from '@/te
 import { driveUntilDone, useStrictClock } from '@/test/integration/chat/_helpers';
 import capturedReport from '@/test/fixtures/attestation-report.json';
 import gpu1a from '@/test/fixtures/attestation/1gpu-004-0.json';
-import composeManagerReport from '@/test/fixtures/attestation/compose-manager-report.json';
 
 const ROUTE = '*/api/attestation/report';
 const MODEL = 'some/model';
@@ -172,6 +168,46 @@ describe('fetchAttestationForVerification: no session', () => {
   it('does not dress the missing credential up as a 401', async () => {
     const err = await errorOf(fetchAttestationForVerification(MODEL, NONCE));
     expect(err).not.toHaveProperty('statusCode');
+  });
+});
+
+// The deployment check reads NEAR's compose file through the gateway (the verifier itself is pure).
+describe('fetchComposeFile', () => {
+  const FILE_ROUTE = '*/api/attestation/compose-file';
+  let fileRequests: { commit: string | null; file: string | null; authorization: string | null }[];
+
+  beforeEach(() => {
+    fakeClock(Date.now());
+    fileRequests = [];
+    server.use(
+      http.get(FILE_ROUTE, ({ request }) => {
+        const url = new URL(request.url);
+        fileRequests.push({
+          commit: url.searchParams.get('commit'),
+          file: url.searchParams.get('file'),
+          authorization: request.headers.get('authorization'),
+        });
+        return HttpResponse.text('services: {}');
+      }),
+    );
+  });
+
+  it('fetches the file through the gateway, authenticated, and returns its text', async () => {
+    await expect(run(fetchComposeFile('81da1f6', 'prod/small-models.yaml'))).resolves.toBe('services: {}');
+    expect(fileRequests).toEqual([
+      { commit: '81da1f6', file: 'prod/small-models.yaml', authorization: `Bearer ${authState.jwt}` },
+    ]);
+  });
+
+  it('reads a failed fetch as no file', async () => {
+    server.use(http.get(FILE_ROUTE, () => HttpResponse.json({ error: 'x' }, { status: 502 })));
+    await expect(run(fetchComposeFile('81da1f6', 'prod/small-models.yaml'))).resolves.toBeNull();
+  });
+
+  it('signed out: no request and no file', async () => {
+    authState.jwt = null;
+    await expect(run(fetchComposeFile('81da1f6', 'prod/small-models.yaml'))).resolves.toBeNull();
+    expect(fileRequests).toEqual([]);
   });
 });
 
