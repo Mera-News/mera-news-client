@@ -2,6 +2,7 @@
 // string, a thrown nothing, a native crash), the on-device context reset, and a job type this bundle cannot run. Rows are real; the handler is the queue's own seam for the one type under test.
 import { inferenceQueue, __setJobHandlerForTests } from '@/lib/inference/InferenceQueue';
 import logger from '@/lib/logger';
+import { completeLocal } from '@/lib/llm/completeLocal';
 import { decide } from '@/lib/platform/on-device-model';
 import { testHost } from '@/test/helpers';
 import { installLlama, llamaReleases, until } from '@/test/integration/chat/_helpers';
@@ -12,7 +13,6 @@ const kevResident = () => decide({ state: {}, questions: { rel: { type: 'score' 
 
 beforeEach(async () => {
   await prepare();
-  installLlama([]);
 });
 afterEach(cleanup);
 
@@ -109,6 +109,24 @@ describe('a handler that fails', () => {
     await untilJob(id, ['gone']);
 
     expect(llamaReleases()).toBe(0);
+  });
+
+  it('a native crash (no message) releases Kev\'s context; the next text job still runs', async () => {
+    installLlama(['x']);
+    await kevResident();
+    __setJobHandlerForTests('persona_summary', async () => {
+      throw new Error('');
+    });
+    const crashing = await enqueueJob('persona_summary', {}, { maxAttempts: 1 });
+    await inferenceQueue.start();
+    await untilJob(crashing, ['gone']);
+    await until(() => llamaReleases() === 1, 5000, 'context release');
+
+    __setJobHandlerForTests('story_headline', async () => ({ answer: await completeLocal({ systemPrompt: 's', prompt: 'p' }) }));
+    const after = await enqueueJob('story_headline', {});
+    inferenceQueue.notify();
+    const row = await untilJob(after, ['done']);
+    expect(row).toMatchObject({ result: { answer: 'x' } });
   });
 
   it('a context reset that itself fails is logged and the queue carries on with the next job', async () => {
