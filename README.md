@@ -10,30 +10,43 @@ The Mera News phone app is one host. A self-hosted server can be another.
 
 Everything is under `lib/`.
 
-- `algorithms/`: pure helpers such as scoring policy, story grouping and language ordering
-- `background/`: background refresh work
-- `backup/`: export and restore of local data
-- `chat-session/`, `chat-tools/`: chat sessions and the tools a chat can call
+- `algorithms/`: pure helpers, for example model attestation checks, story grouping, language and country names, version compare
+- `background/`: the logic behind background scoring runs (the OS task itself belongs to the host)
+- `backup/`: export and import of the local database
+- `chat-session/`: the chat turn engines and session, kept outside any screen
+- `chat-tools/`: what the chat's tool calls do on the device (facts, proposals, news and web search)
 - `config/`: endpoints and feature gates
-- `database/`: WatermelonDB models, schema and migrations
-- `diagnostics/`: system checks
-- `e2ee/`: end-to-end encryption for model requests
-- `explore/`, `news-search/`, `web-search/`: discovery and search
-- `fact-check/`: fact checking
-- `feed-grouping/`, `feed-ordering/`: how the feed is grouped and ordered
-- `feedback-requests/`: feedback requests
-- `generated/`: generated GraphQL types and documents
-- `harnesses/`, `mera-harness/`, `news-harness/`, `news-harness-app/`: the prompt harness and its generator
-- `inference/`, `llm/`: model routing, queueing and transport
-- `mera-protocol/`, `mera-protocol-toolkit/`: the Mera Protocol and its toolkit
+- `database/`: WatermelonDB schema, migrations, models and the services that read and write them
+- `diagnostics/`: a development timeline of the cold start
+- `e2ee/`: end-to-end encryption between the device and the confidential models
+- `explore/`: the scopes and country lists the World pages are built from
+- `fact-check/`: fact checks, the quick check in chat and the server check per article
+- `feed-grouping/`: scoring gates and score sharing between articles of one story
+- `feed-ordering/`: the order and filters of the feed
+- `feedback-requests/`: questions the Mera team asks in the app, and their answers
+- `generated/`: GraphQL types generated from the server schema
+- `harnesses/`: the prompt text and parameters per model, in base folders that model folders extend
+- `inference/`: the queue of on-device model jobs
+- `llm/`: model routing, profiles and the transport to the confidential gateway
+- `mera-harness/`: the persona chat agent, its loop and its skills
+- `mera-protocol/`: on-device scoring and topic generation
+- `mera-protocol-toolkit/`: types and helpers shared with the on-device models
+- `news-harness/`: prompt builders, the scoring engine, the article pipeline and the on-device chat flows
+- `news-harness-app/`: connects the news harness to the logger
+- `news-search/`: the headline search
 - `platform/`: the seam between this package and its host
-- `scheduler/`: the task scheduler
-- `services/`: data services
-- `stats/`, `tracking/`: local counters the product needs to operate
+- `scheduler/`: the task scheduler, feed sync and the client start sequence
+- `services/`: scoring runs, suggestion sync and feedback handling
+- `stats/`: reading activity and stats computed on the device
 - `stores/`: Zustand stores
-- `subscription/`, `subscriptions/`: plan state and publisher subscriptions
-- `user-context/`: the context the user chooses to share
-- `utils/`: shared utilities
+- `subscription/`: the daily reading limit and the reading plans
+- `subscriptions/`: the sources of a publisher
+- `tracking/`: following a story and its timeline
+- `user-context/`: the reader's places and languages, for ordering
+- `utils/`: retry and sleep
+- `web-search/`: web search through the gateway
+
+Files at the top of `lib/` hold the logger, the restart rules, the GraphQL services (account, articles, places, publication display) and a few small shared modules.
 
 ## Provide a platform
 
