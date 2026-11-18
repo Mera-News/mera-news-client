@@ -10,7 +10,7 @@ Object.defineProperty(exports, "COMMAND_REGISTRY_VERSION", {
     return _command.COMMAND_REGISTRY_VERSION;
   }
 });
-exports.resync = void 0;
+exports.resync = exports.marks = void 0;
 var _AppScheduler = require("../scheduler/AppScheduler");
 var _command = require("./command");
 var _factCommit = require("../chat-tools/fact-commit");
@@ -34,12 +34,14 @@ var _userPublicationSubscriptionService = require("../database/services/user-pub
 var _articleFeedbackService = require("../database/services/article-feedback-service");
 var _storyImpressionService = require("../database/services/story-impression-service");
 var _publicationVisitService = require("../database/services/publication-visit-service");
+var _trackedStoryService = require("../database/services/tracked-story-service");
+var _feedOrderStore = require("../stores/feed-order-store");
 // The one registry of writers a paired phone sends to its pod, by name. The pod looks a name up here
 // and runs the same function, with no sink set, so it writes locally there.
 //
 // Writers that are deliberately not registered:
 // - recordOpen, recordPublicationVisit, markSeen, advanceSeenWatermark and the feed card state are
-//   display marks. They write here first and travel in the batch of marks (lib/sync/marks).
+//   display marks. They write on the phone first and travel in one `marks` command (below).
 // - setWeight in location-service is only called inside registered writers, which run on the pod.
 // - replaceFact, removeEmptyFact, untrackStory, keepArticleForTrackedStory and removeArticleFeedback
 //   are only called inside registered writers or by tasks the pod runs itself.
@@ -51,6 +53,19 @@ var _publicationVisitService = require("../database/services/publication-visit-s
 
 /** Asks the pod for a read. Answers `paused` without starting one while reads are paused. */
 const resync = exports.resync = (0, _command.command)('resync', () => _AppScheduler.AppScheduler.trigger('feed-sync'));
+
+/** Applies a phone's batch of display marks through the same writers, in the order they were made. */
+async function applyMarks(batch) {
+  for (const open of batch.opens) await (0, _storyImpressionService.recordOpen)(open);
+  for (const visit of batch.visits) await (0, _publicationVisitService.recordPublicationVisit)(visit);
+  for (const id of batch.seen) await (0, _trackedStoryService.markSeen)(id);
+  for (const {
+    id,
+    ms
+  } of batch.watermarks) await (0, _trackedStoryService.advanceSeenWatermark)(id, ms);
+  if (batch.cardState) await (0, _settingService.setSetting)(_feedOrderStore.FEED_CARD_STATE_SETTING_KEY, (0, _feedOrderStore.serializeCardState)(batch.cardState));
+}
+const marks = exports.marks = (0, _command.command)('marks', applyMarks);
 const COMMANDS = exports.COMMANDS = {
   acceptProposal: _hygieneService.acceptProposal,
   addFact: _factService.addFact,
@@ -74,6 +89,7 @@ const COMMANDS = exports.COMMANDS = {
   disownStoryMember: _trackActions.disownStoryMember,
   generateMoreTopicsForFact: _topicPlanningService.generateMoreTopicsForFact,
   markFactPlacesWrong: _factService.markFactPlacesWrong,
+  marks,
   moveSavedToList: _savedArticleSuggestionService.moveSavedToList,
   nudgeFactWeight: _mutationRailsService.nudgeFactWeight,
   patchMetadata: _factService.patchMetadata,

@@ -4,7 +4,9 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.createMarkBatch = createMarkBatch;
-exports.recordMark = exports.defaultMarkBatch = void 0;
+exports.defaultMarkBatch = void 0;
+exports.recordMark = recordMark;
+var _platform = require("../platform");
 var _tables = require("./tables");
 const empty = () => ({
   opens: [],
@@ -56,4 +58,9 @@ function createMarkBatch() {
 }
 /** The batch the app's mark writers append to. */
 const defaultMarkBatch = exports.defaultMarkBatch = createMarkBatch();
-const recordMark = exports.recordMark = defaultMarkBatch.recordMark;
+
+/** Holds a mark for the pod. Only a phone paired to a pod sends marks, so anywhere else nothing is
+ *  kept: nothing would ever take the batch, and it would grow for the life of the process. */
+function recordMark(kind, payload) {
+  if ((0, _platform.platform)('lib/sync/marks').podCommand) defaultMarkBatch.recordMark(kind, payload); // same signature; TS cannot relate the two generic payloads
+}

@@ -14,7 +14,7 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
 // its name and arguments go to the pod, and the pod's result comes back.
 
 /** An integer, so the older side of a mismatch can be told. Bumped by hand whenever a command is added, removed or renamed; a hash test pins the names. */
-const COMMAND_REGISTRY_VERSION = exports.COMMAND_REGISTRY_VERSION = 2;
+const COMMAND_REGISTRY_VERSION = exports.COMMAND_REGISTRY_VERSION = 3;
 class CommandArgumentsError extends Error {
   constructor(command, detail) {
     super(`Command ${command} cannot be sent: ${detail}`);
