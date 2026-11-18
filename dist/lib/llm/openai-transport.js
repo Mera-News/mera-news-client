@@ -80,13 +80,14 @@ function createOpenAiTransport(config) {
         'Content-Type': 'application/json'
       };
       if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-      // A redirect would carry the key to an address the config never named.
+      // A redirect would carry the key to an address the config never named. Not followed: it comes
+      // back as a 3xx (or an opaque redirect), a status that is never retried.
       const response = await (0, _fetch.fetch)(url, {
         method: 'POST',
         headers,
         body,
         signal: controller.signal,
-        redirect: 'error'
+        redirect: 'manual'
       });
       return {
         response,
@@ -251,7 +252,7 @@ function createOpenAiTransport(config) {
             headers,
             body: payload,
             signal: controller.signal,
-            redirect: 'error'
+            redirect: 'manual'
           });
           if (res.ok) {
             response = res;
