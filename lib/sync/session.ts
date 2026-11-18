@@ -27,6 +27,9 @@ export interface SyncSessionOptions {
   send(commands: SyncCommand[], request: SyncRequest): Promise<{ results: CommandResult[]; snapshot?: Snapshot }>;
   pull(request: SyncRequest): Promise<Snapshot>;
   marks?: MarkBatch;
+  /** The hashes the app kept from the last applied snapshot, so a cold start pulls only what changed.
+   *  A wrong one costs nothing but rows: the server sends a table whenever its hash differs. */
+  initialHashes?: Record<string, string>;
   /** Called once per table when a local write to it lands outside an apply while a pod is paired. */
   onStrayWrite?(table: string): void;
 }
@@ -37,7 +40,7 @@ export const MARKS_TICK_MS = 10_000;
 export function createSyncSession(options: SyncSessionOptions) {
   const marks = options.marks ?? defaultMarkBatch;
   const { local } = options;
-  const known: Record<string, string> = {};
+  const known: Record<string, string> = { ...options.initialHashes };
   let touched = new Set<string>();
   let queue: Promise<unknown> = Promise.resolve();
 
@@ -51,6 +54,7 @@ export function createSyncSession(options: SyncSessionOptions) {
 
   // With a pod paired, a local write to a served table is replaced by the next pull, so it is a bug.
   let applying = false;
+  const MERGE_TABLES = new Set(SYNC_TABLES.filter((t) => t.mode === 'merge').map((t) => t.name));
   const strayTables = SYNC_TABLES.map((t) => t.name).filter(
     (n) => n !== 'settings' && !(Object.values(MARK_TABLES) as string[]).includes(n),
   );
@@ -59,8 +63,11 @@ export function createSyncSession(options: SyncSessionOptions) {
   const reported = new Set<string>();
   const watch = database.withChangesForTables(strayTables).subscribe((changes) => {
       if (applying || !changes?.length || !platform('lib/sync/session').podCommand) return;
-      for (const { record } of changes) {
+      for (const { record, type } of changes) {
         const table = (record.constructor as { table: string }).table;
+        // A row the phone deletes from a merge table stays deleted (the merge never re-adds it), so a
+        // prune is safe. A create or an update there, or any write to a replace table, is not.
+        if (type === 'destroyed' && MERGE_TABLES.has(table)) continue;
         if (reported.has(table)) continue;
         reported.add(table);
         logger.warn(`a local write to ${table} in pod mode will be replaced by the next pull`);

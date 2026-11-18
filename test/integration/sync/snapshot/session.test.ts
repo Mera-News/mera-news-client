@@ -1,6 +1,7 @@
 import database from '@/lib/database';
 import { createMarkBatch } from '@/lib/sync/marks';
 import { createSyncSession } from '@/lib/sync/session';
+import { deleteOlderThan } from '@/lib/database/services/notification-service';
 import type { Snapshot } from '@/lib/sync/snapshot';
 import { resetDatabase, testHost } from '@/test/helpers';
 
@@ -28,6 +29,22 @@ async function podWith(factRows: Record<string, unknown>[]) {
 }
 
 describe('sync session', () => {
+  it('starts from hashes the app kept, so a cold start pulls nothing that has not changed, and a wrong one only costs rows', async () => {
+    const pod = await podWith([fact('f1', 'one')]);
+    const kept = pod.hashesOf(pod.full);
+    const requests: Record<string, string>[] = [];
+    const session = createSyncSession({
+      local: PEER, marks: createMarkBatch(), initialHashes: { ...kept, facts: 'stale' },
+      send: async () => { throw new Error('no commands'); },
+      pull: async (req) => { requests.push(req.hashes); return pod.answer(req.hashes); },
+    });
+    await session.syncNow();
+    expect(requests[0]).toEqual({ ...kept, facts: 'stale' });
+    // Only the table whose kept hash was wrong came back with rows, and it was applied.
+    expect((await rows('facts')).map((r) => r.id)).toEqual(['f1']);
+    expect(session.hashes().facts).toBe(kept.facts);
+  });
+
   it('pulls the snapshot and remembers the applied hashes, so the next pull sends no rows', async () => {
     const pod = await podWith([fact('f1', 'one')]);
     const requests: Record<string, string>[] = [];
@@ -177,6 +194,42 @@ describe('sync session', () => {
       return createSyncSession({ local: PEER, marks, onStrayWrite, send: async () => ({ results: [] }), pull: async () => { throw new Error('no'); } });
     };
     const writeFact = () => database.write(() => database.get('facts').create((r: any) => { r.statement = 's'; }));
+
+    const oldNote = { id: 'n-old', type: 'x', title: 'old', body: 'b', status: 'unread', source: 's', created_at: 1 };
+
+    it('a paired phone pruning old notifications is not stray, and the next pull does not bring them back', async () => {
+      await put('notifications', [oldNote]);
+      const full = await build();
+      await resetDatabase();
+      const stray: string[] = [];
+      testHost.podCommand = async () => null;
+      // The pod still holds the row and sends it every time.
+      const session = createSyncSession({ local: PEER, marks: createMarkBatch(), onStrayWrite: (t) => stray.push(t), send: async () => ({ results: [] }), pull: async () => full });
+      try {
+        await session.syncNow();
+        expect((await rows('notifications')).map((r) => r.id)).toEqual(['n-old']);
+        expect(await deleteOlderThan(1_000)).toBe(1);
+        await session.syncNow();
+        expect(await rows('notifications')).toEqual([]);
+        expect(stray).toEqual([]);
+      } finally {
+        session.stop();
+      }
+    });
+
+    it('an update to a notification and a write to a replace table still report', async () => {
+      await put('notifications', [oldNote]);
+      const stray: string[] = [];
+      const session = open((t) => stray.push(t));
+      try {
+        const [row] = await database.get('notifications').query().fetch();
+        await database.write(() => row.update((r: any) => { r.title = 'changed on the phone'; }));
+        await writeFact();
+        expect([...stray].sort()).toEqual(['facts', 'notifications']);
+      } finally {
+        session.stop();
+      }
+    });
 
     it('reports a local write to a served table once, and not an apply', async () => {
       const pod = await podWith([fact('f1', 'one')]);
