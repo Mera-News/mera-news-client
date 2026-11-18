@@ -4,7 +4,15 @@ import { sanitizedRaw } from '@nozbe/watermelondb/RawRecord';
 
 import database from '../database';
 import type { Snapshot } from './snapshot';
-import { SYNC_TABLES, assertSameVersions, isAppliedSettingKey, type SyncPeer } from './tables';
+import {
+  PAIRING_ERASED_KEY,
+  PAIRING_KEEP_SETTING_KEYS,
+  PAIRING_KEEP_TABLES,
+  SYNC_TABLES,
+  assertSameVersions,
+  isAppliedSettingKey,
+  type SyncPeer,
+} from './tables';
 
 // Whatever a server sends, only these are ever written: a phone's own tables (its chats among them) are not.
 const SYNCED = new Set(SYNC_TABLES.map((t) => t.name));
@@ -19,6 +27,12 @@ export interface ApplyOptions {
   readonly skip?: ReadonlySet<string>;
   /** The versions this side runs. */
   readonly local: SyncPeer;
+  /**
+   * Pairing: erase the phone in the same writer. Every table but the kept ones is emptied or
+   * replaced by the snapshot, settings keep only the kept keys and the ones served, and
+   * `onboarding_done` and the erase marker are written. Added to the defaults in `tables.ts`.
+   */
+  readonly erase?: { readonly keepTables?: readonly string[]; readonly keepSettingKeys?: readonly string[] };
 }
 
 const collection = (table: string) => database.get<Model>(table as Parameters<typeof database.get>[0]);
@@ -31,18 +45,27 @@ export async function applySnapshot(snapshot: Snapshot, options: ApplyOptions): 
   assertSameVersions(options.local, snapshot, 'phone');
   const applied: Record<string, string> = {};
   assertRowsUsable(snapshot);
+  const erase = options.erase;
+  // An erase replaces every served table, so a snapshot missing one would leave it empty.
+  if (erase) for (const t of SYNC_TABLES) if (!snapshot.tables[t.name]?.rows) throw new Error(`Snapshot has no rows for ${t.name}, so the phone cannot be erased`);
+  const keepTables = new Set([...PAIRING_KEEP_TABLES, ...(erase?.keepTables ?? [])]);
+  const keepKeys = new Set([...PAIRING_KEEP_SETTING_KEYS, ...(erase?.keepSettingKeys ?? [])]);
+  // Written by an erase, whatever the phone held.
+  const written: Record<string, string> = erase ? { onboarding_done: 'true', [PAIRING_ERASED_KEY]: String(Date.now()) } : {};
 
   await database.write(async () => {
     const prepared: Model[] = [];
     for (const [name, table] of Object.entries(snapshot.tables)) {
-      if (!table.rows || options.skip?.has(name) || !SYNCED.has(name)) continue;
+      if (!table.rows || (!erase && options.skip?.has(name)) || !SYNCED.has(name)) continue;
+      // Erasing, the pod's rows are the whole table: no merge, and no row held back as seen.
+      const mode = erase ? 'replace' : table.mode;
       const col = collection(name);
       let seen = new Set<string>();
       if (name === 'notifications') {
         const [mark] = await collection('settings').query(Q.where('key', NOTIFICATIONS_SEEN_KEY)).fetch();
         const before = (mark as unknown as { value?: string } | undefined)?.value;
         try {
-          seen = new Set(before ? (JSON.parse(before) as string[]) : []);
+          seen = new Set(before && !erase ? (JSON.parse(before) as string[]) : []);
         } catch {
           seen = new Set();
         }
@@ -58,8 +81,13 @@ export async function applySnapshot(snapshot: Snapshot, options: ApplyOptions): 
 
       if (name === 'settings') {
         const keep = new Map(table.rows.filter((r) => isAppliedSettingKey(String(r.key))).map((r) => [String(r.key), r.value]));
+        for (const [key, value] of Object.entries(written)) keep.set(key, value);
         for (const rec of existing as unknown as { key: string; value: string }[]) {
-          if (!isAppliedSettingKey(rec.key)) continue;
+          if (rec.key === NOTIFICATIONS_SEEN_KEY) continue;
+          if (!isAppliedSettingKey(rec.key) && !(rec.key in written)) {
+            if (erase && !keepKeys.has(rec.key)) prepared.push((rec as unknown as Model).prepareDestroyPermanently());
+            continue;
+          }
           const model = rec as unknown as Model;
           if (!keep.has(rec.key)) prepared.push(model.prepareDestroyPermanently());
           else {
@@ -83,14 +111,21 @@ export async function applySnapshot(snapshot: Snapshot, options: ApplyOptions): 
           else {
             const next = sanitizedRaw({ ...row, id: have.id }, col.schema) as Record<string, unknown>;
             const changed = Object.keys(next).filter(
-              (k) => !['id', '_status', '_changed'].includes(k) && !(table.mode === 'merge' && k === 'status') && next[k] !== (have._raw as any)[k],
+              (k) => !['id', '_status', '_changed'].includes(k) && !(mode === 'merge' && k === 'status') && next[k] !== (have._raw as any)[k],
             );
             if (changed.length) prepared.push(have.prepareUpdate((rec) => { for (const k of changed) (rec._raw as any)[k] = next[k]; }));
           }
         }
-        if (table.mode === 'replace') for (const m of existing) if (!served.has(m.id)) prepared.push(m.prepareDestroyPermanently());
+        if (mode === 'replace') for (const m of existing) if (!served.has(m.id)) prepared.push(m.prepareDestroyPermanently());
       }
       applied[name] = table.hash;
+    }
+    // The phone's own tables (chats, jobs, the translation cache): emptied, not replaced.
+    if (erase) {
+      for (const name of Object.keys(database.schema.tables)) {
+        if (SYNCED.has(name) || keepTables.has(name)) continue;
+        for (const m of await collection(name).query().fetch()) prepared.push(m.prepareDestroyPermanently());
+      }
     }
     await database.batch(...prepared);
   }, 'sync-apply');

@@ -1,3 +1,5 @@
+import { FORBIDDEN_SETTING_KEYS } from '../backup/allowlist';
+
 export type SyncMode = 'replace' | 'merge';
 
 export interface SyncTable {
@@ -32,7 +34,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   replace('settings'),
 ];
 
-/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
+/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply (an erase on pairing empties them). */
 export const PHONE_ONLY_TABLES: readonly string[] = [
   'conversations',
   'messages',
@@ -100,3 +102,37 @@ export function assertSameVersions(local: SyncPeer, remote: SyncPeer, localIs: '
     throw new SyncVersionError(local[field] < remote[field] ? localIs : other);
   }
 }
+
+/** Written by the erase on pairing, so the app can tell an erase that happened from a pairing cut short before it. */
+export const PAIRING_ERASED_KEY = 'pod_pairing_erased_at';
+
+/** Tables an erase on pairing keeps: the account mirror. */
+export const PAIRING_KEEP_TABLES: readonly string[] = ['user_personas'];
+
+// Device state an erase must not take: the session and identity keys a backup never carries,
+// minus onboarding (the erase writes it) and key material of jobs the erase removes.
+const NOT_KEPT_DEVICE_KEYS = ['onboarding_done', 'onboarding_state', 'email_capture_skipped', 'async_inference_pending_job_privkey', 'async_pipeline_privkey'];
+
+/**
+ * Settings an erase on pairing keeps: identity, session and device state, and the display choices.
+ * The app adds its own (tutorial progress) through the erase options.
+ */
+export const PAIRING_KEEP_SETTING_KEYS: readonly string[] = [
+  ...Object.keys(FORBIDDEN_SETTING_KEYS).filter((k) => !NOT_KEPT_DEVICE_KEYS.includes(k)),
+  'has_launched',
+  'js_restart_marker',
+  'session_resume_at',
+  'keychain_afu_migration_v1',
+  'device_bound_user',
+  'bg_inference_submit_enabled',
+  'theme',
+  'text_scale',
+  'blur_images',
+  'static_gradient',
+  'startup_tab',
+  'feed_view',
+  'feed_minimap',
+  'feed_show',
+  'saved_group_by',
+  'nav_order_world',
+];
