@@ -1,0 +1,9 @@
+{
+  "name": "better-sqlite3",
+  "version": "0.0.0-node-sqlite",
+  "private": true,
+  "description": "The subset of the better-sqlite3 API that WatermelonDB's Node driver uses, on node:sqlite.",
+  "main": "index.js",
+  "license": "AGPL-3.0-only",
+  "engines": { "node": ">=22.13" }
+}
