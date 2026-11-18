@@ -11,6 +11,7 @@ import { SMALL_MODEL } from '@/lib/llm/constants';
 import { _resetForTests as resetLimiter } from '@/lib/llm/gateway-rate-limiter';
 import logger from '@/lib/logger';
 import { CLOUD_SCORE_CHUNK_SIZE } from '@/lib/mera-protocol/scoring-service';
+import { DEFAULT_HARNESS_CONFIG } from '@/lib/news-harness/core/config';
 import {
   CAPABILITY_TOKEN_TTL_MS,
   TaskNoAuthError,
@@ -676,5 +677,9 @@ describe('hexToBytes', () => {
 describe('REASON_RELEVANCE_THRESHOLD', () => {
   it('is the documented 0.4 gate (relevance v3: moves in lockstep with RENDER_GATE)', () => {
     expect(REASON_RELEVANCE_THRESHOLD).toBe(0.4);
+  });
+
+  it('is the gate the inline scoring path uses, so both paths owe a note to the same rows', () => {
+    expect(DEFAULT_HARNESS_CONFIG.articlePipeline.reasonRelevanceThreshold).toBe(REASON_RELEVANCE_THRESHOLD);
   });
 });

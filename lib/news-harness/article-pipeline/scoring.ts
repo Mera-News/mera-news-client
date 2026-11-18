@@ -452,7 +452,7 @@ export function buildRelevanceCalls(
 
 /**
  * Phase-2 of the two-phase async flow: reason-only calls for the subset of
- * candidates whose relevance (computed in phase-1) exceeds `subsetThreshold`.
+ * candidates whose relevance (computed in phase-1) is at least `subsetThreshold`.
  * Pure — fact statements are supplied by the caller.
  *
  * One call per candidate (`reason:<id>`), so unlike the relevance pass there is

@@ -77,9 +77,6 @@ const ARTICLES: Record<string, { title: string; description: string; country: st
   ung: { title: 'Grand Prix ticket prices rise', description: 'Organisers blame higher circuit costs.', country: null },
 };
 const FIXED_SCORE: Record<string, number> = { [ARTICLES.atg.title]: 0.4, [ARTICLES.ung.title]: 0.39 };
-/** On the Feed of the inline path only: the gateway path never writes the note of a row exactly at
- *  the gate (see the failing case below), so that row stays owed a note and off its Feed. */
-const ONLY_ON_THE_INLINE_FEED = ['atg'];
 
 /** Score = a fixed function of the system prompt and the article's own fenced block. */
 function score(system: string, block: string): number {
@@ -259,7 +256,7 @@ describe('scoring on a host transport matches scoring through the gateway', () =
     expect(relevanceOf(host)).toEqual(relevanceOf(gateway));
     // Membership, not order: the gateway path stores no raw score, so its Feed ranks ties by age
     // and id (the case below), while the inline path ranks by the score it keeps.
-    expect([...host.feed].sort()).toEqual([...gateway.feed, ...ONLY_ON_THE_INLINE_FEED].sort());
+    expect([...host.feed].sort()).toEqual([...gateway.feed].sort());
     for (const id of host.feed) expect(host.byArticle[id].reason).not.toBe('');
     for (const id of gateway.feed) expect(gateway.byArticle[id].reason).not.toBe('');
   });
@@ -286,9 +283,8 @@ describe('scoring on a host transport matches scoring through the gateway', () =
     expect(wire.modelRequests).toBe(2 + wire.feed.length);
   });
 
-  // Fails until the gateway path writes the note of a row whose raw score is exactly the gate:
-  // its reason builder keeps only scores strictly above 0.4, so the row stays owed a note.
-  it.failing('through the gateway, a row scored exactly at the gate gets its note', async () => {
+  // The note gate is inclusive on both paths: a raw score of exactly 0.4 is owed a note and gets it.
+  it('through the gateway, a row scored exactly at the gate gets its note', async () => {
     const gateway = await runGatewayPath();
     expect(gateway.byArticle.atg.status).toBe('complete');
   });

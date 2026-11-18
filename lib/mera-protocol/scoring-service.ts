@@ -656,7 +656,7 @@ export async function buildRelevanceCalls(
 
 /**
  * Phase-2 of the two-phase async flow: reason-only calls for the subset of
- * candidates whose relevance exceeds `subsetThreshold`.
+ * candidates whose relevance is at least `subsetThreshold`.
  */
 export async function buildReasonCallsForSubset(
   candidates: ScoringCandidate[],
@@ -692,7 +692,8 @@ export async function buildReasonCallsForSubset(
     // `reason_pending`, and isVisible would keep it invisible.
     if (!isScorableCandidate(c)) return false;
     const rel = relevanceMap[c.id];
-    return typeof rel === 'number' && rel > subsetThreshold;
+    // Inclusive, as the inline gate (`>= reasonRelevanceThreshold`): a row at exactly the gate is owed a note.
+    return typeof rel === 'number' && rel >= subsetThreshold;
   });
 
   // ADD 2, mirroring the harness twin exactly (`article-pipeline/scoring.ts`).
