@@ -1,6 +1,6 @@
 // Scoring Service — On-device relevance scoring of ArticleSuggestions (two-pass)
 // Pass 1: Relevance score, batched 5 articles per LLM call (one JSON array out)
-// Pass 2: Reason generation per article (only for relevance >= REASON_THRESHOLD)
+// Pass 2: Reason generation per article (only for relevance at or above the feed's gate, 0.4)
 //
 // The PURE scoring logic (prompt building, parsing, decoding, bucketing) now
 // lives in lib/news-harness/article-pipeline/scoring.ts. This module keeps the
@@ -124,8 +124,6 @@ export type { CloudCallBundle, DecodedResults, ScoringResult };
 /** Articles bundled into one batched relevance prompt (cloud). */
 const ARTICLES_PER_SCORE_PROMPT = ARTICLE_CFG.articlesPerScorePrompt;
 
-/** Relevance threshold — generate reasons for every scored candidate. */
-const REASON_THRESHOLD = 0;
 
 /** Fallback when LLM scoring fails or output is unparseable. */
 const FALLBACK_RELEVANCE = ARTICLE_CFG.fallbackRelevance;
@@ -462,7 +460,7 @@ export async function batchScoreAndReason(
 
   // On this phone the notes are written after the whole pass (retryMissingReasons), so each model
   // loads once per sync.
-  if (survivors.length > 0 && !useOnDevice) {
+  if (survivors.length > 0 && !useOnDevice && notesOn()) {
     const allFactStatements = await loadAllFactStatements();
     const phase2 = buildReasonCallsForSurvivors(survivors, scoreMap, allFactStatements);
     // A refused request keeps the relevance pass: the rows save as `reason_pending` and the
@@ -519,7 +517,7 @@ export async function batchScoreAndReason(
 
 /**
  * Sync cloud phase-2: build reason BatchCalls for the survivors — candidates
- * whose phase-1 score cleared REASON_THRESHOLD.
+ * whose phase-1 score cleared the feed's gate.
  */
 export function buildReasonCallsForSurvivors(
   survivors: ScoringCandidate[],
@@ -996,18 +994,14 @@ async function scoreUnscoredRows(
           return;
         const relevance = scoreMap.get(candidate.id) ?? 0.3;
         const reason = reasonMap.get(candidate.id) ?? '';
-        // REASON_THRESHOLD = 0 → reasons generated for every row, including
-        // sub-DISCARD-floor low-relevance ones. Skip flag now only fires if
-        // phase-2 was bypassed entirely.
-        // On this phone a note costs seconds, so a row below the feed's gate (0.4) is never
-        // written one, and with Skip notes on no row is: `complete` with no note, never
-        // `reason_skipped`, which the feed does not show.
-        // A location-caught row is owed no note on either lane (REASON_THRESHOLD is 0).
+        // A row below the feed's gate (0.4) is never written a note, on either lane, as the
+        // gateway's async pipeline does; with Skip notes on no row is. Both end `complete` with
+        // no note, never `reason_skipped`, which the feed does not show. A location-caught row
+        // is owed no note on either lane.
         const reasonSkipped =
           locationCaughtIds.has(candidate.id) ||
-          (isOnDeviceMode()
-            ? !notesOn() || relevance < ARTICLE_CFG.lowPriorityScore
-            : relevance < REASON_THRESHOLD);
+          !notesOn() ||
+          relevance < (isOnDeviceMode() ? ARTICLE_CFG.lowPriorityScore : ARTICLE_CFG.reasonRelevanceThreshold);
         try {
           await saveScoringResult(candidate.id, {
             relevance,
