@@ -13,7 +13,9 @@
     "!lib/**/__tests__",
     "dist",
     "types",
-    "schema.gql"
+    "schema.gql",
+    "news-schema.gql",
+    "news-schema.pin.json"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -24,7 +26,9 @@
     "check:node": "npm run build && node --test \"test/node/*.node-test.cjs\"",
     "harness:generate": "tsx lib/harnesses/generate.ts",
     "skills:generate": "tsx lib/harnesses/generate.ts",
-    "codegen": "graphql-codegen"
+    "codegen": "graphql-codegen",
+    "news-schema:pin": "node scripts/news-schema.mjs pin",
+    "check:news-schema": "node scripts/news-schema.mjs check && jest --selectProjects unit --testPathPatterns graphql/news-schema"
   },
   "dependencies": {
     "@cospired/i18n-iso-languages": "^4.2.0",

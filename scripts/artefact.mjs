@@ -10,11 +10,11 @@ const source = JSON.parse(readFileSync('package.json', 'utf8'));
 const manifest = Object.fromEntries(
   ['name', 'version', 'description', 'license', 'author', 'engines', 'dependencies', 'peerDependencies'].map((key) => [key, source[key]]),
 );
-manifest.files = ['dist', 'node', 'types', 'schema.gql'];
+manifest.files = ['dist', 'node', 'types', 'schema.gql', 'news-schema.gql', 'news-schema.pin.json'];
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-for (const name of ['dist', 'node', 'types', 'schema.gql', 'LICENSE', 'TRADEMARK.md', 'COMMERCIAL.md', 'README.md']) {
+for (const name of ['dist', 'node', 'types', 'schema.gql', 'news-schema.gql', 'news-schema.pin.json', 'LICENSE', 'TRADEMARK.md', 'COMMERCIAL.md', 'README.md']) {
   cpSync(name, join(outDir, name), { recursive: true });
 }

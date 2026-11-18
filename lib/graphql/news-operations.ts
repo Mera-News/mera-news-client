@@ -26,11 +26,23 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
   'GetTopHeadlinesForCountry',
   'GetTopHeadlinesForCountryWindowed',
   'GetWorldHeadlines',
+  'NewsServerStatus',
   'PlaceSearch',
   'PublicationDisplayNames',
   'PublicationSourcesForNewsPublisher',
   'SearchNews',
 ];
+
+/**
+ * News operations Mera's own server answers but the public news server does not, with why. A host
+ * that checks news documents against the public news schema file checks these against Mera's schema instead.
+ * The client's test fails when one of them starts to validate publicly, so this list cannot rot.
+ */
+export const NEWS_OPERATIONS_NOT_PUBLIC: Readonly<Record<string, string>> = {
+  GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
+  PublicationDisplayNames: 'private to Mera',
+  GetArticleIdsForTopics: 'old topics fallback; whether to retire it is an open owner question',
+};
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a
  *  server that passes news through allows them with the list above. */
