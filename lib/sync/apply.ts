@@ -3,9 +3,11 @@ import type Model from '@nozbe/watermelondb/Model';
 import { sanitizedRaw } from '@nozbe/watermelondb/RawRecord';
 
 import database from '../database';
-import appSchema from '../database/schema';
 import type { Snapshot } from './snapshot';
-import { assertSameVersions, isAppliedSettingKey, type SyncPeer } from './tables';
+import { SYNC_TABLES, assertSameVersions, isAppliedSettingKey, type SyncPeer } from './tables';
+
+// Whatever a server sends, only these are ever written: a phone's own tables (its chats among them) are not.
+const SYNCED = new Set(SYNC_TABLES.map((t) => t.name));
 
 // Local to the phone and never served: the ids of the notifications the last applied snapshot held.
 // A served row the phone lacks but has seen before was deleted on the phone. Ids, not times: the
@@ -33,7 +35,7 @@ export async function applySnapshot(snapshot: Snapshot, options: ApplyOptions): 
   await database.write(async () => {
     const prepared: Model[] = [];
     for (const [name, table] of Object.entries(snapshot.tables)) {
-      if (!table.rows || options.skip?.has(name) || !(name in appSchema.tables)) continue;
+      if (!table.rows || options.skip?.has(name) || !SYNCED.has(name)) continue;
       const col = collection(name);
       let seen = new Set<string>();
       if (name === 'notifications') {
@@ -99,7 +101,7 @@ export async function applySnapshot(snapshot: Snapshot, options: ApplyOptions): 
 // Checked before anything is prepared, so a bad snapshot fails with every table untouched.
 function assertRowsUsable(snapshot: Snapshot): void {
   for (const [name, table] of Object.entries(snapshot.tables)) {
-    if (!table.rows || name === 'settings' || !(name in appSchema.tables)) continue;
+    if (!table.rows || name === 'settings' || !SYNCED.has(name)) continue;
     const ids = new Set<string>();
     for (const row of table.rows) {
       if (typeof row.id !== 'string' || row.id === '' || ids.has(row.id)) throw new Error(`Snapshot table ${name} has a missing or repeated row id`);

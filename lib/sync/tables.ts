@@ -33,6 +33,12 @@ export const SYNC_TABLES: readonly SyncTable[] = [
 ];
 
 /** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
+/** The tables a person's profile is made of: what a pod's profile is replaced with at pairing. */
+export const PROFILE_TABLES: readonly string[] = [
+  'facts', 'topics', 'declined_topics', 'persona_suppressions', 'locations', 'persona_summary_strings', 'persona_change_log',
+  'publication_preferences', 'user_publication_subscriptions', 'tracked_stories', 'saved_article_suggestions',
+];
+
 export const PHONE_ONLY_TABLES: readonly string[] = [
   'conversations',
   'messages',

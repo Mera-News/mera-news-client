@@ -222,6 +222,18 @@ describe('unchanged rows', () => {
   });
 });
 
+describe('tables in a snapshot from a careless server', () => {
+  it('applies no table outside the synced ones, so a phone\'s own chats survive whatever a pod serves', async () => {
+    const snap = await build();
+    snap.tables.conversations = { hash: 'h', mode: 'replace', rows: [{ id: 'pod-chat', title: 'from the pod', created_at: 1, updated_at: 1 }] };
+    snap.tables.translation_cache = { hash: 'h', mode: 'replace', rows: [] };
+    await resetDatabase();
+    await put('conversations', [{ id: 'my-chat', title: 'mine', created_at: 1, updated_at: 1 }]);
+    await applySnapshot(snap, { local: PEER });
+    expect((await rows('conversations')).map((r) => r.id)).toEqual(['my-chat']);
+  });
+});
+
 describe('settings in a snapshot from a careless server', () => {
   it('writes only applied keys, and neither replaces nor deletes any other key', async () => {
     const snap = await build();

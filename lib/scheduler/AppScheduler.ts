@@ -120,6 +120,11 @@ class _AppScheduler {
     this.tasks.set(definition.name, definition as TaskDefinition);
   }
 
+  /** The definition registered under `name`, so a host that registers its own can put this one back. */
+  definition(name: string): TaskDefinition | undefined {
+    return this.tasks.get(name);
+  }
+
   /** Changes a registered task's cadence or run timeout; the next tick and run use the new values. */
   configureTask(name: string, change: { frequency?: number; timeout?: number }): void {
     const task = this.tasks.get(name);

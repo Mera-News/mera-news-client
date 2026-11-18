@@ -63,3 +63,17 @@ describe('configureTask', () => {
     expect(() => AppScheduler.configureTask('no-such-task', { frequency: MINUTE })).toThrow('no-such-task');
   });
 });
+
+describe('definition', () => {
+  it('returns what is registered, so a host that replaces a task can put the original back', () => {
+    const task = addTask({ frequency: 60_000 });
+    const original = AppScheduler.definition(task.name);
+    expect(original).toBe(task.def);
+    const replacement = { ...task.def, frequency: 1_000 };
+    AppScheduler.register(replacement);
+    expect(AppScheduler.definition(task.name)).toBe(replacement);
+    AppScheduler.register(original!);
+    expect(AppScheduler.definition(task.name)).toBe(task.def);
+    expect(AppScheduler.definition('no-such-task')).toBeUndefined();
+  });
+});
