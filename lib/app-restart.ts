@@ -58,7 +58,7 @@ import { env } from '@/lib/platform/env';
 
 import logger from '@/lib/logger';
 
-export type RestartReason = 'ota' | 'update' | 'language' | 'restore';
+export type RestartReason = 'ota' | 'update' | 'language' | 'restore' | 'pair';
 
 export type RestartContext = {
   /** This boot is a JS reload we asked for, not a real cold start. */
@@ -195,7 +195,7 @@ type MarkerPayload = {
   noAutoReload?: boolean;
 };
 
-const RESTART_REASONS: readonly RestartReason[] = ['ota', 'update', 'language', 'restore'];
+const RESTART_REASONS: readonly RestartReason[] = ['ota', 'update', 'language', 'restore', 'pair'];
 
 const EMPTY_CONTEXT: RestartContext = {
   wasJsRestart: false,
@@ -619,7 +619,7 @@ export async function requestRestart(reason: RestartReason, opts?: { spot?: unkn
     // The departure stamp is only meaningful to the next boot for 'ota': by construction that is the
     // restart that fires on a background -> active return (OTASilentUpdater is its only caller, and
     // a blocked restart is deferred to the next return), so the stamp measures the trip that just
-    // ended. 'update', 'language' and 'restore' are in-app taps made after the PIN gate, so the
+    // ended. 'update', 'language', 'restore' and 'pair' are in-app taps made after the PIN gate, so the
     // reader never left as far as the next boot is concerned: null, which pin-store reads as
     // "never left". 'update' must not reuse 'ota': its stamp is from a trip that already ended.
     const payload: MarkerPayload = {

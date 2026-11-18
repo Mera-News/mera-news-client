@@ -6,6 +6,7 @@ import {
   departureMark,
   holdRestart,
   requestRestart,
+  restartContext,
   RESTART_MARKER_KEY,
   whenForeground,
 } from '@/lib/app-restart';
@@ -79,6 +80,13 @@ test('a held restart does not reload; after release the next request reloads onc
   await requestRestart('update');
   expect(devReload).toHaveBeenCalledTimes(1);
   expect(JSON.parse((await getSetting(RESTART_MARKER_KEY)) as string)).toMatchObject({ reason: 'update' });
+});
+
+test('a restart for pairing tells the next boot why it restarted', async () => {
+  await requestRestart('pair');
+  expect(devReload).toHaveBeenCalledTimes(1);
+  __resetAppRestartForTests(); // the next process
+  expect(await restartContext()).toMatchObject({ wasJsRestart: true, reason: 'pair' });
 });
 
 test('a blocked route does not reload', async () => {
