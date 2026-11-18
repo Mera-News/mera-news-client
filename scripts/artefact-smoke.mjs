@@ -1,7 +1,9 @@
 // node scripts/artefact-smoke.mjs <outDir>: packs the artefact, installs it into an empty directory with
 // only its declared dependencies and peers (as a default npm install of it gets them), loads every
-// built module once under plain Node, then writes and reads one setting on a SQLite file through the
-// shipped driver. A dependency the manifest does not declare fails the run.
+// built module once under plain Node, resolves every require() in every module (the lazy ones a load
+// never runs included), runs every import() left in the build, then writes and reads one setting on a
+// SQLite file through the shipped driver. A dependency the manifest does not declare fails the run, and
+// so does a lazy import that only a loader such as tsx could resolve.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -74,13 +76,32 @@ registerPlatform({
   const files = filesUnder(dist);
   if (files.length < 500) throw new Error('only ' + files.length + ' built modules found');
   for (const file of files) require(file);
+  const { createRequire } = require('node:module');
+  const { pathToFileURL } = require('node:url');
+  let lazyRequires = 0;
+  let dynamicImports = 0;
+  const unresolved = [];
+  for (const file of files) {
+    // Comment lines name modules too (in backticks, as examples); only code counts.
+    const source = fs.readFileSync(file, 'utf8').split('\\n').filter((line) => !/^\\s*(\\/\\/|\\/?\\*)/.test(line)).join('\\n');
+    const requireFrom = createRequire(file);
+    for (const [, , spec] of source.matchAll(/\\brequire\\((["'])([^"']+)\\1\\)/g)) {
+      lazyRequires++;
+      try { requireFrom.resolve(spec); } catch (error) { unresolved.push(path.relative(dist, file) + ': require ' + spec + ': ' + error.code); }
+    }
+    for (const [, , spec] of source.matchAll(/\\bimport\\((["'])([^"']+)\\1\\)/g)) {
+      dynamicImports++;
+      try { await import(spec.startsWith('.') ? new URL(spec, pathToFileURL(file)).href : spec); } catch (error) { unresolved.push(path.relative(dist, file) + ': import ' + spec + ': ' + error.code); }
+    }
+  }
+  if (unresolved.length) throw new Error('these only resolve under a loader:\\n' + unresolved.join('\\n'));
   const database = require(path.join(dist, 'database/index.js')).default;
   await database.get('settings').query().fetch();
   const { getSetting, setSetting } = require(path.join(dist, 'database/services/setting-service.js'));
   await setSetting('probe', '1');
   const value = await getSetting('probe');
   if (value !== '1') throw new Error('expected 1, read ' + JSON.stringify(value));
-  console.log('artefact smoke ok: ' + files.length + ' modules loaded');
+  console.log('artefact smoke ok: ' + files.length + ' modules loaded, ' + lazyRequires + ' require calls resolved, ' + dynamicImports + ' import() calls run');
   process.exit(0);
 })().catch((error) => {
   console.error(error);
