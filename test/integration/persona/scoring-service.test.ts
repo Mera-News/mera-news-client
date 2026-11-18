@@ -648,7 +648,7 @@ describe('batchScoreAndReason - cloud path', () => {
     await run(batchScoreAndReason([c]));
 
     const [relevance] = gatewayCalls('batch');
-    expect(userOf(relevance)).toContain('User Context: [User facts] I follow Formula 1 racing.');
+    expect(userOf(relevance)).toMatch(/^User Context: Today: \d{4}-\d{2}-\d{2}\n\[User facts\] I follow Formula 1 racing \(added \d{4}-\d{2}-\d{2}\)\./);
     expect(userOf(relevance)).toContain('News Title: Story a sagaa');
     expect(userOf(relevance)).toContain('Related User Fact: I follow Formula 1 racing');
   });

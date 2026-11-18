@@ -1013,7 +1013,7 @@ describe('location rule - stage wiring and rescoreLocationCaught', () => {
     await run(computeAndScoreForCandidates([ro, inRow]));
     const user = userOf(gatewayCalls('batch')[0]);
     expect(user).toContain('Related User Fact: Pensioner in India (news from: India)');
-    expect(user).toContain('[User facts] Pensioner in India (news from: India).');
+    expect(user).toMatch(/\[User facts\] Pensioner in India \(news from: India\) \(added \d{4}-\d{2}-\d{2}\)\./);
     expect(user).not.toContain('Pension age to rise ro'); // caught: never sent
 
     mode('on-device');
