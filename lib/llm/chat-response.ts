@@ -119,6 +119,34 @@ export async function* consumeChatResponse(
   signal?: AbortSignal,
   resume?: TurnResume,
 ): AsyncGenerator<SseEvent> {
+  // The cleartext check stays here: it is about what the gateway path proves, not about the text.
+  async function* checked(): AsyncGenerator<SseEvent> {
+    for await (const event of consumeChatResponseRaw(response, key, signal, resume)) {
+      if (event.type === 'tool-call-delta') {
+        // A provider that lifted a call out of the content sent it in CLEAR: it
+        // never passed the envelope, so nothing proves the model wrote it. Report
+        // it once (never its content) and fail the turn closed; nothing is
+        // forwarded, so nothing runs.
+        logger.captureMessage(`${TAG} provider returned a cleartext tool call`, {
+          level: 'error',
+          fingerprint: ['e2ee-cleartext-tool-call'],
+          tags: { component: 'cloudComplete' },
+        });
+        throw new CleartextToolCallError();
+      }
+      yield event;
+    }
+  }
+  yield* postProcessChatEvents(checked(), tools);
+}
+
+/** Raw model events to final ones: think tags stripped, text-tool calls parsed into whole
+ *  `tool-call-delta` events, and a `stop` that ended on a call rewritten to `tool_calls`. Shared by
+ *  every transport so the same model text gives the same events. */
+export async function* postProcessChatEvents(
+  raw: AsyncIterable<SseEvent>,
+  tools: TextToolDefinition[],
+): AsyncGenerator<SseEvent> {
   const think = createThinkStripper();
   const calls = createToolCallStreamParser(tools, APP_TOOL_FORMAT);
   let callIndex = 0;
@@ -130,23 +158,11 @@ export async function* consumeChatResponse(
       yield { type: 'tool-call-delta', index, id: `call_${stamp}_${index}`, name: c.name, argumentsDelta: c.argumentsRaw };
     }
   }
-  for await (const event of consumeChatResponseRaw(response, key, signal, resume)) {
+  for await (const event of raw) {
     if (event.type === 'text-delta') {
       const delta = think.push(event.delta);
       if (delta) yield* emit(calls.push(delta));
       continue;
-    }
-    if (event.type === 'tool-call-delta') {
-      // A provider that lifted a call out of the content sent it in CLEAR: it
-      // never passed the envelope, so nothing proves the model wrote it. Report
-      // it once (never its content) and fail the turn closed; nothing is
-      // forwarded, so nothing runs.
-      logger.captureMessage(`${TAG} provider returned a cleartext tool call`, {
-        level: 'error',
-        fingerprint: ['e2ee-cleartext-tool-call'],
-        tags: { component: 'cloudComplete' },
-      });
-      throw new CleartextToolCallError();
     }
     if (event.type === 'finish') {
       const tail = think.flush();

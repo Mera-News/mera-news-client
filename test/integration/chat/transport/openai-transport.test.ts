@@ -277,10 +277,4 @@ describe('the OpenAI transport modes', () => {
     expect(await errorOf(cloudBatchComplete([{ id: 'a', system: 's', prompt: 'p' }]))).toBeInstanceOf(OnDeviceModeError);
     expect(seen).toHaveLength(0);
   });
-
-  it('throws from chat on the first next()', async () => {
-    use();
-    const stream = cloudChatStream({ messages: [{ role: 'user', content: 'hi' }] });
-    await expect(stream.next()).rejects.toThrow('chat is not available on this transport');
-  });
 });

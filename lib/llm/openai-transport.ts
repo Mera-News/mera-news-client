@@ -1,6 +1,6 @@
 // A plain OpenAI-compatible model transport: one POST to `<baseUrl>/chat/completions` per call,
 // with a per-attempt deadline and a short retry on 429, 5xx and network errors. Unlike the gateway
-// transport it applies the harness quirks, and it has no chat leg.
+// transport it applies the harness quirks. Its chat leg streams the reply and sends tools as text.
 
 import { fetch } from '@/lib/platform/fetch';
 import { harnessFolderFor, loadHarness } from '@/lib/harnesses';
@@ -8,7 +8,11 @@ import { QUIRKS } from '@/lib/harnesses/quirks';
 import { stripLeakedReasoning } from '../algorithms/reasoning-leak';
 import type { BatchCompletionResult } from '@/lib/news-harness/core/types';
 import type { BatchCall } from './types';
-import type { CloudCompleteRequest, LlmTransport } from './cloudComplete';
+import { APP_TOOL_FORMAT, toTextToolMessages, type TextToolDefinition } from '@/lib/harnesses/text-tool-protocol';
+import { sseEvents } from '../algorithms/sse';
+import { CHAT_REASONING_HEADROOM_TOKENS } from './constants';
+import { postProcessChatEvents, STREAM_IDLE_TIMEOUT_MS, type SseEvent } from './chat-response';
+import type { CloudChatStreamRequest, CloudCompleteRequest, LlmTransport } from './cloudComplete';
 import { CallerAbortError, EmptyReplyError, type CloudCallOptions } from './gateway-fetch';
 import { assertCloudAllowed } from './on-device-gate';
 
@@ -66,11 +70,28 @@ interface ChatCompletionResponse {
   choices?: { message?: { content?: string | null; reasoning_content?: string | null } }[];
 }
 
+interface ChatChunk {
+  choices?: {
+    delta?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null; tool_calls?: unknown[] };
+    message?: {
+      content?: string | null;
+      reasoning_content?: string | null;
+      reasoning?: string | null;
+      tool_calls?: unknown[];
+    };
+    finish_reason?: string | null;
+  }[];
+}
+
+const finishReasonOf = (raw: string | null | undefined): 'stop' | 'tool_calls' | 'length' | 'error' =>
+  raw === 'stop' || raw === 'length' || raw === 'tool_calls' ? raw : raw ? 'error' : 'stop';
+
 export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTransport {
   const url = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
   const timeoutMs = config.callTimeoutMs ?? 120_000;
   const concurrency = config.concurrency ?? 4;
-  const quirks = loadHarness(config.harnessFolder ?? harnessFolderFor('openai', config.model) ?? 'cloud-base').params.quirks;
+  const params = loadHarness(config.harnessFolder ?? harnessFolderFor('openai', config.model) ?? 'cloud-base').params;
+  const quirks = params.quirks;
   for (const name of quirks) if (!QUIRKS[name]) throw new Error(`unknown quirk "${name}" in the harness`);
   let open = 0;
 
@@ -88,7 +109,8 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-      const response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+      // A redirect would carry the key to an address the config never named.
+      const response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'error' });
       return { response, text: await response.text() };
     } catch (err) {
       if (signal?.aborted) throw new CallerAbortError('openai transport: caller aborted', err);
@@ -180,14 +202,150 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
     return results;
   }
 
+  /** The raw leg: events as the model wrote them, before think stripping and tool parsing. */
+  async function* rawChat(request: CloudChatStreamRequest): AsyncGenerator<SseEvent> {
+    const { signal } = request;
+    // A harness that cannot think is never asked to, as on the gateway leg.
+    const thinking = (request.enableThinking ?? false) && params.thinking;
+    let body: Record<string, unknown> = {
+      model: config.model,
+      messages: toTextToolMessages(request.messages, request.tools as TextToolDefinition[] | undefined, request.toolChoice, APP_TOOL_FORMAT),
+      stream: request.stream !== false,
+      temperature: request.temperature,
+      // The trace shares the answer's token budget, so a thinking call gets headroom for it.
+      max_tokens: request.maxTokens === undefined ? undefined : request.maxTokens + (thinking ? CHAT_REASONING_HEADROOM_TOKENS : 0),
+      max_completion_tokens: request.maxCompletionTokens,
+      top_p: request.topP,
+      n: request.n,
+      presence_penalty: request.presencePenalty,
+      frequency_penalty: request.frequencyPenalty,
+      __enableThinking: thinking,
+    };
+    for (const name of quirks) body = QUIRKS[name](body);
+    delete body.__enableThinking;
+    const payload = JSON.stringify(body);
+
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let sawBytes = false;
+    let timedOut = false;
+    const arm = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, ms);
+    };
+    const onCallerAbort = () => controller.abort();
+    signal?.addEventListener('abort', onCallerAbort, { once: true });
+    open++;
+    try {
+      let response: Response | null = null;
+      for (let n = 0; !response; n++) {
+        if (signal?.aborted) throw callerAborted();
+        arm(timeoutMs);
+        try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+          if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+          const res = await fetch(url, { method: 'POST', headers, body: payload, signal: controller.signal, redirect: 'error' });
+          if (res.ok) {
+            response = res;
+            break;
+          }
+          const text = await res.text();
+          if (isRetryableStatus(res.status) && n < MAX_ATTEMPTS - 1) {
+            clearTimeout(timer);
+            await sleep(retryDelayMs(res, n), signal);
+            continue;
+          }
+          throw Object.assign(new Error(`model request failed: ${res.status}`), { statusCode: res.status, responseBody: text });
+        } catch (err) {
+          if (signal?.aborted) throw new CallerAbortError('openai transport: caller aborted', err);
+          if (timedOut) throw Object.assign(new Error('the model took longer than the call timeout'), { name: 'TimeoutError' });
+          if ((err as { statusCode?: number }).statusCode !== undefined || err instanceof CallerAbortError || n === MAX_ATTEMPTS - 1) throw err;
+          await sleep(retryDelayMs(null, n), signal);
+        }
+      }
+
+      // Content type first: reading `.body` on a JSON reply would empty what text() reads.
+      if (!(response.headers.get('content-type') ?? '').includes('text/event-stream') || !response.body) {
+        let text: string;
+        try {
+          text = await response.text();
+        } catch (err) {
+          if (signal?.aborted) throw new CallerAbortError('openai transport: caller aborted', err);
+          if (timedOut) throw Object.assign(new Error('the model took longer than the call timeout'), { name: 'TimeoutError' });
+          throw err;
+        }
+        clearTimeout(timer);
+        if (!text.trim()) throw new EmptyReplyError();
+        const choice = (JSON.parse(text) as ChatChunk).choices?.[0];
+        const message = choice?.message;
+        if (message?.tool_calls?.length) return void (yield { type: 'error', message: 'unexpected native tool call' });
+        if (!message?.content && (message?.reasoning_content || message?.reasoning)) yield { type: 'reasoning' };
+        if (message?.content) yield { type: 'text-delta', delta: message.content };
+        yield { type: 'finish', reason: finishReasonOf(choice?.finish_reason) };
+        return;
+      }
+
+      const reader = response.body.getReader();
+      let finish = 'stop';
+      let reasoned = false;
+      let started = false;
+      try {
+        for await (const data of sseEvents(reader, () => {
+          sawBytes = true;
+          arm(STREAM_IDLE_TIMEOUT_MS);
+        })) {
+          if (data === '[DONE]') break;
+          let chunk: ChatChunk;
+          try {
+            chunk = JSON.parse(data) as ChatChunk;
+          } catch {
+            continue;
+          }
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
+          if (choice.finish_reason) finish = choice.finish_reason;
+          const d = choice.delta;
+          if (!d) continue;
+          if (d.tool_calls?.length) return void (yield { type: 'error', message: 'unexpected native tool call' });
+          if ((d.reasoning_content || d.reasoning) && !started && !reasoned) {
+            reasoned = true;
+            yield { type: 'reasoning' };
+          }
+          if (d.content) {
+            started = true;
+            yield { type: 'text-delta', delta: d.content };
+          }
+        }
+      } catch (err) {
+        if (signal?.aborted) throw new CallerAbortError('openai transport: caller aborted', err);
+        if (!timedOut) throw err;
+        if (!sawBytes) throw Object.assign(new Error('the model took longer than the call timeout'), { name: 'TimeoutError' });
+        return void (yield { type: 'error', message: 'the model stopped sending' });
+      } finally {
+        void reader.cancel().catch(() => undefined);
+      }
+      if (signal?.aborted) throw callerAborted();
+      yield { type: 'finish', reason: finishReasonOf(finish) };
+    } finally {
+      open--;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onCallerAbort);
+    }
+  }
+
+  async function* chat(request: CloudChatStreamRequest): AsyncGenerator<SseEvent> {
+    await assertCloudAllowed('chat');
+    yield* postProcessChatEvents(rawChat(request), (request.tools ?? []) as TextToolDefinition[]);
+  }
+
   return {
     asyncJobs: false,
     complete,
     batch,
-    // shortcut: no pod path chats yet, build a buffered leg when one does
-    async *chat() {
-      throw new Error('chat is not available on this transport');
-    },
+    chat,
     inFlight: () => open,
   };
 }
