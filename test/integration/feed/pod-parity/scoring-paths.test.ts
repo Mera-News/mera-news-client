@@ -28,6 +28,8 @@ import {
   advanceUntilDone,
   defaultResponder,
   gatewayCalls,
+  http,
+  HttpResponse,
   mockGateway,
   resetDatabase,
   server,
@@ -49,6 +51,7 @@ import {
 } from '@/test/integration/data/feed-sync/steps/support';
 import { settleMachine, startMachine } from '@/test/integration/data/feed-sync/machine/support';
 import { hostTransport, type HostCall } from '@/test/integration/chat/transport/host-transport-kit';
+import { createOpenAiTransport } from '@/lib/llm/openai-transport';
 
 jest.setTimeout(180_000);
 
@@ -199,6 +202,30 @@ async function runHostPath() {
   return { ...(await capture(sent)), gatewayCalls: gatewayCalls().length - gatewayBefore };
 }
 
+/** The same model behind a plain OpenAI-compatible endpoint: the wire carries no call ids, so the
+ *  kind of call is read from the request, as a real model would read it. */
+async function runOpenAiPath() {
+  const gatewayBefore = gatewayCalls().length;
+  const sent: { id?: string; system: string; user: string }[] = [];
+  server.use(
+    http.post('http://model.test/v1/chat/completions', async ({ request }) => {
+      const body = (await request.json()) as { messages: { role: string; content: string }[] };
+      const system = body.messages.find((m) => m.role === 'system')?.content ?? '';
+      const user = body.messages.find((m) => m.role === 'user')?.content ?? '';
+      const id = /Return a JSON array of/.test(user) ? 'score:wire' : /Relevance Score:/.test(user) ? 'reason:wire' : undefined;
+      sent.push({ id, system, user });
+      const content = answer(id, system, user);
+      if (content === null) return new HttpResponse('the fixture model has no answer', { status: 500 });
+      return HttpResponse.json({ choices: [{ message: { content } }] });
+    }),
+  );
+  testHost.llmTransport = createOpenAiTransport({ baseUrl: 'http://model.test/v1', model: 'fixture-model' });
+  await seedProfile();
+  serveArticles();
+  await advanceUntilDone(startMachine());
+  return { ...(await capture(sent)), gatewayCalls: gatewayCalls().length - gatewayBefore, modelRequests: sent.length };
+}
+
 describe('scoring on a host transport matches scoring through the gateway', () => {
   beforeEach(async () => {
     resetFeedSyncMemory();
@@ -235,6 +262,28 @@ describe('scoring on a host transport matches scoring through the gateway', () =
     expect([...host.feed].sort()).toEqual([...gateway.feed, ...ONLY_ON_THE_INLINE_FEED].sort());
     for (const id of host.feed) expect(host.byArticle[id].reason).not.toBe('');
     for (const id of gateway.feed) expect(gateway.byArticle[id].reason).not.toBe('');
+  });
+
+  it('the OpenAI transport sends, stores and shows what the in-process host transport does', async () => {
+    const host = await runHostPath();
+
+    await settleMachine();
+    cleanupFeedSync();
+    server.resetHandlers();
+    await resetDatabase();
+    resetFeedSyncMemory();
+    await resetScoringWorld();
+
+    const wire = await runOpenAiPath();
+    if (process.env.PARITY_REPORT) fs.writeFileSync(process.env.PARITY_REPORT, JSON.stringify({ host, wire }, null, 2) + '\n');
+
+    expect(wire.gatewayCalls).toBe(0);
+    expect(wire.relevance).toEqual(host.relevance);
+    expect(wire.byArticle).toEqual(host.byArticle);
+    expect(wire.feed).toEqual(host.feed);
+    // One read of the ten fixture articles: two relevance requests, then one note per Feed story.
+    expect(wire.modelRequests).toBe(host.calls);
+    expect(wire.modelRequests).toBe(2 + wire.feed.length);
   });
 
   // Fails until the gateway path writes the note of a row whose raw score is exactly the gate:
