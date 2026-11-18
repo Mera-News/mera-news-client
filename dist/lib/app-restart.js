@@ -199,7 +199,7 @@ async function markOtaRestartAttempted(updateId) {
  * on every boot.
  */
 const MIN_RESTART_INTERVAL_MS = exports.MIN_RESTART_INTERVAL_MS = 10_000;
-const RESTART_REASONS = ['ota', 'update', 'language', 'restore'];
+const RESTART_REASONS = ['ota', 'update', 'language', 'restore', 'pair'];
 const EMPTY_CONTEXT = {
   wasJsRestart: false,
   backgroundedAt: null,
@@ -637,7 +637,7 @@ async function requestRestart(reason, opts) {
     // The departure stamp is only meaningful to the next boot for 'ota': by construction that is the
     // restart that fires on a background -> active return (OTASilentUpdater is its only caller, and
     // a blocked restart is deferred to the next return), so the stamp measures the trip that just
-    // ended. 'update', 'language' and 'restore' are in-app taps made after the PIN gate, so the
+    // ended. 'update', 'language', 'restore' and 'pair' are in-app taps made after the PIN gate, so the
     // reader never left as far as the next boot is concerned: null, which pin-store reads as
     // "never left". 'update' must not reuse 'ota': its stamp is from a trip that already ended.
     const payload = {
