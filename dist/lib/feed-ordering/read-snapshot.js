@@ -1,0 +1,105 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.buildReadSnapshot = buildReadSnapshot;
+exports.isReadStory = isReadStory;
+exports.parseCardState = parseCardState;
+// read-snapshot — "has the reader read this story?" as a pure value, for the
+// 7-day keep of unread High and Emergency rows.
+//
+// Read = OPENED (the opened-stories set: article ids and stable cluster ids)
+// or VIEWED on the Feed (card state 'viewed'). A 'skipped' card, dwelt past
+// without a touch, is still unread. Nothing here records anything new.
+//
+// STORY level, not row level: card states are keyed by the feed-order row id,
+// which is the representative's article id at first ingest. Checking rows
+// alone left a viewed story's siblings unread, kept for 7 days, and back as a
+// fresh card once the viewed representative aged out. So every read article
+// found among `rows` also marks its story: its top stable cluster id (the
+// order store's rep-switch key) and its server `storyKey` (the edge story
+// grouping always unions).
+//
+// DB-FREE on purpose: fact-rows-selector and its unit suites must never reach
+// SQLite. Callers read the `feed_card_state_v1` setting themselves and hand
+// the blob to `parseCardState`.
+
+/** Compact wire encoding for a state record: `['s' | 'v', epochMs]`. */
+
+/** Defensive parse of the persisted `feed_card_state_v1` blob. A device that has
+ *  never written the key, or wrote a malformed one, gets an empty map: every
+ *  card back at unviewed, the safe direction (shows more, hides nothing).
+ *
+ *  Older blobs also carry a `tombs` map from the removed eviction mechanism. It
+ *  is ignored and never re-serialized, so it goes inert on the next write. */
+function parseCardState(raw) {
+  if (!raw) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object') return {};
+  const rawStates = parsed.states;
+  if (!rawStates || typeof rawStates !== 'object') return {};
+  const states = {};
+  for (const [id, v] of Object.entries(rawStates)) {
+    if (!Array.isArray(v) || v.length !== 2 && v.length !== 3) continue;
+    const [code, at, keys] = v;
+    if (code !== 's' && code !== 'v') continue;
+    if (typeof at !== 'number' || !Number.isFinite(at)) continue;
+    const kept = code === 'v' && Array.isArray(keys) ? keys.filter(k => typeof k === 'string') : [];
+    states[id] = {
+      state: code === 'v' ? 'viewed' : 'skipped',
+      at,
+      ...(kept.length ? {
+        keys: kept
+      } : {})
+    };
+  }
+  return states;
+}
+
+/** Every key a read story is known by: article ids, stable cluster ids and
+ *  `sk:`-prefixed story keys. */
+
+function topStableClusterId(s) {
+  return s.clusters?.find(c => c.stableClusterId)?.stableClusterId ?? null;
+}
+
+/**
+ * Build the snapshot. `opened` is the opened-stories set (article ids plus
+ * stable cluster ids, `getOpenedSeenSet` / `useOpenedStoriesStore.ids`);
+ * `rows` are the suggestions the caller is about to judge, used to lift a read
+ * article to its story.
+ */
+function buildReadSnapshot(cardStates, opened, rows) {
+  const readKeys = new Set(opened);
+  for (const id in cardStates) {
+    if (cardStates[id].state !== 'viewed') continue;
+    readKeys.add(id);
+    for (const k of cardStates[id].keys ?? []) readKeys.add(k);
+  }
+  const snap = {
+    readKeys
+  };
+  // One pass: a row read by any key lends the story its other keys.
+  for (const r of rows) {
+    if (!isReadStory(r, snap)) continue;
+    const scid = topStableClusterId(r);
+    if (scid) readKeys.add(scid);
+    if (r.storyKey) readKeys.add(`sk:${r.storyKey}`);
+  }
+  return snap;
+}
+
+/** True when any key of this row's story was read. */
+function isReadStory(s, snap) {
+  const k = snap.readKeys;
+  if (s.articleId && k.has(s.articleId)) return true;
+  const scid = topStableClusterId(s);
+  if (scid && k.has(scid)) return true;
+  return !!s.storyKey && k.has(`sk:${s.storyKey}`);
+}

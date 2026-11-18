@@ -1,0 +1,236 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.TOPICS_CURRENT_ARM_ID = exports.MULTI_SUBJECT_ARM_ID = exports.FORCED_OFFER_UNGROUNDED_ARM_ID = exports.BASELINE_ARM = void 0;
+exports.agentArmIds = agentArmIds;
+exports.dedupeModeFor = dedupeModeFor;
+exports.forcedOfferClosingFor = forcedOfferClosingFor;
+exports.forcedOfferGroundingFor = forcedOfferGroundingFor;
+exports.multiSubjectFor = multiSubjectFor;
+exports.personaPromptFor = personaPromptFor;
+exports.recentConversationFor = recentConversationFor;
+exports.registerAgentArm = registerAgentArm;
+exports.resetAgentArmsForTest = resetAgentArmsForTest;
+exports.resolveAgentArm = resolveAgentArm;
+exports.routeEnforcementFor = routeEnforcementFor;
+exports.routerProcedureFor = routerProcedureFor;
+exports.topicFlowFor = topicFlowFor;
+exports.topicPromptFor = topicPromptFor;
+// mera-harness/core — the agent's experiment arms. PURE, RN-free.
+//
+// WHY THESE LIVE HERE and not in lib/news-harness/prompts/prompt-variants.ts:
+// that registry's shipped set is pinned by a test elsewhere, and more importantly these arms are the HARNESS's, so they belong in
+// the folder that is meant to lift out as its own package. The rules are the
+// same ones that registry established, because they are the right rules:
+//
+//   - An arm is a VALUE, never an edit. Deriving an arm by string surgery over
+//     the shipped prompt makes it a function of whatever the file says today,
+//     so a result recorded last week stops being reproducible.
+//   - 'baseline' is ALWAYS a byte-exact no-op, so a control measures the
+//     shipped configuration and nothing else.
+//   - An UNKNOWN id THROWS. A typo'd arm that quietly scored the baseline
+//     would be written up as a real result, and a wrong number is worse than a
+//     crashed run.
+
+const BASELINE_ARM = exports.BASELINE_ARM = 'baseline';
+const BASELINE = {
+  id: BASELINE_ARM,
+  description: 'The shipped configuration, unmodified. The control arm.'
+};
+
+/**
+ * Re-worded decision procedure. That section is the only part of the router
+ * that actually decides a route, so it is the only part worth an arm.
+ *
+ * It MUST produce a different leg-0 prompt from baseline, or the runner's
+ * nonce-normalised promptHash cannot tell the two apart and the arm silently
+ * measures the control. `arms.test.ts` asserts exactly that.
+ */
+const ROUTER_V1 = {
+  id: 'router-v1',
+  description: 'Router prompt with an explicitly numbered match-then-load procedure and a stricter ' + 'one-question rule. Tests whether routing accuracy moves with the procedure wording.',
+  routerPrompt: `You are Mera, updating what you know about this person so their news is worth reading.
+
+## Voice
+Write in the user's selected language. Never use an em dash or an en dash; use a comma, a full stop or a colon. No filler openers. Short, plain, specific.
+
+## Procedure, in this exact order
+1. Read the state line, then the known facts.
+2. Write ONE short sentence acknowledging what they just said, under 200 characters. Do this BEFORE any tool call, every time.
+3. Compare their message against the skill index below. Pick the SINGLE closest row and call load_skill with its id. If nothing is close, answer briefly and stop here.
+4. Do exactly what the loaded instructions say. They decide what to produce; this prompt does not.
+5. Resolve every place with lookup_place before it appears in a fact. Check find_similar_facts before proposing anything that might replace what you already hold.
+
+## Questions
+One question per turn at most, and only as the last thing you say. If you asked something last turn and they did not answer it, do not ask again: take the most likely reading and offer it. Prefer the reading that can be undone.
+
+## Scope
+Their profile and their news. Redirect anything else in one short line.`
+};
+
+/**
+ * The PRODUCTION control: the whole agent turn on the shipped one-shot prompt,
+ * and the topic call on the shipped one-shot topic prompt.
+ *
+ * Without it the eval can only compare a router against another router, while
+ * the question that decides is whether any of this beats what ships.
+ */
+const ONESHOT_PROD = {
+  id: 'oneshot-prod',
+  description: 'PRODUCTION CONTROL. The agent turn runs on the shipped one-shot persona prompt and the ' + 'topic call on the shipped one-shot topic prompt. Compare every agent metric against this.',
+  personaPrompt: 'oneshot',
+  topicPrompt: 'oneshot'
+};
+
+/**
+ * THE BEFORE, as an arm rather than as an older run.
+ *
+ * Every later change is a bug fix, so it all landed unconditionally and
+ * `baseline` is now the FIXED configuration. Comparing it against an earlier run would be
+ * a cross-run comparison, and NEAR latency swings roughly fourfold by time of
+ * day, so a cross-run latency or cost number says as much about the hour as
+ * about the change.
+ *
+ * This arm reproduces the measured configuration exactly, interleaved: the
+ * four-line inline procedure with "If nothing is close, answer briefly and
+ * stop here", no re-ask, and all four discovery tools on the route leg. It is
+ * the only arm allowed to carry the escape hatch, and the generator lint that
+ * bans that sentence from router.md deliberately does not reach here: this is
+ * a control, and a control that has been tidied up measures nothing.
+ */
+const PRE_ENFORCEMENT = {
+  id: 'pre-enforcement',
+  description: 'THE BEFORE. The router prompt on its four-line inline procedure with the escape hatch, no ' + 'format-error re-ask, and all four discovery tools on the route leg. Reproduces the ' + 'configuration that routed 38% and left 99 of 308 route legs with no skill loaded.',
+  routerProcedure: 'inline-legacy',
+  routeEnforcement: 'off'
+};
+
+/**
+ * SEVERAL SUBJECTS IN ONE TURN. OFF by default:
+ * it ships only after the corpus comparison against `baseline` passes.
+ *
+ * "I'm 34 and work as a product manager in Berlin. I moved here from Bangalore"
+ * loaded one skill and dropped the job and the origin. Under this arm the route
+ * leg loads one skill per subject and the loop runs each as its own segment,
+ * with its own guideline, place lookups, replace rules and topic skill.
+ */
+const MULTI_SUBJECT_ARM_ID = exports.MULTI_SUBJECT_ARM_ID = 'multi-subject';
+const MULTI_SUBJECT = {
+  id: MULTI_SUBJECT_ARM_ID,
+  description: 'B1: the route leg loads one skill per subject (up to three) and the loop runs them as ' + 'ordered segments of one turn. Compare fact recall and legs per turn against baseline.',
+  multiSubject: 'on',
+  routerAddendum: `## Several subjects in one message
+This section overrides the two-subjects tie-break above. When the message states facts about two or three DIFFERENT subjects (a job, a home, where they are from, a relative, an interest), call \`load_skill\` once for EACH subject, the one they led with first, at most three calls in this one response. Origin plus current home is still ONE subject: origin. A question or small talk beside the facts adds no call. One subject is one call, as always.`
+};
+
+/**
+ * THE TOPIC FLOW CONTROL. The owner's rule, fixed before the run: the
+ * isolated topics' share with no content word from any other fact must be at
+ * least 95% and higher than this arm's first-pass share; guards are combo
+ * topics naming the fact's subject, near-duplicates within a set at most 10%, ladder
+ * coverage not worse, and `error` checked on every row.
+ */
+const TOPICS_CURRENT_ARM_ID = exports.TOPICS_CURRENT_ARM_ID = 'topics-current';
+const TOPICS_CURRENT = {
+  id: TOPICS_CURRENT_ARM_ID,
+  description: 'F6 control: topics made the way they were before isolation (fact-only half plus combo ' + 'half in one batch, location line and other facts included). Compare against baseline.',
+  topicFlow: 'current'
+};
+
+/**
+ * The forced offer as it was before grounding: whatever the required leg
+ * returns is offered, grounded or not. Pass rule, fixed before the run: on
+ * facts/* turns, baseline's proposal hit rate is no more than 5 points below
+ * this arm's, residence turns are no worse, and `error` is checked on every row.
+ */
+const FORCED_OFFER_UNGROUNDED_ARM_ID = exports.FORCED_OFFER_UNGROUNDED_ARM_ID = 'forced-offer-ungrounded';
+const FORCED_OFFER_UNGROUNDED = {
+  id: FORCED_OFFER_UNGROUNDED_ARM_ID,
+  description: 'Control: the forced-offer leg keeps entries that name nothing the user or Mera said. ' + 'Compare against baseline.',
+  forcedOfferGrounding: 'off'
+};
+
+/** Arms that ship. A runner may add more for a throwaway probe. */
+const SHIPPED_ARMS = [ROUTER_V1, ONESHOT_PROD, PRE_ENFORCEMENT, MULTI_SUBJECT, TOPICS_CURRENT, FORCED_OFFER_UNGROUNDED];
+const REGISTRY = new Map([[BASELINE_ARM, BASELINE], ...SHIPPED_ARMS.map(a => [a.id, a])]);
+function agentArmIds() {
+  return [...REGISTRY.keys()];
+}
+function resolveAgentArm(id) {
+  if (id === undefined) return BASELINE;
+  const arm = REGISTRY.get(id);
+  if (!arm) {
+    throw new Error(`Unknown agent arm '${id}'. Registered: ${agentArmIds().join(', ')}.`);
+  }
+  return arm;
+}
+
+/** Cannot replace an existing id, and cannot replace the baseline at all:
+ *  every arm is measured against the control, so a mutated control corrupts
+ *  every comparison in the run rather than only its own. */
+function registerAgentArm(arm) {
+  if (arm.id === BASELINE_ARM) {
+    throw new Error("The 'baseline' arm is the control and cannot be replaced.");
+  }
+  if (REGISTRY.has(arm.id)) throw new Error(`Agent arm '${arm.id}' is already registered.`);
+  REGISTRY.set(arm.id, arm);
+}
+
+/** Test-only. Re-seeds the SHIPPED set, not just the baseline: a reset that
+ *  dropped shipped arms would unregister them for every test after the first
+ *  afterEach in a file, and "the registry starts clean" would then pass for the
+ *  wrong reason. */
+function resetAgentArmsForTest() {
+  REGISTRY.clear();
+  REGISTRY.set(BASELINE_ARM, BASELINE);
+  for (const arm of SHIPPED_ARMS) REGISTRY.set(arm.id, arm);
+}
+
+/** Absent means ON, so the shipped configuration is what gets measured and an
+ *  arm has to opt OUT to see the difference. */
+function dedupeModeFor(arm) {
+  return arm.topicDedupe ?? 'overlap';
+}
+function topicPromptFor(arm) {
+  return arm.topicPrompt ?? 'skill';
+}
+function personaPromptFor(arm) {
+  return arm.personaPrompt ?? 'router';
+}
+
+/** Absent means the shipped body, so an arm has to opt OUT to measure the
+ *  procedure that preceded it. */
+function routerProcedureFor(arm) {
+  return arm.routerProcedure ?? 'skill';
+}
+
+/** Absent means ON, so the shipped loop is what gets measured. */
+function routeEnforcementFor(arm) {
+  return arm.routeEnforcement ?? 'on';
+}
+
+/** Absent means OFF: one skill per turn is what ships until the multi-subject arm is switched on. */
+function multiSubjectFor(arm) {
+  return arm.multiSubject ?? 'off';
+}
+
+/** The topic flow an arm measures. Absent is what ships. */
+/** Absent means ON. */
+function forcedOfferGroundingFor(arm) {
+  return arm.forcedOfferGrounding ?? 'on';
+}
+
+/** Absent means OFF until the corpus run passes. */
+function forcedOfferClosingFor(arm) {
+  return arm.forcedOfferClosing ?? 'off';
+}
+
+/** Absent means ON. */
+function recentConversationFor(arm) {
+  return arm.recentConversation ?? 'on';
+}
+function topicFlowFor(arm) {
+  return arm.topicFlow ?? 'isolated+combo';
+}

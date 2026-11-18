@@ -1,0 +1,328 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.REFRESH_MIN_INTERVAL_MS = void 0;
+exports.__resetSuggestionsRefreshThrottleForTests = __resetSuggestionsRefreshThrottleForTests;
+exports.flushSuggestionsRefresh = flushSuggestionsRefresh;
+exports.refreshSuggestionsInStoreUnsafe = refreshSuggestionsInStoreUnsafe;
+exports.requestSuggestionsRefresh = requestSuggestionsRefresh;
+exports.runScoringPass = runScoringPass;
+var _articleSuggestionReads = require("../database/services/article-suggestion-reads");
+var _articleSuggestionStatus = require("../database/article-suggestion-status");
+var _scoringError = require("./scoring-error");
+var _logger = _interopRequireDefault(require("../logger"));
+var _scoringService = require("../mera-protocol/scoring-service");
+var _cloudComplete = require("../llm/cloudComplete");
+var _runInferenceHandler = require("../background/run-inference-handler");
+var _forYouStore = require("../stores/for-you-store");
+var _meraProtocolStore = require("../stores/mera-protocol-store");
+var _graphqlTypes = require("../generated/graphql-types");
+var _keepAwake = require("../platform/keep-awake");
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+// SuggestionSyncService — scoring and store-refresh helpers.
+// Full sync logic has moved to lib/scheduler/feed-sync/ (FeedSyncMachine).
+
+const KEEP_AWAKE_TAG = 'mera-scoring-pass';
+
+/**
+ * Score every currently unscored article_suggestion row.
+ * Called from FeedSyncMachine.stepScore and can be re-used by callers
+ * that want to re-score without going through a full server sync.
+ *
+ * After every batch we reload the full suggestion list from the DB and push it
+ * into the store so freshly-scored rows appear in the feed mid-run.
+ */
+async function runScoringPass(batchSize = 20) {
+  const onDevice = _meraProtocolStore.useMeraProtocolStore.getState().processingMode === _graphqlTypes.ProcessingMode.OnDevice;
+
+  // A transport with no async jobs scores inline below, like the phone does.
+  if (!onDevice && (0, _cloudComplete.transportServesJobs)()) {
+    const setScoringError = _forYouStore.useForYouStore.getState().setScoringError;
+    const result = await (0, _runInferenceHandler.runBackgroundCycle)('scoring-pass');
+    if (result === 'error') {
+      // Transient backend failure (network error, server down, expired endpoint).
+      // Log it but let the sync complete so articles are at least persisted.
+      // inference-recover will attempt scoring again on the next foreground.
+      // Surface it in the header status row so the user knows the pipeline stalled.
+      // A breadcrumb only: the cycle already captured (or deliberately suppressed) the cause.
+      _logger.default.warn('[runScoringPass] cloud inference cycle returned error, sync will complete');
+      setScoringError((0, _scoringError.classifyScoringError)());
+      return 0;
+    }
+
+    // `running` (batches enqueued / in flight) and `idle` (nothing left to
+    // score) both mean the pipeline accepted the pass without a hard failure —
+    // clear the header error. Set on hard failure, cleared on success/progress.
+    setScoringError(null);
+    _logger.default.info(`[runScoringPass] cloud cycle result: ${result}`);
+    return 0;
+  }
+  await (0, _keepAwake.activateKeepAwakeAsync)(KEEP_AWAKE_TAG);
+  // `startDeviceProcessing` / `finishDeviceProcessing` are the ONLY flag this
+  // pass raises. There used to be a second, `on-device-banner-store`, set and
+  // cleared in this exact try/finally — so it could never hold a value
+  // `isDeviceProcessing` did not already hold — and read by no renderer
+  // anywhere. Its copy now lives in the header narration's `onDevice` pool.
+  _forYouStore.useForYouStore.getState().startDeviceProcessing(0);
+  try {
+    // Progressive rendering during scoring: coalesce the per-batch refreshes so
+    // rapid batches don't each rebuild + replace the whole suggestion array on
+    // the JS thread. The trailing flush below guarantees the final batch lands.
+    const onBatchComplete = () => {
+      void requestSuggestionsRefresh();
+    };
+    const onProgress = (completed, total) => {
+      _forYouStore.useForYouStore.getState().updateDeviceProgress(completed, total);
+    };
+    const scored = await (0, _scoringService.processAllUnscored)(onProgress, batchSize, onBatchComplete);
+    // Terminal exactness: cancel any pending throttled refresh and reflect the
+    // final DB state before the run is marked finished.
+    await flushSuggestionsRefresh();
+    _forYouStore.useForYouStore.getState().markProcessingRunFinished();
+    return scored;
+  } catch (error) {
+    _logger.default.captureException(error, {
+      tags: {
+        service: 'SuggestionSyncService',
+        method: 'runScoringPass'
+      }
+    });
+    throw error;
+  } finally {
+    _forYouStore.useForYouStore.getState().finishDeviceProcessing();
+    (0, _keepAwake.deactivateKeepAwake)(KEEP_AWAKE_TAG);
+  }
+}
+
+/** Exposed so the async reconciler can push fresh scores into the store. */
+async function refreshSuggestionsInStoreUnsafe() {
+  return refreshSuggestionsInStore();
+}
+
+// --- Coalesced store-refresh (leading + trailing throttle) ---
+//
+// Feed-sync hydrates in 25-item chunks and the on-device scorer completes many
+// batches in quick succession — each previously triggered a full reload + sort
+// + whole-array replace on the JS thread. `requestSuggestionsRefresh` coalesces
+// those bursts: the first call in an idle window runs immediately (so the first
+// hydrated chunk paints instantly), calls within the window collapse into a
+// single trailing execution, and a trailing timer guarantees the final chunk
+// always lands. Overlapping executions are serialized (never concurrent) so two
+// reloads can't interleave their store writes.
+
+const REFRESH_MIN_INTERVAL_MS = exports.REFRESH_MIN_INTERVAL_MS = 1500;
+
+/** Wall-clock ms when the most recent refresh execution STARTED. */
+let lastRefreshStart = 0;
+/** Pending trailing execution timer, or null when none is scheduled. */
+let trailingTimer = null;
+/** In-flight refresh execution (serialization guard), or null when idle. */
+let refreshInFlight = null;
+/** A refresh was requested while one was already running — coalesce into one
+ *  extra pass so the latest DB state is always reflected. */
+let rerunRequested = false;
+
+/** Run one store refresh, swallowing + logging errors so throttle callers never
+ *  see a rejection (progressive rendering is fire-and-forget). */
+async function executeRefreshOnce() {
+  try {
+    await refreshSuggestionsInStore();
+  } catch (err) {
+    _logger.default.captureException(err, {
+      tags: {
+        service: 'SuggestionSyncService',
+        method: 'requestSuggestionsRefresh'
+      }
+    });
+  }
+}
+
+/** Execute a refresh, serializing against any in-flight one. If a refresh is
+ *  already running, mark a re-run and join it rather than running concurrently. */
+function runRefreshSerialized() {
+  if (refreshInFlight) {
+    rerunRequested = true;
+    return refreshInFlight;
+  }
+  lastRefreshStart = Date.now();
+  refreshInFlight = (async () => {
+    try {
+      await executeRefreshOnce();
+      // Coalesce requests that arrived mid-flight into exactly one more pass.
+      while (rerunRequested) {
+        rerunRequested = false;
+        lastRefreshStart = Date.now();
+        await executeRefreshOnce();
+      }
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+/**
+ * Coalesced, identity-preserving store refresh. Leading call in an idle window
+ * runs immediately; calls within `REFRESH_MIN_INTERVAL_MS` collapse into one
+ * trailing execution. Never rejects.
+ */
+function requestSuggestionsRefresh() {
+  const elapsed = Date.now() - lastRefreshStart;
+  if (elapsed >= REFRESH_MIN_INTERVAL_MS && !refreshInFlight) {
+    // Leading edge — run now so the first chunk appears instantly.
+    if (trailingTimer) {
+      clearTimeout(trailingTimer);
+      trailingTimer = null;
+    }
+    return runRefreshSerialized();
+  }
+  // Inside the window (or a refresh is running) — ensure a single trailing
+  // execution is scheduled so the final coalesced state always lands.
+  if (!trailingTimer) {
+    const delay = Math.max(REFRESH_MIN_INTERVAL_MS - elapsed, 0);
+    trailingTimer = setTimeout(() => {
+      trailingTimer = null;
+      void runRefreshSerialized();
+    }, delay);
+  }
+  return Promise.resolve();
+}
+
+/**
+ * Cancel any pending trailing refresh and reflect the final DB state now, so a
+ * terminal state (hydrate/scoring done, abort, error) is always exact. When
+ * nothing is pending and nothing is in flight the last refresh already reflects
+ * current state, so this is a no-op. Never rejects.
+ */
+function flushSuggestionsRefresh() {
+  const hadPending = trailingTimer !== null;
+  if (trailingTimer) {
+    clearTimeout(trailingTimer);
+    trailingTimer = null;
+  }
+  if (hadPending || refreshInFlight) {
+    return runRefreshSerialized();
+  }
+  return Promise.resolve();
+}
+
+/** Test-only: reset the throttle module state between specs. @internal */
+function __resetSuggestionsRefreshThrottleForTests() {
+  if (trailingTimer) clearTimeout(trailingTimer);
+  trailingTimer = null;
+  refreshInFlight = null;
+  rerunRequested = false;
+  lastRefreshStart = 0;
+}
+
+// --- Internal helpers ---
+
+const RELEVANCE_DISPLAY_THRESHOLD = 0.3;
+async function refreshSuggestionsInStore() {
+  const suggestions = await (0, _articleSuggestionReads.loadSuggestions)();
+  suggestions.sort(byRelevanceDesc);
+
+  // Identity-preserving merge: reuse the previous object reference for any
+  // row whose display-relevant fields are all unchanged, so the card's memo
+  // skips re-rendering untouched cards. Sorting + derived counts still recompute
+  // from the fresh values below (identical, since the merge only swaps refs).
+  const prev = _forYouStore.useForYouStore.getState().suggestions;
+  const merged = prev && prev.length > 0 ? mergePreservingIdentity(prev, suggestions) : suggestions;
+  let relevantArticleCount = 0;
+  let unscoredCount = 0;
+  for (const s of merged) {
+    if (s.status === _articleSuggestionStatus.ArticleSuggestionStatus.Unscored) {
+      unscoredCount++;
+    } else if (s.relevance > RELEVANCE_DISPLAY_THRESHOLD) {
+      relevantArticleCount++;
+    }
+  }
+  _forYouStore.useForYouStore.setState({
+    suggestions: merged,
+    unscoredCount,
+    endCursor: null,
+    hasNextPage: true
+  });
+  // Preserve the server-provided articleCount set by FeedSyncMachine; only
+  // update relevantArticleCount.
+  const {
+    articleCount
+  } = _forYouStore.useForYouStore.getState();
+  _forYouStore.useForYouStore.getState().setCounts(articleCount, relevantArticleCount);
+
+  // Republish the "you filtered this, showing it because it's major news"
+  // labels for the rows we just put on screen. Hooked HERE, at the one place
+  // every surface's rows land, so scoring, feed-sync, the add/retire-filter
+  // sweeps (which all end in a refresh) and a cold launch are covered by one
+  // wiring point instead of four. Derived and non-fatal: a failure costs a label
+  // this pass, never a row, so it must not reject the refresh.
+  //
+  // Lazy require, mirroring refreshUi() in suppression-sweep: a static import
+  // the other way round would close a load-time cycle (suppression-sweep already
+  // requires this module).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sweep = require("./suppression-sweep");
+    await sweep.refreshHardFilterLabels();
+  } catch (err) {
+    _logger.default.captureException(err, {
+      tags: {
+        service: 'SuggestionSyncService',
+        method: 'refreshHardFilterLabels'
+      }
+    });
+  }
+}
+
+/**
+ * Reuse the previous ForYouSuggestion object reference whenever every field a
+ * consumer reads is unchanged. Because reusing the reference reverts the whole
+ * object to its prior values, `suggestionsDisplayEqual` MUST cover EVERY field
+ * (missing one = stale UI). Rows without a stable `_id` (e.g. test fixtures) are
+ * always treated as new.
+ */
+function mergePreservingIdentity(prev, next) {
+  const prevById = new Map();
+  for (const p of prev) {
+    if (p && p._id) prevById.set(p._id, p);
+  }
+  const merged = next.map(n => {
+    if (!n._id) return n;
+    const p = prevById.get(n._id);
+    return p && suggestionsDisplayEqual(p, n) ? p : n;
+  });
+  // Nothing changed: keep the array itself, or every reader regroups the feed.
+  const unchanged = merged.length === prev.length && merged.every((m, i) => m === prev[i]);
+  return unchanged ? prev : merged;
+}
+function clustersSig(clusters) {
+  if (!clusters || clusters.length === 0) return '';
+  return clusters.map(c => `${c.clusterId}:${c.confidence}:${c.stableClusterId ?? ''}`).join(',');
+}
+function topicIdsSig(ids) {
+  return ids && ids.length > 0 ? ids.join(',') : '';
+}
+function matchedTopicsSig(matched) {
+  if (!matched || matched.length === 0) return '';
+  return matched.map(m => `${m.topicId ?? ''}:${m.text}`).join('|');
+}
+
+/** True when a and b are equal across every field any consumer (ArticleSuggestionCard,
+ *  ArticleSuggestionContainer, ArticleMetaRow, and the fact-sectioned feed
+ *  selector) reads. Deliberately exhaustive over ForYouSuggestion. */
+function suggestionsDisplayEqual(a, b) {
+  return a.articleId === b.articleId && a.status === b.status && a.relevance === b.relevance && a.reason === b.reason && a.title_en === b.title_en && a.title_original === b.title_original && a.description_en === b.description_en && a.article_url === b.article_url && a.image_url === b.image_url && a.publication_name === b.publication_name && a.country_code === b.country_code && a.language_code === b.language_code && a.createdAt === b.createdAt && a.firstPubDate === b.firstPubDate && a.rawScore === b.rawScore && a.eventType === b.eventType && (a.storyKey ?? null) === (b.storyKey ?? null) &&
+  // A stamp is what lets an unscored row render in the Feed.
+  (a.scoreFailedAt ?? null) === (b.scoreFailedAt ?? null) && a.headlineScope === b.headlineScope &&
+  // Load-bearing: the Dashboard's per-country headline sections key on this,
+  // so a country code arriving on a later sync must mark the row CHANGED —
+  // otherwise the section only appears once some unrelated field shifts.
+  (a.headlineCountryCode ?? null) === (b.headlineCountryCode ?? null) && clustersSig(a.clusters) === clustersSig(b.clusters) && topicIdsSig(a.userTopicIds) === topicIdsSig(b.userTopicIds) && matchedTopicsSig(a.matchedTopics) === matchedTopicsSig(b.matchedTopics);
+}
+function byRelevanceDesc(a, b) {
+  const av = a.status !== _articleSuggestionStatus.ArticleSuggestionStatus.Unscored ? a.relevance : -Infinity;
+  const bv = b.status !== _articleSuggestionStatus.ArticleSuggestionStatus.Unscored ? b.relevance : -Infinity;
+  return bv - av;
+}

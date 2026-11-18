@@ -1,0 +1,825 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.V3_RENDER_GATE = exports.RENDER_GATE = exports.NEW_INTEREST_WINDOW_MS = exports.IMPORTANT_KEEP_MS = exports.FEED_WINDOW_MS = void 0;
+exports.buildFactRows = buildFactRows;
+exports.effectiveRenderGate = effectiveRenderGate;
+exports.gateForRow = gateForRow;
+exports.isBreaking = isBreaking;
+exports.isComplete = isComplete;
+exports.isEmergency = isEmergency;
+exports.isHeadlineRow = isHeadlineRow;
+Object.defineProperty(exports, "isHeadlineSectionId", {
+  enumerable: true,
+  get: function () {
+    return _ownership.isHeadlineSectionId;
+  }
+});
+exports.isOpenedId = isOpenedId;
+exports.isSuggestionOpened = isSuggestionOpened;
+exports.isVisible = isVisible;
+exports.isWithinWindow = isWithinWindow;
+exports.keepsPastFeedWindow = keepsPastFeedWindow;
+exports.passesRenderGate = passesRenderGate;
+exports.primaryStatement = primaryStatement;
+exports.relevancePassesGate = relevancePassesGate;
+exports.sectionKindOf = sectionKindOf;
+var _ownership = require("../news-harness/feed-select/ownership");
+var _storyGrouping = require("../algorithms/story-grouping");
+var _config = require("../news-harness/core/config");
+var _articleSuggestionStatus = require("../database/article-suggestion-status");
+var _publicationTags = require("../feed-ordering/publication-tags");
+var _representativeCompare = require("../algorithms/representative-compare");
+var _readSnapshot = require("../feed-ordering/read-snapshot");
+// fact-rows-selector — the pure selector behind the fact-rows For-You
+// view. Turns the render-gated suggestion pool into per-fact horizontal rows
+// (one row per owning fact) plus the emergency strip pinned above them.
+//
+// PURE: RN-free. It consumes the store's `ForYouSuggestion` rows + the persona
+// snapshots and returns plain data the screen renders verbatim; no DB / expo /
+// react-native imports, so it unit-tests without a device.
+//
+// Pipeline (mirrors the earlier feed selector, minus the sectioned/two-zone
+// machinery): filter to visible → story-group → pick a representative per group
+// → pull EMERGENCY-band stories out into the strip → assign each remaining
+// group to a fact section via
+// `resolveOwningFactLenient` (a story folds into the fact it matched even at
+// zero signal, so low-priority suggestions live inside their fact section; a
+// negative/suppressed or factless match resolves to null and is DROPPED — there
+// is no "Also for you" catch-all) → order cards newest-first within a row and
+// rows by their newest "added" time.
+//
+// HEADLINE SECTIONS: top-headline rows carry a persisted `headline_scope`
+// and SYNTHETIC matched topics (`topicId: null`), so ownership can never resolve
+// an owner for them and a single `if (!factId) continue` silently dropped every
+// one of them from the Dashboard — while the Feed tab rendered them all along.
+// They now fall through to a section per scope (one per COUNTRY code, one
+// GLOBAL) that sits ALONGSIDE the fact sections and clears the SAME relevance
+// bar. Each carries a `headlineReadCount` denominator so the section can state,
+// in one line, how many headlines Mera read for the scope versus how many it
+// judged worth the reader's time.
+//
+// A section with ZERO surviving cards is DROPPED, exactly like a fact
+// section — see step 5b. This reverses an earlier rule that kept the empty shell so its
+// denominator could say "Mera read 20 · none looked relevant today"; the user
+// overruled that, since an empty section promises content and then admits it has
+// none. The `…DenominatorNone` strings still exist in all 20 locales as an
+// unreachable guard — do not read their presence as evidence the state occurs.
+//
+// Section membership additionally requires the fact link to be RELEVANCE-BACKED
+// (`isSectionMemberEligible` + `isFactSectionViable`, feed-select/ownership).
+// Ownership alone answers "which fact did this story MATCH?" from topic weights
+// and never looks at what the scorer concluded about the article, so a coarse
+// vector-search hit that was then scored to near-zero still claimed a section —
+// producing a "News about: Learning Dutch" section of EU-AI-labelling stories,
+// one of which rendered Mera's own "no direct tie to your Dutch learning"
+// rationale inside the section claiming it.
+//
+// Visibility rule (user-specified): a card enters its row once its
+// NOTE exists — i.e. the row reached `complete` (terminal: note text present OR
+// deliberately skipped for a sub-threshold-reason row). `reason_pending` rows
+// (scored, note still generating) stay hidden; the status accordion narrates the
+// wait. Sub-render-gate (< 0.4, see RENDER_GATE) and out-of-window rows never
+// render.
+//
+// RELEVANCE V3 gate raise (2026-08-05): RENDER_GATE moved 0.3 → 0.4 and became
+// INCLUSIVE (`relevance >= RENDER_GATE`, was strict `>`), so it now sits at
+// EXACTLY `discardFloor` (feed-select/ownership.ts) instead of being looser than
+// it. That closes the historic gap Rule 1 (`isSectionMemberEligible`) existed to
+// patch: a row could previously clear RENDER_GATE (0.3) while still being
+// `UNSCORED` per `bucketOf` (discardFloor 0.4), reach the visible pool, and then
+// get silently excluded from its fact section. With the two gates numerically
+// identical, no row can pass `passesRenderGate` while sub-`discardFloor` any
+// more — Rule 1 is now a no-op safety net rather than a live rejection path
+// (kept in place; a future divergence of the two constants would reopen the gap
+// it guards against). The 0.4-bucketed LOW rows still render and still claim
+// their section, unaffected by this change.
+
+/**
+ * Publication window for everything the user can see: the Feed tab, the
+ * Dashboard and the swipe stack. 48h. It is its own constant, apart from
+ * `SCORE_PROPAGATION_LOOKBACK_MS` (the donor pool, also 48h), so the two can
+ * move independently. Storage keeps the same 48h
+ * (`SUGGESTION_TTL_MS` in lib/scheduler/tasks/data-cleanup-task.ts), except
+ * for the unread High and Emergency rows of {@link IMPORTANT_KEEP_MS}.
+ *
+ * The stats card's counts are NOT this window: every count there is the last
+ * 24 hours (`COUNTS_WINDOW_MS`), a subset of what the feed lists. Counts
+ * narrower than the list can never advertise rows the feed refuses to render.
+ */
+const FEED_WINDOW_MS = exports.FEED_WINDOW_MS = 48 * 3600_000;
+
+/** How long an unread High or Emergency stays visible and survives cleanup. */
+const IMPORTANT_KEEP_MS = exports.IMPORTANT_KEEP_MS = 7 * 24 * 3600_000;
+
+/** The render gate — a scored row must clear this to be shown. Exported so the
+ *  swipe-stack selector reuses the exact same threshold.
+ *
+ *  RELEVANCE V3 (2026-08-05): raised 0.3 → 0.4 and made INCLUSIVE (see
+ *  {@link passesRenderGate}) — the LOW bucket floor (`discardFloor` in
+ *  feed-select/ownership.ts, also 0.4) and the render gate are now the SAME
+ *  cutoff on purpose, closing the gap where a 0.31–0.38 row was feed-visible
+ *  but already discarded by the scoring pipeline. Moves in lockstep with
+ *  `REASON_RELEVANCE_THRESHOLD` (lib/services/inference-results.ts). */
+const RENDER_GATE = exports.RENDER_GATE = 0.4;
+
+/** Render gate for a row that relevance v3 SCORED.
+ *
+ *  THE V3 SCORER IS RETIRED — nothing produces a score at this gate any more.
+ *  This constant and {@link gateForRow} survive it on purpose: a device that had
+ *  the v3 beta on still holds v3-scored rows for up to the 48h feed window, and
+ *  those rows are never re-scored. Judging them at 0.4 would flood the feed with
+ *  exactly the ~50%-junk band the A/B below measured. The column that carries
+ *  the vintage (`article_suggestions.scored_with_v3`) is kept for the same
+ *  reason — see `lib/database/schema.ts`. When the last v3-scored row ages out
+ *  of every device, this and its column can go; not before.
+ *
+ *  Original calibration — judge-calibrated on the
+ *  2026-08-05 two-sim A/B (321 blind-judged articles): v3's continuous scores
+ *  spread instead of piling at the buckets, so the shared 0.4 gate admits
+ *  roughly twice v1's volume at ~50% judge-rated junk. At 0.55 the v3 feed
+ *  matches the legacy path's volume (226 vs 212 measured) and its must-show
+ *  recall (27/35) with cleaner ranking. Legacy scoring keeps RENDER_GATE —
+ *  its bucketed LOW rows sit at exactly 0.4 and would vanish under this.
+ *
+ *  TOP-K FOLLOW-UP (documented, deliberately not built — needs UI work):
+ *  the path from ~226 to the ~100-120 target is a feed BUDGET, not a higher
+ *  gate: rank by the continuous v3 score and cap at K (~120), keeping this
+ *  gate as the quality floor ("floor + cap"). Measured on the A/B gold set:
+ *  top-151 → 28% judge-skip at v1-equivalent size; gate 0.6 alone would cost
+ *  recall (25/35). v3's continuous scores make the ranking well-defined —
+ *  v1's four-value buckets could not break its 125-way tie at 0.6. The cap
+ *  belongs where visible rows are already ranked (buildFeedList /
+ *  feed-list-selector for the Feed tab; section assembly here for the
+ *  Dashboard) plus UI: a "show more" affordance / per-surface budget setting,
+ *  and the header sentence must count the CAPPED set, not everything above
+ *  the floor. */
+const V3_RENDER_GATE = exports.V3_RENDER_GATE = 0.55;
+
+/**
+ * The render gate for ONE row, chosen by the scorer that actually produced its
+ * score rather than by the current flag.
+ *
+ * WHY PER ROW. `effectiveRenderGate()` below answers "what gate does a score
+ * written NOW get?", which is the wrong question for a row scored an hour ago.
+ * Scored rows live for 48h (`FEED_WINDOW_MS`) and are never re-scored, so a
+ * device that ran the v3 beta holds a MIXTURE of vintages, and a single global
+ * gate re-judges every one of them against a threshold calibrated for a scorer
+ * most of them never saw. Retiring v3 did not retire its rows.
+ *
+ * That is not a symmetric risk. v1's relevance is QUANTISED — measured on the
+ * 348-row gold set (`harness-local/fixtures/goldset-348.json`) it takes just 25
+ * distinct values, 89 rows tie at 0.6, and 25 rows sit at EXACTLY 0.4, which is
+ * 21.6% of the 116 rows v1 admits at its own gate. Moving the gate to 0.55 for
+ * everyone deletes all 25 of those instantly, and since nothing re-scores them
+ * they never come back.
+ *
+ * SURFACE SCOPE: those 0.4 rows sit in the LOW band, because `bandOf` puts
+ * [0.4,0.6) there. This used to reach the Dashboard only, since the Feed's
+ * importance filter defaulted to 'medium' and already required >= 0.6. That
+ * filter has been removed from both tabs, so the LOW band now renders
+ * everywhere and this gate protects the whole of it on both surfaces.
+ *
+ * So the vintage travels with the row (`article_suggestions.scored_with_v3`,
+ * schema v50) and each row is judged at its own scorer's gate. Absent/false —
+ * every pre-v50 row — reads as legacy and keeps `RENDER_GATE`, which is exactly
+ * what those rows were scored under.
+ */
+function gateForRow(s) {
+  return s.scoredWithV3 === true ? V3_RENDER_GATE : RENDER_GATE;
+}
+
+/** The render gate for a row's raw relevance — the per-row gate applied.
+ *  Prefer this over comparing against {@link effectiveRenderGate} directly:
+ *  that compares every row to the CURRENT flag's gate, which is the mixed-
+ *  vintage bug {@link gateForRow} exists to prevent. */
+function relevancePassesGate(s) {
+  return (s.relevance ?? 0) >= gateForRow(s);
+}
+
+/** The effective render gate for rows scored FROM NOW ON: always
+ *  {@link RENDER_GATE} (0.4).
+ *
+ *  It used to return {@link V3_RENDER_GATE} whenever the v3 beta was on, because
+ *  v3's continuous blended score needed the tighter gate. v3 is retired; the
+ *  switch now selects v4, which is the LEGACY path — v1-vintage quantised
+ *  scores, calibrated against 0.4. Returning 0.55 for a v4-scored row would
+ *  delete the whole 0.4 tier the moment the toggle went on, with nothing to
+ *  re-score it back (on `goldset-348`, 25 rows sit at EXACTLY 0.4 — 21.6% of
+ *  what v1 admits at its own gate).
+ *
+ *  No store read is left here, so this is now a constant. Kept as a FUNCTION
+ *  deliberately: it is the named answer to "what gate does a fresh score get",
+ *  and its callers (diagnostics, the pipeline) should keep asking that question
+ *  rather than inlining a literal.
+ *
+ *  SCOPE unchanged: this is NOT the right thing to compare an EXISTING row
+ *  against — v3-scored rows can still be on-device for up to the 48h window.
+ *  Use {@link gateForRow} / {@link relevancePassesGate} for that. */
+function effectiveRenderGate() {
+  return RENDER_GATE;
+}
+const BREAKING_EVENT_TYPES = new Set(['disaster', 'weather', 'conflict']);
+
+/** One breaking-strip entry (representative + collapsed members). Consumed by
+ *  `BreakingStrip`. */
+
+/** One story-group card in a fact row (a collapsed multi-source story). */
+
+/**
+ * What a Dashboard section IS.
+ *  - `fact`             — a persona fact's own section ("News about: X").
+ *  - `headline-country` — top headlines for one country scope.
+ *  - `headline-global`  — top headlines for the GLOBAL scope.
+ *
+ * `FactRow.kind` is OPTIONAL and absent ⇒ `'fact'`: every section was a fact
+ * section before headline sections existed, so callers (and fixtures) that build
+ * `FactRow` literals without it keep compiling and keep meaning what they meant.
+ * Read it through {@link sectionKindOf}, never directly.
+ */
+
+/** The section's kind, defaulting an absent `kind` to `'fact'`. */
+function sectionKindOf(row) {
+  return row.kind ?? 'fact';
+}
+
+/** True for the two headline section kinds. */
+function isHeadlineRow(row) {
+  return sectionKindOf(row) !== 'fact';
+}
+/** One fact row: a fact's stories laid out as a horizontal strip. */
+
+/**
+ * The part of a fact statement a TITLE shows: the text before the first "; ".
+ * One persona fact can hold two statements joined that way ("Expat from India
+ * living in Nieuw-West, …; Lives in Nieuw-West, …"), which made a section
+ * title run to five lines. Falls back to the whole statement when the first
+ * part is empty. Titles only: `FactRow.statement` keeps the full text.
+ */
+function primaryStatement(statement) {
+  const whole = statement.trim();
+  const first = whole.split('; ')[0].trim();
+  return first || whole;
+}
+
+/** Why a fact section has no stories. See {@link FactRow.emptyReason}. */
+
+/** How long an empty section counts as a "new interest" (its label). */
+const NEW_INTEREST_WINDOW_MS = exports.NEW_INTEREST_WINDOW_MS = 24 * 60 * 60 * 1000;
+// --- helpers --------------------------------------------------------------
+
+function parseMs(iso) {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Terminal note-gate: the note exists, or was deliberately skipped. */
+function isComplete(s) {
+  return s.status === _articleSuggestionStatus.ArticleSuggestionStatus.Complete;
+}
+
+/** The render gate — INCLUSIVE (relevance v3: was strict `>`, now `>=`, so
+ *  rows at exactly the cutoff stay included). Uses the row's OWN gate: 0.55 for
+ *  a row relevance v3 scored, 0.4 for a legacy-scored one (see
+ *  {@link gateForRow} for why this is per row and not per flag). */
+function passesRenderGate(s) {
+  return relevancePassesGate(s);
+}
+
+/** The 7-day keep: a complete High or Emergency story nobody has read.
+ *  "Read" comes from the caller's pure snapshot (opened or viewed on the Feed,
+ *  at story level). It decides only the extension; the 7-day age limit is
+ *  applied by {@link isWithinWindow}. */
+function keepsPastFeedWindow(s, snap) {
+  if (!isComplete(s)) return false;
+  const band = (0, _ownership.bandOf)(s.relevance);
+  const important = band === 'HIGH' || band === 'EMERGENCY' || (s.rawScore ?? 0) > _config.DEFAULT_HARNESS_CONFIG.articlePipeline.emergencyPriorityCutoff;
+  return important && !(0, _readSnapshot.isReadStory)(s, snap);
+}
+
+/** The publication window (`cutoffMs = nowMs - FEED_WINDOW_MS`, 48h). With a
+ *  `snap`, an unread High or Emergency also passes until 7 days after publish.
+ *  No snapshot means no extension. */
+function isWithinWindow(s, cutoffMs, snap) {
+  const pub = parseMs(s.firstPubDate);
+  if (pub >= cutoffMs) return true;
+  return !!snap && pub >= cutoffMs - (IMPORTANT_KEEP_MS - FEED_WINDOW_MS) && keepsPastFeedWindow(s, snap);
+}
+
+/** A row is VISIBLE once its note exists (status `complete`) — see the module
+ *  header. Must also clear the render gate and the publication window (see
+ *  FEED_WINDOW_MS). Exported so the
+ *  swipe-stack selector applies the identical visibility gate.
+ *
+ *  Composed from the three named sub-predicates above so the funnel diagnostic
+ *  can attribute WHICH gate rejected a row without re-implementing (and then
+ *  drifting from) the comparisons. Keep the conjunction order in sync with the
+ *  diagnostic's attribution order. */
+function isVisible(s, cutoffMs, snap) {
+  return isComplete(s) && passesRenderGate(s) && isWithinWindow(s, cutoffMs, snap);
+}
+
+/** scoredAt ?? createdAt in epoch ms — the row's "added to feed" time. */
+function addedMsOf(s) {
+  if (typeof s.scoredAt === 'number' && Number.isFinite(s.scoredAt)) return s.scoredAt;
+  return parseMs(s.createdAt);
+}
+
+/** Breaking predicate (rawScore > 1.0, or ≥ 0.8 with a disaster/weather/conflict
+ *  event type). Exported so the swipe-stack selector's deck ordering pins the
+ *  same breaking stories first without duplicating the rule. */
+function isBreaking(s) {
+  const raw = s.rawScore;
+  if (raw == null) return false;
+  if (raw > 1.0) return true;
+  return raw >= 0.8 && s.eventType != null && BREAKING_EVENT_TYPES.has(s.eventType);
+}
+
+/**
+ * The Dashboard emergency-strip predicate: the EMERGENCY band and nothing else.
+ *
+ * ## Why this is NOT `isBreaking`
+ *
+ * `isBreaking`'s second clause admits the HIGH band (raw 0.8–1.0) whenever the
+ * event type is disaster/weather/conflict, and that is what put ordinary
+ * high-relevance stories under a red "BREAKING" chip — a story about a region
+ * getting LESS rain than usual is `weather` at HIGH, and it was being fronted
+ * above every section as though it were an alert. The strip is the loudest
+ * surface in the app; it is reserved for the tier the rest of the app already
+ * calls EMERGENCY.
+ *
+ * The looseness in `isBreaking` is deliberate and stays: that predicate's job
+ * is giving a story a feed recency bonus, i.e. "never BURY this". (It also
+ * exempted stories from the Med+/High importance dial, which no longer exists;
+ * the recency bonus is what it is for now.) Never burying a high-relevance
+ * disaster story and fronting it in a red alert strip are different decisions,
+ * so they get different predicates rather than one predicate serving both
+ * badly.
+ *
+ * Reads `rawScore`, not `relevance`, for the same reason `isBreaking` does:
+ * soft-suppression penalties can drag the persisted `relevance` below the tier
+ * the scorer actually assigned.
+ *
+ * A story that no longer qualifies is not lost — it falls through to its own
+ * fact/headline section like any other card.
+ */
+function isEmergency(s, config = _config.DEFAULT_HARNESS_CONFIG) {
+  const raw = s.rawScore;
+  if (raw == null || !Number.isFinite(raw)) return false;
+  return raw > config.articlePipeline.emergencyPriorityCutoff;
+}
+
+/** Minimal ownership projection from a store row. `matchedTopics` is what
+ *  `resolveOwningFactLenient` reads; the headline scope/country ride along so the
+ *  headline-section routing below reads ONE projection rather than reaching back
+ *  into the store row shape. */
+function ownershipProjection(s) {
+  return {
+    id: s._id,
+    rawScore: s.rawScore,
+    relevance: s.relevance,
+    pubDateMs: parseMs(s.firstPubDate),
+    clusterMemberships: [],
+    headlineScope: s.headlineScope ?? null,
+    headlineCountryCode: normalizeCountryCode(s.headlineCountryCode),
+    matchedTopics: (s.matchedTopics ?? []).map(m => ({
+      topicId: m.topicId,
+      text: m.text
+    }))
+  };
+}
+
+/** Uppercase, trimmed ISO alpha-2, or null for absent/blank. Both sides of the
+ *  country key (`locations.country_code` via `buildRetrievalProfile`, and the
+ *  persisted `headline_country_code`) are already normalized this way; doing it
+ *  again here means a legacy or hand-built row can never split one country into
+ *  two sections. */
+function normalizeCountryCode(code) {
+  const c = (code ?? '').trim().toUpperCase();
+  return c.length > 0 ? c : null;
+}
+
+/**
+ * The headline section a row belongs to, or null when it has none:
+ *  - not a headline row at all, or
+ *  - `CITY` scope (never requested as its own retrieval scope — see
+ *    `HeadlineSectionScope`), or
+ *  - `COUNTRY` scope with no country code. Dropping these is deliberate: the
+ *    brief's rule is that a null-country COUNTRY row belongs to no country
+ *    section rather than to an invented "unknown country" bucket.
+ */
+function headlineSectionIdOf(rep) {
+  if (rep.headlineScope === 'GLOBAL') return _ownership.GLOBAL_HEADLINE_SECTION_ID;
+  if (rep.headlineScope !== 'COUNTRY') return null;
+  const cc = normalizeCountryCode(rep.headlineCountryCode);
+  return cc ? (0, _ownership.countryHeadlineSectionId)(cc) : null;
+}
+
+/** Strongest weight among the user's locations in `countryCode`, or null when
+ *  the persona has none there (the scope can outlive a deleted location). */
+function countryLocationWeight(locations, countryCode) {
+  let best = null;
+  for (const loc of locations.values()) {
+    if (normalizeCountryCode(loc.countryCode) !== countryCode) continue;
+    if (best == null || loc.weight > best) best = loc.weight;
+  }
+  return best;
+}
+
+// Representative election (`makeRepCompare`) lives in
+// `@/lib/algorithms/representative-compare`, shared with
+// `feed-list-selector`, so the Dashboard and the Feed cannot drift apart on
+// which article fronts a given story. It used to be duplicated in both files,
+// byte-identically and by hand.
+//
+// SYMMETRY WITH THE FEED: `feed-list-selector` applies best-member scoring, a story group
+// on its BEST member so election cannot demote the story. The same rule now
+// holds here — `createdAtMs` is group-maxed where the group is built, so
+// `cardCompare` ranks a card by its freshest member regardless of which member
+// was elected to front it.
+//
+// This became necessary when the shared comparator flipped to electing the
+// OLDEST member (the originating report rather than the latest rewrite). Without
+// the group-max, a multi-source story would sink to roughly where its first
+// report landed, so a story gaining coverage through the day would drift DOWN
+// the Dashboard as it got more important. Election is a presentation choice;
+// it must not move the story.
+
+/** Card (story-group) ordering within a Dashboard section: the group's freshest
+ *  `createdAt` (suggestion-creation time) descending, then id. */
+function cardCompare(a, b) {
+  if (a.createdAtMs !== b.createdAtMs) return b.createdAtMs - a.createdAtMs;
+  return a.data._id < b.data._id ? -1 : a.data._id > b.data._id ? 1 : 0;
+}
+
+// --- public API -----------------------------------------------------------
+
+/**
+ * Build the fact-rows feed from the store rows + persona snapshots.
+ *
+ * @param suggestions the live `ForYouSuggestion` pool.
+ * @param snapshots   topics/facts/locations + factStatements (from
+ *                    `loadSectionSnapshots`).
+ * @param openedIds   the opened-stories set — used to compute per-section unread
+ *                    counts + the unread-high-priority-first sort. Pass the live
+ *                    set so the Dashboard resorts as stories are opened.
+ * @param nowMs       injected clock (deterministic testing).
+ * @param userCtx     the user's geo/language context (home/other countries +
+ *                    app language) — makes representative ELECTION tier-aware
+ *                    (see `makeRepCompare`). `null` (default) preserves the
+ *                    legacy geo/language-blind pick. Card order, breaking
+ *                    sort, and section sort are unaffected.
+ */
+function buildFactRows(suggestions, snapshots, openedIds = new Set(), nowMs = Date.now(), config = _config.DEFAULT_HARNESS_CONFIG, userCtx = null,
+/** When the last processing run finished (null = none yet). Decides an empty
+ *  section's `emptyReason`. */
+lastProcessingRunFinishedAt = null, /** Who has read what, for the 7-day keep. Absent = plain 48h window. */
+readSnapshot) {
+  const cutoffMs = nowMs - FEED_WINDOW_MS;
+  const hpMult = config.scoringEngine.HP_MULT;
+  const repCompareForGroups = (0, _representativeCompare.makeRepCompare)(userCtx);
+
+  // 0. Headline DENOMINATORS — "how many headlines did Mera read for this
+  //    scope". Counted over the RAW pool inside the publication window, with no
+  //    visibility/relevance gate: the sentence's whole point is to account for
+  //    the headlines that did NOT make the cut, so gating it on the same bar it
+  //    reports against would make it always read "N read · N worth your time".
+  //    Presence of a scope here is also what makes its section EXIST — a scope
+  //    with zero headlines in the window gets no section at all (there is
+  //    nothing to account for), while a scope with headlines gets its section
+  //    even if none of them clear the bar.
+  //
+  //    CO-MATCHED headlines are excluded. A headline that ALSO matched a real
+  //    persona topic carries a real topicId, resolves an owning fact at step 4,
+  //    and is routed to that FACT's section — never to a headline section. It
+  //    was still being counted here, so the sentence described a population the
+  //    section could not show. The denominator now counts only rows that could
+  //    actually land in this section, using the SAME ownership resolver step 4
+  //    routes with, so the two cannot disagree. Placement is deliberately
+  //    unchanged: a headline about something you care about stays under that
+  //    topic, which is the more personal result and the existing behaviour.
+  //
+  //    Known approximation: this is a per-ROW test, whereas step 4 routes per
+  //    story-GROUP representative. A headline that ends up a non-rep member of a
+  //    mixed group can therefore still be counted. Counting per row is inherent
+  //    to a denominator computed over the raw (partly unscored, ungrouped) pool.
+  const headlineReadCounts = new Map();
+  const headlineCountries = new Map(); // sectionId → alpha-2
+  for (const s of suggestions) {
+    if (!isWithinWindow(s, cutoffMs, readSnapshot)) continue;
+    const projection = ownershipProjection(s);
+    const sectionId = headlineSectionIdOf(projection);
+    if (!sectionId) continue;
+    // Owned by a fact ⇒ routed to that fact's section, not here. The resolver
+    // returns null exactly when step 4 would fall through to the headline
+    // section — every matched fact NEGATIVE (suppressed), or no active
+    // fact-linked topic at all (the pure-headline case, synthetic topicId
+    // null). Those stay counted, which is right: they are the rows this
+    // section is accounting for.
+    if ((0, _ownership.resolveOwningFactLenient)(projection, snapshots.topics, snapshots.facts, hpMult)) {
+      continue;
+    }
+    headlineReadCounts.set(sectionId, (headlineReadCounts.get(sectionId) ?? 0) + 1);
+    const cc = normalizeCountryCode(s.headlineCountryCode);
+    if (cc) headlineCountries.set(sectionId, cc);
+  }
+
+  // 1. Visible pool (note-gated + render gate + FEED_WINDOW_MS). A muted
+  //    publication's rows leave here, not at each surface: its purge waits for
+  //    the Undo toast and dies with the app, so rows can outlive the mute.
+  const visible = suggestions.filter(s => isVisible(s, cutoffMs, readSnapshot) && !(0, _publicationTags.isMutedPublication)(s.publication_name, userCtx));
+  if (visible.length === 0) {
+    return {
+      breaking: [],
+      rows: sortRows(emptyFactRows(new Set(), snapshots, nowMs, lastProcessingRunFinishedAt), snapshots)
+    };
+  }
+
+  // 2. Story-group the visible pool (display thresholds incl. the weighted edge).
+  const groups = (0, _storyGrouping.buildStoryGroups)(visible.map(_storyGrouping.groupableOf), _storyGrouping.DISPLAY_GROUPING_OPTIONS);
+
+  // 3. Per group: pick a representative (newest member) + collapse members.
+  const breaking = [];
+  const assignable = [];
+  for (const g of groups) {
+    const rep = (0, _storyGrouping.pickRepresentative)(g, repCompareForGroups).s;
+    const members = g.map(it => it.s).filter(m => m._id !== rep._id);
+    const all = [rep, ...members];
+    const pubDateMs = all.reduce((mx, m) => Math.max(mx, parseMs(m.firstPubDate)), 0);
+    const addedMs = all.reduce((mx, m) => Math.max(mx, addedMsOf(m)), 0);
+
+    // EMERGENCY band only — see `isEmergency`. Deliberately NOT `isBreaking`,
+    // which is the (looser) "never bury this" predicate.
+    // Evaluated over the whole group, like `pubDateMs`/`addedMs` above: the
+    // representative is elected oldest-first for provenance, so asking only the
+    // rep would miss an emergency that broke in later coverage of the same story.
+    if (all.some(m => isEmergency(m, config))) {
+      breaking.push({
+        data: rep,
+        members
+      });
+      continue;
+    }
+    const bucket = (0, _ownership.bucketOf)(rep.relevance, config);
+    // High-priority: display bucket HIGH+ OR a matched persona topic flagged
+    // highPriority. (bucketRank ≥ HIGH also captures the EMERGENCY tier, which
+    // is strictly higher-priority than HIGH.)
+    const highPriority = (0, _ownership.bucketRank)(bucket) >= (0, _ownership.bucketRank)('HIGH') || (rep.matchedTopics ?? []).some(m => m.topicId != null && snapshots.topics.get(m.topicId)?.highPriority === true);
+    assignable.push({
+      rep,
+      group: {
+        data: rep,
+        members,
+        rawScore: rep.rawScore,
+        bucket,
+        pubDateMs,
+        addedMs,
+        // Group-maxed, like `pubDateMs` and `addedMs` above. `cardCompare`
+        // orders Dashboard cards by this, so taking the representative's value
+        // would sink every multi-source story to where its FIRST report landed
+        // once the rep flipped to oldest-first — a story gaining coverage all
+        // day would drift down instead of up.
+        createdAtMs: all.reduce((mx, m) => Math.max(mx, parseMs(m.createdAt)), 0),
+        highPriority
+      }
+    });
+  }
+  breaking.sort((a, b) => {
+    const ra = a.data.rawScore ?? Number.NEGATIVE_INFINITY;
+    const rb = b.data.rawScore ?? Number.NEGATIVE_INFINITY;
+    if (ra !== rb) return rb - ra;
+    const pa = parseMs(a.data.firstPubDate);
+    const pb = parseMs(b.data.firstPubDate);
+    if (pa !== pb) return pb - pa;
+    return a.data._id < b.data._id ? -1 : 1;
+  });
+
+  // 4. Assign each remaining group to a fact section. A story folds into the
+  //    fact it matched even at ZERO signal (lenient ownership), so low-priority
+  //    suggestions live inside the fact section they're part of rather than a
+  //    separate "Also for you" catch-all. A group with no fact to belong to —
+  //    a negative (suppressed) match, or a factless one (tracked/exploration/
+  //    deleted-fact topics) — resolves to null and is dropped from the Dashboard.
+  //    A TOP-HEADLINE row has synthetic matched topics (`topicId: null`), so it
+  //    can never resolve an owning fact and used to be dropped here — it reached
+  //    the device, was scored, and rendered on the Feed tab, but the Dashboard
+  //    threw it away. It now falls through to its SCOPE section instead. Fact
+  //    ownership still wins when both apply: a headline that also matched a real
+  //    persona topic is about that fact, and showing it in both places would
+  //    duplicate the card.
+  const factRows = new Map();
+
+  // Headline section SHELLS, created up-front from the denominators (step 0) so
+  // a scope with headlines but no qualifying member still renders its title +
+  // its "none looked relevant today" line.
+  const headlineRows = new Map();
+  for (const [sectionId, readCount] of headlineReadCounts) {
+    const countryCode = headlineCountries.get(sectionId) ?? null;
+    const isGlobal = sectionId === _ownership.GLOBAL_HEADLINE_SECTION_ID;
+    headlineRows.set(sectionId, {
+      factId: sectionId,
+      kind: isGlobal ? 'headline-global' : 'headline-country',
+      countryCode,
+      headlineReadCount: readCount,
+      weight: isGlobal ? (0, _ownership.headlineSectionWeight)('GLOBAL', null, config) : (0, _ownership.headlineSectionWeight)('COUNTRY', countryCode ? countryLocationWeight(snapshots.locations, countryCode) : null, config),
+      // Localized in the UI layer from `kind` + `countryCode` — see FactRow.
+      statement: '',
+      factStatement: null,
+      latestAddedMs: 0,
+      unreadCount: 0,
+      groups: []
+    });
+  }
+  for (const {
+    rep,
+    group
+  } of assignable) {
+    // RULE 1 (see feed-select/ownership): the pipeline already discarded this
+    // row — its relevance never cleared `discardFloor` — so its fact match is
+    // not relevance-backed and it must not claim a section. Historically
+    // `RENDER_GATE` (0.3) was looser than `discardFloor` (0.4), so a row could
+    // reach `group` here while still `UNSCORED`; relevance v3 raised
+    // `RENDER_GATE` to 0.4 — the SAME cutoff as `discardFloor` — so this branch
+    // is no longer reachable in practice (kept as the safety net for if the two
+    // constants ever diverge again). Applied to headline sections IDENTICALLY,
+    // The bar is the existing one, not a new one.
+    if (!(0, _ownership.isSectionMemberEligible)(group.bucket)) continue;
+    const projection = ownershipProjection(rep);
+    const factId = (0, _ownership.resolveOwningFactLenient)(projection, snapshots.topics, snapshots.facts, hpMult);
+    if (!factId) {
+      // No fact owns it. A top-headline row still has a home — its scope's
+      // section. Anything else (negative/suppressed or factless) stays dropped.
+      const sectionId = headlineSectionIdOf(projection);
+      if (sectionId) headlineRows.get(sectionId)?.groups.push(group);
+      continue;
+    }
+    let row = factRows.get(factId);
+    if (!row) {
+      const fact = snapshots.facts.get(factId);
+      row = {
+        factId,
+        kind: 'fact',
+        weight: fact?.weight ?? 1,
+        statement: fact?.statement?.trim() || factId,
+        factStatement: snapshots.factStatements.get(factId) ?? null,
+        latestAddedMs: 0,
+        unreadCount: 0,
+        groups: []
+      };
+      factRows.set(factId, row);
+    }
+    row.groups.push(group);
+  }
+
+  // 5. Finalize each row: order cards createdAt-desc, compute unread counts.
+  const isGroupUnread = g => !isSuggestionOpened(g.data, openedIds);
+  const rows = [];
+  for (const row of factRows.values()) {
+    // RULE 2 (see feed-select/ownership): a fact section needs one story at
+    // SECTION_MIN_VIABLE_BUCKET, now LOW (owner, 2026-10-21: "low should still
+    // show the section"), so any visible story keeps its fact's section.
+    if (!(0, _ownership.isFactSectionViable)(row.groups.map(g => g.bucket))) continue;
+    row.groups.sort(cardCompare);
+    row.latestAddedMs = row.groups.reduce((mx, g) => Math.max(mx, g.addedMs), 0);
+    row.unreadCount = row.groups.filter(isGroupUnread).length;
+    rows.push(row);
+  }
+
+  // 5b. Finalize the headline sections. RULE 2 is applied with the SAME test and
+  //     now the SAME consequence as a fact section: a non-viable headline
+  //     section disappears.
+  //
+  //     This used to keep the shell and empty its cards, on the argument that
+  //     the one-line denominator ("Mera read 20 · none looked relevant today")
+  //     was the only place a reader learns Mera did work on their behalf. The
+  //     user overruled that after living with it: an empty section reads as a
+  //     promise of content followed by an admission there is none, and it cost a
+  //     screenful every time. Their standing rule for this feature — "if not
+  //     relevant we're saving users time by not showing it" — decides it.
+  //
+  //     Note the shell was ALSO masking a real defect: until a headline scoring fix, every
+  //     pure headline row was written off before scoring, so the shell was the
+  //     permanent state of the feature rather than an occasional honest empty.
+  //     Anyone tempted to restore it should first confirm the sections can fill.
+  for (const row of headlineRows.values()) {
+    if (!(0, _ownership.isFactSectionViable)(row.groups.map(g => g.bucket), _ownership.HEADLINE_SECTION_MIN_VIABLE_BUCKET)) continue;
+    row.groups.sort(cardCompare);
+    row.latestAddedMs = row.groups.reduce((mx, g) => Math.max(mx, g.addedMs), 0);
+    row.unreadCount = row.groups.filter(isGroupUnread).length;
+    rows.push(row);
+  }
+
+  // Every fact the reader holds an active interest for gets a section,
+  // stories or not (the owner reversed the earlier no-empty-sections rule).
+  // Includes facts RULE 2 dropped above: their LOW matches stay hidden, the
+  // section shows its empty state instead. Headline sections are NOT included:
+  // an empty headline scope still disappears, as before.
+  rows.push(...emptyFactRows(new Set(rows.map(r => r.factId)), snapshots, nowMs, lastProcessingRunFinishedAt));
+
+  // Section order (Dashboard live resort): section WEIGHT desc first — the one
+  // axis on which synthetic headline sections are comparable with real fact
+  // sections (a default-weight fact is 1.0, a full-weight home country 0.55,
+  // GLOBAL 0.35; see `headlineSectionWeight`) — then unread count desc (a
+  // fully-read section sinks below any section with at least one unread story),
+  // then by group count desc, ties broken by factId asc for determinism.
+  return {
+    breaking,
+    rows: sortRows(rows, snapshots)
+  };
+}
+
+/**
+ * Empty fact rows for every fact that owns at least one ACTIVE,
+ * non-negative topic and has no row in `populated`. A fact the reader
+ * down-weighted to below zero is suppression working, not a missing section,
+ * so it gets none.
+ */
+function emptyFactRows(populated, snapshots, nowMs, lastProcessingRunFinishedAt) {
+  const factIds = new Set();
+  for (const t of snapshots.topics.values()) {
+    if (t.status !== 'active' || !t.factId || t.weight < 0) continue;
+    factIds.add(t.factId);
+  }
+  const out = [];
+  for (const factId of factIds) {
+    if (populated.has(factId)) continue;
+    const fact = snapshots.facts.get(factId);
+    if (!fact) continue;
+    const created = fact.createdAtMs;
+    out.push({
+      factId,
+      kind: 'fact',
+      weight: fact.weight ?? 1,
+      statement: fact.statement?.trim() || factId,
+      factStatement: snapshots.factStatements.get(factId) ?? null,
+      latestAddedMs: 0,
+      unreadCount: 0,
+      groups: [],
+      emptyReason: lastProcessingRunFinishedAt === null || created > lastProcessingRunFinishedAt ? 'awaiting-first-run' : 'no-match-yet',
+      newInterest: nowMs - created < NEW_INTEREST_WINDOW_MS
+    });
+  }
+  return out;
+}
+
+/** 1 = has stories (fact and headline sections), 2 = empty (last). */
+function sortTier(row) {
+  if (row.groups.length > 0 || row.emptyReason === undefined) return 1;
+  return 2;
+}
+
+/**
+ * Section order. An EXPLICIT tier comes first, because the weight axis below
+ * would otherwise put an empty fact section (weight 1.0) above every populated
+ * headline section (0.55 and lower): every section with stories first, then
+ * every empty section, new interests included (owner decision: a section
+ * with nothing to read never sits above one with stories). Within the populated tier:
+ * section WEIGHT desc (the one axis on which headline sections compare with
+ * fact sections: a default-weight fact is 1.0, a full-weight home country
+ * 0.55, GLOBAL 0.35; see `headlineSectionWeight`), then unread count desc (a
+ * fully-read section sinks below any with at least one unread story), then
+ * group count desc, then factId asc for determinism. Within the empty tier:
+ * newest fact first, then factId.
+ */
+function sortRows(rows, snapshots) {
+  return rows.sort((a, b) => {
+    const ta = sortTier(a);
+    const tb = sortTier(b);
+    if (ta !== tb) return ta - tb;
+    if (ta !== 1) {
+      const ca = snapshots?.facts.get(a.factId)?.createdAtMs ?? 0;
+      const cb = snapshots?.facts.get(b.factId)?.createdAtMs ?? 0;
+      if (ca !== cb) return cb - ca;
+      return a.factId < b.factId ? -1 : a.factId > b.factId ? 1 : 0;
+    }
+    const wa = a.weight ?? 1;
+    const wb = b.weight ?? 1;
+    if (wa !== wb) return wb - wa;
+    if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
+    if (a.groups.length !== b.groups.length) return b.groups.length - a.groups.length;
+    return a.factId < b.factId ? -1 : a.factId > b.factId ? 1 : 0;
+  });
+}
+
+/** Raw predicate behind `isSuggestionOpened`: true when `articleId` OR
+ *  `stableClusterId` (if present) is in the opened set. Exported separately so
+ *  callers that only have an article id + stable cluster id (no full
+ *  `ForYouSuggestion`) — e.g. the article-detail screen — can reuse the exact
+ *  same opened-set check without constructing a fake suggestion. */
+function isOpenedId(articleId, stableClusterId, openedSet) {
+  if (openedSet.size === 0) return false;
+  if (articleId && openedSet.has(articleId)) return true;
+  if (stableClusterId && openedSet.has(stableClusterId)) return true;
+  return false;
+}
+
+/** True when a suggestion's article_id OR top stable cluster id is in the opened
+ *  set — the card-dimming predicate. Ported from the deleted feed-sections
+ *  selector. */
+function isSuggestionOpened(s, openedSet) {
+  const topStable = s.clusters?.find(c => c.stableClusterId)?.stableClusterId;
+  return isOpenedId(s.articleId, topStable, openedSet);
+}

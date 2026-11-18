@@ -1,0 +1,615 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.HYGIENE_THRESHOLDS = exports.FOLLOW_INSTEAD_BARS = void 0;
+exports.analyzeHygiene = analyzeHygiene;
+exports.detectFollowInstead = detectFollowInstead;
+exports.followInsteadProposal = followInsteadProposal;
+exports.isNoStakeOffer = void 0;
+exports.placeComponents = placeComponents;
+var _actionNames = require("./action-names");
+var _topicGeneration = require("./topic-generation");
+var _questionnaireData = require("../prompts/questionnaire-data");
+var _factStats = require("../feed-select/fact-stats");
+// news-harness — periodic persona fact-hygiene analyzer (PURE, RN-free).
+//
+// A deterministic O(facts² + topics) sweep over plain persona
+// snapshots that proposes conservative cleanups for the weekly hygiene sweep:
+//   • duplicate_facts — two facts with near-identical statements, OR sharing ≥2
+//     of the SAME normalized topic texts (via the fact-stats cross-fact detector)
+//   • too_broad_fact  — a fact fanning out to too many active topics, or whose
+//     statement is a single generic word → downweight it
+//   • stale_topic     — a low-weight active topic idle past the stale window
+//   • stale_fact      — a fact whose owned topics are ALL retired/suppressed
+//   • location_conflict — two or more of the user's OWN place facts name
+//     places that share nothing (moved from Amsterdam to Berlin, and an older
+//     "Expat from India living in Amsterdam" survived) → keep the newest
+//   • follow_instead — not from the weekly analyzer: the daily sweep's
+//     detectFollowInstead names a topic that floods the feed unread, or an
+//     interest fact with no stake, and offers it as a followed story
+//
+// No imports of lib/database, lib/stores, expo, react-native, or watermelondb —
+// the RN adapter (lib/database/services/hygiene-service.ts) maps live rows into
+// these shapes, calls analyzeHygiene, and routes an accepted proposal's `ops`
+// through the persona-action executor / fact-service.
+//
+// NOTE ON CONFIG PLACEMENT: the thresholds below live in THIS file (exported
+// consts), NOT in core/config.ts — that harness-config module is owned by the
+// concurrent chat-rail work this round, so hygiene knobs are colocated with the
+// only code that reads them. If they ever need runtime tuning, promote them.
+
+// ── Thresholds (conservative by design) ─────────────────────────────────────
+
+const HYGIENE_THRESHOLDS = exports.HYGIENE_THRESHOLDS = {
+  /** Active-topic fan-out STRICTLY above which a fact is "too broad". */
+  tooBroadTopicFanout: 8,
+  /** A fact statement with word-count ≤ this is "too generic" (single word). */
+  genericStatementMaxWords: 1,
+  /** A too-broad fact is only proposed while its effective weight is above this
+   *  floor — so repeated accepts converge (each accept lowers the weight) rather
+   *  than re-proposing forever. */
+  tooBroadMinEffectiveWeight: 0,
+  /** Weight delta applied to a too-broad fact on accept (downweight). */
+  tooBroadDownweightDelta: -0.3,
+  /** A topic idle for longer than this (ms) is a stale-topic candidate. 45d. */
+  staleTopicIdleMs: 45 * 24 * 60 * 60 * 1000,
+  /** …AND its weight is in [0, this) — low-value positive topics only. Negative
+   *  topics are intentional signals and are left alone. */
+  staleTopicMaxWeight: 0.3,
+  /** Token Jaccard at/above which two fact statements are near-duplicates. */
+  duplicateStatementJaccard: 0.8,
+  /** Facts sharing at least this many normalized topic texts → duplicate. */
+  duplicateSharedTopicTexts: 2
+};
+/** The daily follow-instead bars, tuned against the four-fact account (510
+ *  articles, 490 scored, top 0.38). */
+const FOLLOW_INSTEAD_BARS = exports.FOLLOW_INSTEAD_BARS = {
+  /** Distinct stories a topic or fact needs in the 48h window. */
+  minStories: 20,
+  /** A flooding topic has at least this many times the median topic's stories. */
+  medianMultiple: 3,
+  /** …and at least this share of all the stories matched. */
+  minShare: 0.25,
+  /** …and the reader opened fewer than this share of them. */
+  maxOpenedShare: 0.25
+};
+
+// ── Input projections (plain; no DB/RN) ─────────────────────────────────────
+
+/** One fact's incoherent topics, as judged by the (impure) LLM sanity sweep.
+ *  The judging happens in the RN adapter; this module only shapes the proposal,
+ *  so the analyzer stays pure and deterministic. */
+
+// ── Output ──────────────────────────────────────────────────────────────────
+
+/** A minimal PersonaAction shape, structurally compatible with the executor's
+ *  richer `PersonaAction` — kept local so the pure module never imports RN. */
+
+/** One concrete op an accept runs, in order. */
+
+// ── Text helpers ─────────────────────────────────────────────────────────────
+
+/** Lowercase, strip punctuation, collapse whitespace → word tokens. */
+function tokenize(s) {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length > 0);
+}
+function jaccard(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter += 1;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+/** Effective weight for a fact (null ⇒ 1.0 baseline). */
+function effWeight(f) {
+  return f.weight ?? 1;
+}
+function shorten(s, max = 48) {
+  const t = s.trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+function pairKey(a, b) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+// ── Analyzer ─────────────────────────────────────────────────────────────────
+
+function analyzeHygiene(input) {
+  const th = input.thresholds ?? HYGIENE_THRESHOLDS;
+  const rejected = new Set(input.rejectedFingerprints ?? []);
+
+  // Per-fact owned-topic buckets by status (single pass).
+  const activeTopicsByFact = new Map();
+  const ownedTopicCount = new Map(); // any status, factId != null
+  for (const t of input.topics) {
+    if (!t.factId) continue;
+    ownedTopicCount.set(t.factId, (ownedTopicCount.get(t.factId) ?? 0) + 1);
+    if (t.status === 'active') {
+      const list = activeTopicsByFact.get(t.factId);
+      if (list) list.push(t);else activeTopicsByFact.set(t.factId, [t]);
+    }
+  }
+  const proposals = [];
+  // Facts scheduled for deletion by an earlier (higher-priority) proposal — a
+  // downweight/stale-topic op on a doomed fact would be redundant.
+  const factsBeingDeleted = new Set();
+
+  // 1. duplicate_facts ------------------------------------------------------
+  for (const p of detectDuplicateFacts(input.facts, input.topics, th)) {
+    const loser = p.deleteFactId;
+    const other = p.keepFactId;
+    const id = `duplicate_facts:${pairKey(loser, other)}`;
+    if (rejected.has(id)) continue;
+    proposals.push({
+      id,
+      kind: 'duplicate_facts',
+      subject: {
+        facts: [p.deleteStatement, p.keepStatement].map(x => shorten(x)),
+        topics: []
+      },
+      targetFactIds: [loser, other].sort(),
+      targetTopicIds: [],
+      ops: [{
+        type: 'delete_fact',
+        factId: loser
+      }],
+      invertible: false
+    });
+    factsBeingDeleted.add(loser);
+  }
+
+  // 1b. location_conflict ---------------------------------------------------
+  for (const p of detectLocationConflicts(input.facts)) {
+    if (factsBeingDeleted.has(p.olderFactId) || factsBeingDeleted.has(p.newerFactId)) continue;
+    const id = `location_conflict:${pairKey(p.olderFactId, p.newerFactId)}`;
+    if (rejected.has(id)) continue;
+    proposals.push({
+      id,
+      kind: 'location_conflict',
+      subject: {
+        facts: [shorten(p.olderStatement), shorten(p.newerStatement)],
+        topics: []
+      },
+      targetFactIds: [p.olderFactId, p.newerFactId].sort(),
+      targetTopicIds: [],
+      ops: [{
+        type: 'delete_fact',
+        factId: p.olderFactId
+      }],
+      invertible: false
+    });
+    factsBeingDeleted.add(p.olderFactId);
+  }
+
+  // 2. stale_fact (all owned topics retired/suppressed) ---------------------
+  for (const f of input.facts) {
+    const owned = ownedTopicCount.get(f.id) ?? 0;
+    if (owned === 0) continue; // no topics ⇒ maybe still generating; leave alone
+    const active = activeTopicsByFact.get(f.id)?.length ?? 0;
+    if (active > 0) continue; // has at least one active topic ⇒ not stale
+    if (factsBeingDeleted.has(f.id)) continue; // already a duplicate loser
+    const id = `stale_fact:${f.id}`;
+    if (rejected.has(id)) continue;
+    proposals.push({
+      id,
+      kind: 'stale_fact',
+      subject: {
+        facts: [shorten(f.statement)],
+        topics: []
+      },
+      targetFactIds: [f.id],
+      targetTopicIds: [],
+      ops: [{
+        type: 'delete_fact',
+        factId: f.id
+      }],
+      invertible: false
+    });
+    factsBeingDeleted.add(f.id);
+  }
+
+  // 3. too_broad_fact (high active fan-out or generic statement) ------------
+  for (const f of input.facts) {
+    if (factsBeingDeleted.has(f.id)) continue;
+    if (effWeight(f) <= th.tooBroadMinEffectiveWeight) continue; // converged
+    const fanout = activeTopicsByFact.get(f.id)?.length ?? 0;
+    const words = tokenize(f.statement).length;
+    const tooBroad = fanout > th.tooBroadTopicFanout;
+    const tooGeneric = words > 0 && words <= th.genericStatementMaxWords;
+    if (!tooBroad && !tooGeneric) continue;
+    const id = `too_broad_fact:${f.id}`;
+    if (rejected.has(id)) continue;
+    proposals.push({
+      id,
+      kind: 'too_broad_fact',
+      subject: {
+        facts: [shorten(f.statement)],
+        topics: []
+      },
+      targetFactIds: [f.id],
+      targetTopicIds: [],
+      ops: [{
+        type: 'persona_action',
+        action: {
+          action_type: _actionNames.ACTION_NAMES.SET_FACT_WEIGHT,
+          factId: f.id,
+          delta: th.tooBroadDownweightDelta
+        }
+      }],
+      invertible: true
+    });
+  }
+
+  // 4. stale_topic (idle + low positive weight) -----------------------------
+  for (const t of input.topics) {
+    if (t.status !== 'active') continue;
+    if (t.factId && factsBeingDeleted.has(t.factId)) continue;
+    if (t.lastSignalAtMs == null) continue; // never signaled ⇒ maybe brand new
+    if (input.now - t.lastSignalAtMs <= th.staleTopicIdleMs) continue;
+    if (t.weight < 0 || t.weight >= th.staleTopicMaxWeight) continue;
+    const id = `stale_topic:${t.id}`;
+    if (rejected.has(id)) continue;
+    proposals.push({
+      id,
+      kind: 'stale_topic',
+      subject: {
+        facts: [],
+        topics: [shorten(t.text)]
+      },
+      targetFactIds: t.factId ? [t.factId] : [],
+      targetTopicIds: [t.id],
+      ops: [{
+        type: 'persona_action',
+        action: {
+          action_type: _actionNames.ACTION_NAMES.RETIRE_TOPIC,
+          topicId: t.id
+        }
+      }],
+      invertible: true
+    });
+  }
+
+  // 5. incoherent_topics (LLM sanity verdicts, grouped per fact) -----------
+  // The judging is impure and happens in the RN adapter; this only shapes the
+  // verdicts into proposals so fingerprinting, rejection memory and ordering
+  // stay in one place. `ops` puts generate_replacements FIRST — the executor
+  // relies on that order to never retire a topic before its replacement exists.
+  const factById = new Map(input.facts.map(f => [f.id, f]));
+  for (const inc of input.incoherentFacts ?? []) {
+    if (inc.topicIds.length === 0) continue;
+    if (factsBeingDeleted.has(inc.factId)) continue; // fact is going anyway
+    const fact = factById.get(inc.factId);
+    if (!fact) continue; // stale verdict for a fact deleted since the sweep read
+    const id = `incoherent_topics:${inc.factId}`;
+    if (rejected.has(id)) continue;
+
+    // Only topics that still exist AND still belong to this fact, and never
+    // a topic at weight 0 or below: that is the user's own downrank (Profile
+    // "show less", see topic-service), and replacing it would silently undo
+    // what they asked for.
+    const owned = new Set((activeTopicsByFact.get(inc.factId) ?? []).filter(t => t.weight > 0).map(t => t.id));
+    const topicIds = inc.topicIds.filter(tid => owned.has(tid));
+    if (topicIds.length === 0) continue;
+    const textById = new Map((activeTopicsByFact.get(inc.factId) ?? []).map(t => [t.id, t.text]));
+    const topicTexts = topicIds.map(tid => shorten(textById.get(tid) ?? '', 32)).filter(Boolean);
+    proposals.push({
+      id,
+      kind: 'incoherent_topics',
+      subject: {
+        facts: [shorten(fact.statement)],
+        topics: topicTexts
+      },
+      targetFactIds: [inc.factId],
+      targetTopicIds: [...topicIds].sort(),
+      // generate_replacements FIRST, then the retires. The executor holds both
+      // safety rules — replacements committed before anything is retired, and
+      // never retire a fact's last active topic — because only it knows whether
+      // the generation actually produced rows.
+      ops: [{
+        type: 'generate_replacements',
+        factId: inc.factId,
+        fillTo: inc.fillTo
+      }, ...topicIds.map(tid => ({
+        type: 'persona_action',
+        action: {
+          action_type: _actionNames.ACTION_NAMES.RETIRE_TOPIC,
+          topicId: tid
+        }
+      }))],
+      invertible: true
+    });
+  }
+
+  // Deterministic order: by kind, then fingerprint.
+  const kindOrder = {
+    duplicate_facts: 0,
+    location_conflict: 1,
+    stale_fact: 2,
+    incoherent_topics: 3,
+    too_broad_fact: 4,
+    stale_topic: 5,
+    follow_instead: 6
+  };
+  proposals.sort((a, b) => {
+    const k = kindOrder[a.kind] - kindOrder[b.kind];
+    return k !== 0 ? k : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  return proposals;
+}
+
+// ── follow-instead detector ─────────────────────────────────────────────────
+
+/** One article in the 48h window, read from rows the product already keeps. */
+
+const FLOOD_PREFIX = 'follow_instead:topic:';
+const NO_STAKE_PREFIX = 'follow_instead:fact:';
+
+/** The no-stake trigger takes the fact with it, so the card words it apart. */
+const isNoStakeOffer = p => p.id.startsWith(NO_STAKE_PREFIX);
+exports.isNoStakeOffer = isNoStakeOffer;
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Who could move to Followed stories, best first: a no-stake fact leads (it is
+ * how an empty Feed ends), then the most stories. Reads only what the product
+ * already keeps and only proposes: no opens are stored, no topic changes here.
+ */
+function detectFollowInstead(input) {
+  const bars = FOLLOW_INSTEAD_BARS;
+  const rejected = new Set(input.rejectedFingerprints ?? []);
+  const topicById = new Map(input.topics.filter(t => t.status === 'active').map(t => [t.id, t]));
+  const storiesByTopic = new Map();
+  const allStories = new Set();
+  for (const row of input.rows) {
+    for (const topicId of row.topicIds) {
+      if (!topicById.has(topicId)) continue;
+      allStories.add(row.storyKey);
+      const stories = storiesByTopic.get(topicId) ?? new Map();
+      stories.set(row.storyKey, [...(stories.get(row.storyKey) ?? []), row]);
+      storiesByTopic.set(topicId, stories);
+    }
+  }
+  const medianStories = storiesByTopic.size > 0 ? median([...storiesByTopic.values()].map(s => s.size)) : 0;
+  const storyBound = new Set(input.storyBoundTopicIds ?? []);
+  const eligible = input.facts.filter(f => !f.newsStopped && !(0, _questionnaireData.isLocationAttribute)(f.questionnaireAttribute ?? '') && !rejected.has(`${NO_STAKE_PREFIX}${f.id}`));
+  const topicsOf = factId => [...topicById.values()].filter(t => t.factId === factId && !storyBound.has(t.id));
+  const noStake = [];
+  const noStakeFacts = new Set();
+  for (const f of eligible.filter(x => x.isInterest)) {
+    const topics = topicsOf(f.id);
+    const stories = new Map();
+    for (const t of topics) {
+      for (const [key, rows] of storiesByTopic.get(t.id) ?? []) stories.set(key, [...(stories.get(key) ?? []), ...rows]);
+    }
+    const rows = [...stories.values()];
+    // A row still waiting has no verdict, so only judged stories can say "none".
+    const judged = rows.filter(r => r.some(x => x.judged)).length;
+    if (judged < bars.minStories || rows.some(r => r.some(x => x.passedGate))) continue;
+    noStakeFacts.add(f.id);
+    noStake.push({
+      trigger: 'no_stake',
+      id: `${NO_STAKE_PREFIX}${f.id}`,
+      factId: f.id,
+      statement: f.statement,
+      topicIds: topics.map(t => t.id),
+      stories: stories.size
+    });
+  }
+  const flood = [];
+  for (const f of eligible) {
+    if (noStakeFacts.has(f.id)) continue;
+    for (const t of topicsOf(f.id)) {
+      const id = `${FLOOD_PREFIX}${t.normalizedText}`;
+      const stories = storiesByTopic.get(t.id);
+      if (!stories || rejected.has(id)) continue;
+      const count = stories.size;
+      if (count < bars.minStories || count < bars.medianMultiple * medianStories) continue;
+      if (count < bars.minShare * allStories.size) continue;
+      const counted = [...stories.values()].filter(r => r.some(x => !x.alreadyRead));
+      const opened = counted.filter(r => r.some(x => x.opened)).length;
+      if (counted.length > 0 && opened / counted.length >= bars.maxOpenedShare) continue;
+      flood.push({
+        trigger: 'flood',
+        id,
+        factId: f.id,
+        statement: f.statement,
+        topicIds: [t.id],
+        subject: t.text,
+        stories: count
+      });
+    }
+  }
+  const biggest = (a, b) => b.stories - a.stories || (a.id < b.id ? -1 : 1);
+  return [...noStake.sort(biggest), ...flood.sort(biggest)];
+}
+
+/** The offer for a candidate that passed the AI check. */
+function followInsteadProposal(c, follow, subject) {
+  const noStake = c.trigger === 'no_stake';
+  return {
+    id: c.id,
+    kind: 'follow_instead',
+    subject: {
+      facts: [shorten(c.statement)],
+      topics: [shorten(follow.label)]
+    },
+    targetFactIds: [c.factId],
+    targetTopicIds: [...c.topicIds].sort(),
+    ops: [{
+      type: 'follow_story',
+      ...follow,
+      subject
+    }, ...(noStake ? [{
+      type: 'delete_fact',
+      factId: c.factId
+    }] : c.topicIds.map(topicId => ({
+      type: 'persona_action',
+      action: {
+        action_type: _actionNames.ACTION_NAMES.RETIRE_TOPIC,
+        topicId
+      }
+    })))],
+    invertible: !noStake
+  };
+}
+
+// ── duplicate detector ───────────────────────────────────────────────────────
+
+/**
+ * Flags fact PAIRS that are duplicates by EITHER signal:
+ *   (a) near-identical statements (token Jaccard ≥ threshold), OR
+ *   (b) sharing ≥ N of the SAME normalized topic texts (cross-fact overlap via
+ *       the fact-stats detector).
+ * The lower effective-weight fact is the delete target (tie → larger id).
+ * One pair yields at most one proposal even when both signals fire.
+ */
+function detectDuplicateFacts(facts, topics, th) {
+  const factById = new Map(facts.map(f => [f.id, f]));
+  const flagged = new Map();
+
+  // (a) statement near-dupes — O(facts²) over a small pool.
+  const tokenSets = facts.map(f => ({
+    id: f.id,
+    set: new Set(tokenize(f.statement))
+  }));
+  for (let i = 0; i < tokenSets.length; i += 1) {
+    for (let j = i + 1; j < tokenSets.length; j += 1) {
+      const sim = jaccard(tokenSets[i].set, tokenSets[j].set);
+      if (sim >= th.duplicateStatementJaccard) {
+        const key = pairKey(tokenSets[i].id, tokenSets[j].id);
+        if (!flagged.has(key)) {
+          flagged.set(key, {
+            a: tokenSets[i].id,
+            b: tokenSets[j].id
+          });
+        }
+      }
+    }
+  }
+
+  // (b) shared normalized topic texts — reuse the fact-stats cross-fact detector.
+  const overlapGroups = (0, _factStats.findTopicOverlapAcrossFacts)(topics.map(t => ({
+    id: t.id,
+    factId: t.factId,
+    normalizedText: t.normalizedText
+  })));
+  const sharedCount = new Map(); // pairKey → shared-text count
+  for (const g of overlapGroups) {
+    const fids = g.factIds;
+    for (let i = 0; i < fids.length; i += 1) {
+      for (let j = i + 1; j < fids.length; j += 1) {
+        const key = pairKey(fids[i], fids[j]);
+        sharedCount.set(key, (sharedCount.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  for (const [key, count] of sharedCount) {
+    if (count < th.duplicateSharedTopicTexts) continue;
+    if (flagged.has(key)) continue; // statement dupe already covers this pair
+    const [a, b] = key.split('|');
+    flagged.set(key, {
+      a,
+      b
+    });
+  }
+  const out = [];
+  for (const {
+    a,
+    b
+  } of flagged.values()) {
+    const fa = factById.get(a);
+    const fb = factById.get(b);
+    if (!fa || !fb) continue;
+    // Keep the higher-weight fact; tie → keep the lexicographically smaller id.
+    let keep = fa;
+    let del = fb;
+    const wa = effWeight(fa);
+    const wb = effWeight(fb);
+    if (wb > wa || wb === wa && fb.id < fa.id) {
+      keep = fb;
+      del = fa;
+    }
+    out.push({
+      keepFactId: keep.id,
+      deleteFactId: del.id,
+      keepStatement: keep.statement,
+      deleteStatement: del.statement
+    });
+  }
+  // Deterministic order by delete-target id.
+  out.sort((x, y) => x.deleteFactId < y.deleteFactId ? -1 : x.deleteFactId > y.deleteFactId ? 1 : 0);
+  return out;
+}
+
+// ── location conflict detector ──────────────────────────────────────────────
+
+/** The combined origin-plus-residence key some personas still carry. */
+const COMBINED_ORIGIN_RESIDENCE_KEY = 'background: origin and current residence';
+
+/** Place words introducing where the user lives, inside a fact statement. */
+const LIVES_IN_RE = /\b(?:lives?|living|residing|resides?|based)\s+in\s+/gi;
+
+/** Bloc and continent components shared by places that are still different. */
+const PLACE_STOP_COMPONENTS = new Set(['europe', 'eu', 'european union', 'asia', 'africa', 'oceania', 'north america', 'south america', 'latin america', 'middle east']);
+function isOwnPlaceFact(f) {
+  const attr = (f.questionnaireAttribute ?? '').trim();
+  if (!attr) return false;
+  const isPlaceKey = (0, _questionnaireData.isLocationAttribute)(attr) || attr.toLowerCase().startsWith(COMBINED_ORIGIN_RESIDENCE_KEY);
+  // A relative's or partner's address is not where the USER lives.
+  return isPlaceKey && !_topicGeneration.RELATIONAL_SUBJECT_RE.test(f.statement);
+}
+
+/** The place a statement names: the text after the LAST "lives in" / "living
+ *  in", else the whole statement, split into normalized components. */
+function placeComponents(statement) {
+  let place = statement;
+  let m;
+  LIVES_IN_RE.lastIndex = 0;
+  while ((m = LIVES_IN_RE.exec(statement)) !== null) {
+    place = statement.slice(m.index + m[0].length);
+  }
+  const parts = place.split(',').map(p => p.trim().toLowerCase().replace(/[.!?]+$/, '')).filter(p => p.length > 0 && !PLACE_STOP_COMPONENTS.has(p));
+  return new Set(parts);
+}
+/**
+ * Pairs of the user's own place facts whose places share no component. The
+ * NEWEST place fact is taken as current (a move is recorded as a new fact);
+ * every other place fact that shares nothing with it is proposed for removal.
+ * Places that overlap ("Lives in Berlin" and "Expat from India living in
+ * Berlin, Germany") are the same place said twice and do not conflict.
+ */
+function detectLocationConflicts(facts) {
+  const places = facts.filter(isOwnPlaceFact);
+  if (places.length < 2) return [];
+  const newest = places.reduce((a, b) => b.createdAtMs > a.createdAtMs || b.createdAtMs === a.createdAtMs && b.id > a.id ? b : a);
+  const newestParts = placeComponents(newest.statement);
+  if (newestParts.size === 0) return [];
+  const out = [];
+  for (const f of places) {
+    if (f.id === newest.id) continue;
+    const parts = placeComponents(f.statement);
+    if (parts.size === 0) continue;
+    let shared = false;
+    for (const p of parts) {
+      if (newestParts.has(p)) {
+        shared = true;
+        break;
+      }
+    }
+    if (shared) continue;
+    out.push({
+      olderFactId: f.id,
+      newerFactId: newest.id,
+      olderStatement: f.statement,
+      newerStatement: newest.statement
+    });
+  }
+  return out;
+}

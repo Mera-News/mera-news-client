@@ -1,0 +1,462 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.EMPTY_FACT_SUMMARY = exports.CHAT_EMPTY_FACT_SUMMARY = void 0;
+exports.append = append;
+exports.countEmptyFactRemovals = countEmptyFactRemovals;
+exports.getById = getById;
+exports.getChangeTargets = getChangeTargets;
+exports.getRecent = getRecent;
+exports.observeRecent = observeRecent;
+exports.prepareAppend = prepareAppend;
+exports.revertChange = revertChange;
+exports.wasFactRemoved = wasFactRemoved;
+var _watermelondb = require("@nozbe/watermelondb");
+var _index = _interopRequireDefault(require("../index"));
+var topicService = _interopRequireWildcard(require("./topic-service"));
+var locationService = _interopRequireWildcard(require("./location-service"));
+var suppressionService = _interopRequireWildcard(require("./suppression-service"));
+var publicationPreferenceService = _interopRequireWildcard(require("./publication-preference-service"));
+var _actionNames = require("../../news-harness/persona-management/action-names");
+var _personaMutationSweeps = require("./persona-mutation-sweeps");
+var cache;
+function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+// Persona-Change-Log Service — WatermelonDB adapter for persona-v3
+// `persona_change_log`. Every persona mutation (nudge, slider, chat action,
+// digest, migration) appends a row whose `action_json` carries enough state
+// ({ before, after, targetId, delta }) to invert the action.
+//
+// `revertChange` is the revert SCAFFOLD: it applies the inverse of the logged
+// action for the action types that exist today (weight-set / create /
+// retire) and throws for anything it does not know how to invert. The full
+// rails (per-day budgets, richer action types) arrive later and
+// extend the switch below.
+
+const changeLogCollection = _index.default.get('persona_change_log');
+const factsCollection = _index.default.get('facts');
+
+/** The invertible payload every rails mutation must log. */
+
+/** `twoState` tells a Preferred / Not preferred row from an older More / Mute
+ *  one: both store the same kinds, and old rows keep their old wording. */
+const TWO_STATE_ACTIONS = new Set([_actionNames.ACTION_NAMES.SET_PUBLICATION_PREF, _actionNames.ACTION_NAMES.SET_SOURCE_SCOPE_PREF]);
+function fillRow(row, input) {
+  row.actionType = input.actionType;
+  row.actionJson = JSON.stringify(TWO_STATE_ACTIONS.has(input.actionType) ? {
+    ...input.action,
+    twoState: true
+  } : input.action);
+  row.source = input.source;
+  row.summary = input.summary;
+  row.reverted = false;
+  row.createdAt = new Date();
+}
+async function append(input) {
+  return _index.default.write(async () => changeLogCollection.create(row => fillRow(row, input)));
+}
+
+/** The row, unsaved, for a caller that must commit it in its own batch. */
+function prepareAppend(input) {
+  return changeLogCollection.prepareCreate(row => fillRow(row, input));
+}
+
+/** `summary` of the audit row Mera writes when it removes an empty fact. */
+const EMPTY_FACT_SUMMARY = exports.EMPTY_FACT_SUMMARY = 'empty_fact';
+/** The same removal from chat. Its own summary: the sweep's daily cap counts only its own. */
+const CHAT_EMPTY_FACT_SUMMARY = exports.CHAT_EMPTY_FACT_SUMMARY = 'empty_fact_chat';
+
+/** How many empty facts Mera removed since `sinceMs`. Read from the audit, which
+ *  the person cannot dismiss the way they can an inbox row. */
+async function countEmptyFactRemovals(sinceMs) {
+  const rows = await changeLogCollection.query(_watermelondb.Q.where('action_type', _actionNames.ACTION_NAMES.HYGIENE_DELETE_FACT), _watermelondb.Q.where('summary', EMPTY_FACT_SUMMARY)).fetch();
+  return rows.filter(row => row.createdAt.getTime() >= sinceMs).length;
+}
+
+/** True when a fact with this normalised statement was removed before, by the
+ *  person or by Mera. A paraphrase does not match. */
+async function wasFactRemoved(statement) {
+  const key = topicService.normalizeTopicText(statement);
+  const rows = await changeLogCollection.query(_watermelondb.Q.where('action_type', _actionNames.ACTION_NAMES.HYGIENE_DELETE_FACT)).fetch();
+  return rows.some(row => {
+    try {
+      const removed = JSON.parse(row.actionJson).statement;
+      return typeof removed === 'string' && topicService.normalizeTopicText(removed) === key;
+    } catch {
+      return false;
+    }
+  });
+}
+async function getById(id) {
+  return changeLogCollection.find(id);
+}
+
+/** Reactive query of the most recent entries (audit screen). */
+function observeRecent(limit = 100) {
+  return changeLogCollection.query(_watermelondb.Q.sortBy('created_at', _watermelondb.Q.desc), _watermelondb.Q.take(limit)).observe();
+}
+
+/** What a change-log `targetId` names: a topic, fact or filter by its text, a place by city + country. */
+
+/**
+ * Names for the ids the audit rows point at, in one read per table. Most rows
+ * store only `targetId`; the audit screen renders "Removed {{name}}" from this.
+ * Retired topics and filters keep their rows, so they still resolve; a deleted
+ * fact or place does not, and its row falls back to the action label.
+ */
+async function getChangeTargets(ids) {
+  const out = new Map();
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0) return out;
+  const where = _watermelondb.Q.where('id', _watermelondb.Q.oneOf(unique));
+  const [topics, facts, filters, places] = await Promise.all([_index.default.get('topics').query(where).fetch(), factsCollection.query(where).fetch(), _index.default.get('persona_suppressions').query(where).fetch(), _index.default.get('locations').query(where).fetch()]);
+  for (const r of topics) out.set(r.id, {
+    text: r.text
+  });
+  for (const r of facts) out.set(r.id, {
+    text: r.statement
+  });
+  for (const r of filters) out.set(r.id, {
+    text: r.pattern
+  });
+  for (const r of places) out.set(r.id, {
+    city: r.city,
+    countryCode: r.countryCode
+  });
+  return out;
+}
+async function getRecent(limit = 100) {
+  return changeLogCollection.query(_watermelondb.Q.sortBy('created_at', _watermelondb.Q.desc), _watermelondb.Q.take(limit)).fetch();
+}
+function parseAction(row) {
+  try {
+    const parsed = JSON.parse(row.actionJson);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // fall through
+  }
+  throw new Error(`persona_change_log ${row.id}: unparseable action_json`);
+}
+function requireTargetId(action, rowId) {
+  if (typeof action.targetId !== 'string' || !action.targetId) {
+    throw new Error(`persona_change_log ${rowId}: action_json has no targetId`);
+  }
+  return action.targetId;
+}
+function requireNumericBefore(action, rowId) {
+  if (typeof action.before !== 'number') {
+    throw new Error(`persona_change_log ${rowId}: action_json has no numeric 'before'`);
+  }
+  return action.before;
+}
+function requireBooleanBefore(action, rowId) {
+  if (typeof action.before !== 'boolean') {
+    throw new Error(`persona_change_log ${rowId}: action_json has no boolean 'before'`);
+  }
+  return action.before;
+}
+
+/**
+ * Was this suppression row a HARD filter? Reads the row rather than the log,
+ * because `add_suppression`/`retire_suppression` entries record kind/value but
+ * not strength. A row that no longer exists can't have excluded anything, so
+ * a miss is `false` — never a throw, since this only informs the sweep.
+ */
+async function suppressionWasHard(suppressionId) {
+  try {
+    const all = await suppressionService.getAll();
+    const found = all.find(s => s.id === suppressionId);
+    return !!found && found.strength >= suppressionService.HARD_SUPPRESSION_STRENGTH;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Retire a topic minted by `row`, unless another unreverted mint row names the
+ * same topic. createTopics returns the existing row for a repeat mint, so two
+ * verdicts can log two mints of ONE topic and the first still stands behind it.
+ */
+async function retireMintedTopic(row, topicId) {
+  const mints = await changeLogCollection.query(_watermelondb.Q.where('action_type', _watermelondb.Q.oneOf([_actionNames.ACTION_NAMES.ADD_TOPIC, _actionNames.ACTION_NAMES.ADD_NEGATIVE_TOPIC])), _watermelondb.Q.where('reverted', false)).fetch();
+  const stillMinted = mints.some(m => {
+    if (m.id === row.id) return false;
+    try {
+      return parseAction(m).targetId === topicId;
+    } catch {
+      return false;
+    }
+  });
+  if (!stillMinted) await topicService.retire(topicId);
+}
+
+/**
+ * Reverts a logged persona mutation by applying its inverse, marks the row
+ * `reverted`, appends a `revert_change` entry (source 'user'), and then runs
+ * whatever retroactive feed sweep the undo requires, the same reconciliation the persona-action-executor seam does,
+ * via the same shared policy module. A revert is a persona mutation like any
+ * other; skipping this is what let an undone hard filter leave its purged
+ * articles gone for the rest of the 48h window.
+ *
+ * Implemented inversions:
+ *   set_topic_weight / set_fact_weight / set_location_weight → restore `before`
+ *   add_topic          → retire the created topic (unless another unreverted mint names it)
+ *   retire_topic       → reactivate the topic
+ *   set_high_priority  → restore the prior boolean flag
+ *   add_negative_topic → retire the created (negative) topic
+ *   add_suppression    → retire the created suppression
+ *   retire_suppression → reactivate the suppression (removing a filter is
+ *                        an audited, undoable mutation, not a silent delete)
+ *   suppress_topic     → reactivate the topic (forward-compat)
+ *   set_publication_pref → restore the prior pref kind (or clear if it was none)
+ *   set_source_scope_pref → the same, for a country scope
+ *   set_fact_places    → restore places, places_by, places_source (compare-and-set), re-run regeneration
+ *   set_fact_news_stopped → clear metadata.news_stopped
+ * Returns whether the inverse was applied: false when the row was already
+ * reverted, or (source preferences only, compare-and-set) when a newer action
+ * owns the value. Weights and suppressions still revert unconditionally.
+ *
+ * Anything else throws — later changes extend this switch as new action types
+ * gain rails.
+ */
+async function revertChange(changeLogId) {
+  const row = await changeLogCollection.find(changeLogId);
+  if (row.reverted) return false;
+  const action = parseAction(row);
+
+  // A revert is a persona mutation like any other, so it owes the
+  // feed the same reconciliation the forward path does. Described in FORWARD
+  // terms — `sweepForRevert` mirrors it — so a new action type can never be
+  // wired into one path and forgotten in the other.
+  const sweepInput = {
+    actionType: row.actionType
+  };
+  switch (row.actionType) {
+    case 'set_topic_weight':
+      {
+        const targetId = requireTargetId(action, row.id);
+        await topicService.setWeight(targetId, requireNumericBefore(action, row.id));
+        break;
+      }
+    case 'set_fact_weight':
+      {
+        const targetId = requireTargetId(action, row.id);
+        const before = action.before;
+        if (before !== null && typeof before !== 'number') {
+          throw new Error(`persona_change_log ${row.id}: 'before' must be number|null for set_fact_weight`);
+        }
+        const fact = await factsCollection.find(targetId);
+        await _index.default.write(async () => {
+          await fact.update(f => {
+            f.weight = before;
+            f.updatedAt = new Date();
+          });
+        });
+        break;
+      }
+    case 'set_location_weight':
+      {
+        const targetId = requireTargetId(action, row.id);
+        await locationService.setWeight(targetId, requireNumericBefore(action, row.id));
+        break;
+      }
+    case 'add_topic':
+      {
+        // Inverse of creation is retirement, not deletion — retired rows keep
+        // serving dedup/history.
+        const targetId = requireTargetId(action, row.id);
+        await retireMintedTopic(row, targetId);
+        break;
+      }
+    case 'retire_topic':
+      {
+        // ACCEPTED DRIFT: `reactivate` restores status 'active', not whatever the
+        // row held before. Removing a NEGATIVE topic routes through retire_topic
+        // (there is no retire_negative_topic), so reverting the removal of a
+        // topic that had been 'suppressed' brings it back 'active' instead. The
+        // weight — which is what actually makes a negative topic negative — is
+        // untouched, so the topic is still disliked; it just loses hard-suppressed
+        // status. Not worth a second action type; revisit if suppressed topics
+        // ever become user-visible as a distinct state.
+        const targetId = requireTargetId(action, row.id);
+        await topicService.reactivate(targetId);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.SET_HIGH_PRIORITY:
+      {
+        const targetId = requireTargetId(action, row.id);
+        await topicService.setHighPriority(targetId, requireBooleanBefore(action, row.id));
+        break;
+      }
+    case _actionNames.ACTION_NAMES.ADD_NEGATIVE_TOPIC:
+      {
+        // Inverse of creation is retirement (mirrors add_topic).
+        const targetId = requireTargetId(action, row.id);
+        await retireMintedTopic(row, targetId);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.ADD_SUPPRESSION:
+      {
+        const targetId = requireTargetId(action, row.id);
+        // Undoing a HARD add retires the filter, so its casualties must come
+        // back — the mirror of the purge the add performed.
+        sweepInput.hardFilter = await suppressionWasHard(targetId);
+        await suppressionService.retireSuppression(targetId);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.RETIRE_SUPPRESSION:
+      {
+        // Mirror of add_suppression's inverse. reactivateSuppression keeps the
+        // ORIGINAL expires_at, so undoing the removal of a long-expired SOFT
+        // filter is deliberately inert rather than a silent 30-day extension.
+        const targetId = requireTargetId(action, row.id);
+        // Undoing a removal puts the filter back, so a HARD one must re-purge
+        // what it had been blocking.
+        sweepInput.hardFilter = await suppressionWasHard(targetId);
+        await suppressionService.reactivateSuppression(targetId);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.SUPPRESS_TOPIC:
+      {
+        // Forward-compat: undo a topic suppression by reactivating it.
+        const targetId = requireTargetId(action, row.id);
+        await topicService.reactivate(targetId);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.SET_PUBLICATION_PREF:
+      {
+        // `before` is the PRIOR pref kind ('boost'|'deprioritize'|'mute') or
+        // 'none' (no prior preference). Restoring 'none' retires the row.
+        const targetId = requireTargetId(action, row.id);
+        const before = action.before;
+        if (before !== 'none' && before !== 'boost' && before !== 'deprioritize' && before !== 'mute') {
+          throw new Error(`persona_change_log ${row.id}: 'before' must be a publication pref kind for set_publication_pref`);
+        }
+        // Crossing the mute boundary is a hard-filter change in either
+        // direction; sweepForRevert mirrors it (restoring 'mute' purges,
+        // leaving 'mute' releases).
+        // COMPARE-AND-SET: restore only while the value is still the one this
+        // action set. If a newer action changed it (a later boost over a
+        // "Fewer from"), that action owns the value and this undo is a no-op:
+        // nothing written, the row stays un-reverted.
+        if (typeof action.after === 'string') {
+          const current = await publicationPreferenceService.getPreferenceKind(targetId);
+          if (current !== action.after) return false;
+        }
+        sweepInput.prefBefore = before;
+        sweepInput.prefAfter = typeof action.after === 'string' ? action.after : undefined;
+        await publicationPreferenceService.setPreferenceKind(targetId, before);
+        break;
+      }
+    // source-pref v47. MANDATORY, not optional: `isRevertible` in
+    // components/custom/persona-audit/action-display.ts is a DENY-list, so this
+    // action type is already offered an Undo button on the Activity screen —
+    // without a case here that button can only produce an error toast.
+    //
+    // `targetId` is the composite `'{scopeKind}:{scopeValue}'` ('country:IND').
+    // A scope has no row id to point at, so the log has to carry enough to
+    // rebuild the whole SourceScopeRef; the executor and the Source-preferences
+    // screen both write exactly this encoding.
+    case _actionNames.ACTION_NAMES.SET_SOURCE_SCOPE_PREF:
+      {
+        const targetId = requireTargetId(action, row.id);
+        const sep = targetId.indexOf(':');
+        const scopeKind = sep > 0 ? targetId.slice(0, sep) : '';
+        const scopeValue = sep > 0 ? targetId.slice(sep + 1) : '';
+        if (scopeKind !== 'country' || !scopeValue) {
+          throw new Error(`persona_change_log ${row.id}: targetId must be '{scopeKind}:{scopeValue}' for set_source_scope_pref`);
+        }
+        const before = action.before;
+        if (before !== 'none' && before !== 'boost' && before !== 'deprioritize' && before !== 'mute') {
+          throw new Error(`persona_change_log ${row.id}: 'before' must be a publication pref kind for set_source_scope_pref`);
+        }
+        // Same mute-boundary wiring as set_publication_pref — inert for scopes
+        // today (both gates reject a scope mute) but kept symmetric so the two
+        // paths cannot drift. See persona-mutation-sweeps.
+        // COMPARE-AND-SET, as for set_publication_pref.
+        if (typeof action.after === 'string') {
+          const current = await publicationPreferenceService.getScopePreferenceKind({
+            scopeKind,
+            scopeValue
+          });
+          if (current !== action.after) return false;
+        }
+        sweepInput.prefBefore = before;
+        sweepInput.prefAfter = typeof action.after === 'string' ? action.after : undefined;
+        // `label` is only consulted when `before` is a concrete kind (restoring
+        // 'none' retires the row and keeps its stored label for the audit trail).
+        //
+        // Three tiers, because there are two producers. The executor logs the
+        // label; the Source-preferences screen hand-appends its rows WITHOUT one,
+        // and undoing one of its "clear" rows has to re-activate the row with the
+        // name the user actually saw — so fall back to the label still stored on
+        // the retired row before falling back to the raw alpha-3 token.
+        const logged = typeof action.label === 'string' ? action.label.trim() : '';
+        const stored = (await publicationPreferenceService.getAll()).find(p => p.scopeKind === scopeKind && (p.scopeValue ?? '').trim().toUpperCase() === scopeValue.trim().toUpperCase())?.publicationName?.trim();
+        const label = logged || stored || scopeValue;
+        await publicationPreferenceService.setScopePreferenceKind({
+          scopeKind,
+          scopeValue
+        }, before, label);
+        break;
+      }
+    case _actionNames.ACTION_NAMES.SET_FACT_PLACES:
+      {
+        const targetId = requireTargetId(action, row.id);
+        const b = action.before;
+        const a = action.after;
+        if (!b || !Array.isArray(b.places) || !a || !Array.isArray(a.places)) {
+          throw new Error(`persona_change_log ${row.id}: before/after must carry places for set_fact_places`);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const {
+          restoreFactPlaces
+        } = require("./fact-service");
+        const by = b.by === 'sweep' || b.by === 'user' || b.by === 'chat' ? b.by : null;
+        const ok = await restoreFactPlaces(targetId, {
+          places: b.places,
+          by,
+          source: typeof b.source === 'string' ? b.source : null
+        }, a.places);
+        if (!ok) return false;
+        break;
+      }
+    case _actionNames.ACTION_NAMES.SET_FACT_NEWS_STOPPED:
+      {
+        const targetId = requireTargetId(action, row.id);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const {
+          setFactNewsStopped
+        } = require("./fact-service");
+        await setFactNewsStopped(targetId, false);
+        break;
+      }
+    default:
+      throw new Error(`persona_change_log ${row.id}: no inverse implemented for action_type '${row.actionType}'`);
+  }
+  await _index.default.write(async () => {
+    await row.update(r => {
+      r.reverted = true;
+    });
+  });
+  await append({
+    actionType: 'revert_change',
+    action: {
+      targetId: row.id,
+      revertedActionType: row.actionType
+    },
+    source: 'user',
+    summary: `Reverted: ${row.summary}`
+  });
+
+  // AFTER the inverse is committed and audited (both sweeps read the
+  // persona live, so running earlier would screen against the pre-revert
+  // state). Identical policy and identical failure handling to the executor
+  // seam: a sweep failure is caught and logged inside runSweepFor, never
+  // propagated — the revert already happened, so throwing here would report a
+  // completed undo as failed.
+  await (0, _personaMutationSweeps.runSweepFor)((0, _personaMutationSweeps.sweepForRevert)(sweepInput), row.actionType);
+  return true;
+}

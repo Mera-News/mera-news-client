@@ -1,0 +1,38 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.isVersionOlder = isVersionOlder;
+function parseVersion(version) {
+  if (!version) return null;
+  const segments = version.trim().split('.');
+  const numbers = [];
+  for (const segment of segments) {
+    const value = Number(segment);
+    if (!Number.isInteger(value) || value < 0) return null;
+    numbers.push(value);
+  }
+  return numbers.length ? numbers : null;
+}
+
+/**
+ * Strict comparison of dot-separated numeric versions. Returns true when
+ * `current` is strictly older than `target` (e.g. "1.1.10" < "1.2.0"). Missing
+ * trailing segments count as 0, so "1.2" === "1.2.0". If either version is empty
+ * or non-numeric we return false — an unparseable version must never trigger a
+ * force-update.
+ */
+function isVersionOlder(current, target) {
+  const a = parseVersion(current);
+  const b = parseVersion(target);
+  if (!a || !b) return false;
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x < y) return true;
+    if (x > y) return false;
+  }
+  return false;
+}
