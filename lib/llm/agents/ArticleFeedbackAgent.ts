@@ -25,6 +25,7 @@ import { useAppLanguageStore } from '../../stores/app-language-store';
 import { useFloatingChatStore } from '../../stores/floating-chat-store';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { chatRunsInCloud } from '../chat-cloud';
+import { usesGateway } from '../cloudComplete';
 import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import { isTracked } from '../../database/services/tracked-story-service';
 import { isSubjectTracked } from '../../tracking/track-actions';
@@ -252,7 +253,7 @@ export class ArticleFeedbackAgent implements IAgent {
     // toggle on, so getToolDefinitions() would declare `webSearch` while the
     // cached prompt still tells the model it has no way to look beyond the
     // metadata — reproducing the exact "toggle on, still refuses" bug reported.
-    const webSearch = mode === 'CLOUD' && protocol.webSearchInChat === true;
+    const webSearch = mode === 'CLOUD' && usesGateway() && protocol.webSearchInChat === true;
 
     // Static content depends only on needsToolFormat + languageName + mode +
     // webSearch — all fixed per session unless the user changes app language,
@@ -274,7 +275,7 @@ export class ArticleFeedbackAgent implements IAgent {
       // Same gate as getToolDefinitions' `proposeFactCheck` declaration, and
       // part of the cache key below for the same reason webSearch is: a prompt
       // built in one mode must not keep serving after the user switches.
-      factCheck: mode === 'CLOUD',
+      factCheck: mode === 'CLOUD' && usesGateway(),
       factPlaces: mode === 'CLOUD',
     });
     this.lastNeedsToolFormat = needsToolFormat;
@@ -292,7 +293,7 @@ export class ArticleFeedbackAgent implements IAgent {
     // place it must agree, because it decides how much of the article the claim
     // picker actually gets to read.
     const factCheck =
-      chatRunsInCloud();
+      chatRunsInCloud() && usesGateway();
     const facts = await getFacts(); // newest-first (sorted created_at desc)
 
     const storeContext = useFloatingChatStore.getState().context;
@@ -356,7 +357,9 @@ export class ArticleFeedbackAgent implements IAgent {
     const protocol = useMeraProtocolStore.getState();
     const mode: 'CLOUD' | 'LOCAL' =
       chatRunsInCloud() ? 'CLOUD' : 'LOCAL';
-    return getArticleFeedbackToolDefinitions(mode, protocol.webSearchInChat === true);
+    const defs = getArticleFeedbackToolDefinitions(mode, usesGateway() && protocol.webSearchInChat === true);
+    // The claim check searches through the gateway, so a host's own transport leaves it out.
+    return usesGateway() ? defs : defs.filter((t) => t.function.name !== 'proposeFactCheck');
   }
 
   // --- IAgent: tool execution ---

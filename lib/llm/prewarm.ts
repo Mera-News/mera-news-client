@@ -21,7 +21,7 @@ import logger from '../logger';
 import { useCloudChatStore } from '../stores/cloud-chat-store';
 import { useUserStore } from '../stores/user-store';
 import { chatRunsInCloud } from './chat-cloud';
-import { cloudComplete } from './cloudComplete';
+import { cloudComplete, usesGateway } from './cloudComplete';
 import { READINESS_PING_PROMPT, READINESS_PING_SYSTEM } from '@/lib/news-harness/readiness-ping/prompt';
 import { attestProfile } from './provider-e2ee';
 import { profilesToPreattest, refreshRouting } from './router';
@@ -53,9 +53,9 @@ export const PING_DEADLINE_MS = 60_000;
  * readiness ping. Returns immediately (void); all warming runs in the background.
  */
 export function prewarmCloudChat(opts: { ping?: boolean } = {}): void {
-  // Chat on the phone never touches the gateway: nothing to warm, no badge.
-  if (!chatRunsInCloud()) {
-    logger.debug('[chat-timing] prewarm skipped (on-device)');
+  // Chat on the phone, or on a host's own transport, never touches the gateway: nothing to warm, no badge.
+  if (!chatRunsInCloud() || !usesGateway()) {
+    logger.debug('[chat-timing] prewarm skipped (no gateway)');
     setReadiness('idle');
     return;
   }

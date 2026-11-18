@@ -20,6 +20,7 @@ import { buildPersonaUpdateStaticPrompt, buildPersonaUpdateContext, buildToolDef
 import { useAppLanguageStore } from '../../stores/app-language-store';
 import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { chatRunsInCloud } from '../chat-cloud';
+import { usesGateway } from '../cloudComplete';
 import { ProcessingMode } from '../../generated/graphql-types';
 import { SUPPORTED_LANGUAGES } from '../../supported-languages';
 import {
@@ -93,7 +94,7 @@ export class PersonaUpdateAgent implements IAgent {
       chatRunsInCloud() ? 'CLOUD' : 'LOCAL';
     // Prose about `webSearch` only makes sense where the tool is declared:
     // CLOUD, and only with the toggle on.
-    const webSearch = mode === 'CLOUD' && protocol.webSearchInChat === true;
+    const webSearch = mode === 'CLOUD' && usesGateway() && protocol.webSearchInChat === true;
     // Recalibration is a cloud scoring call: On this phone (cloud chat or not) it is not offered.
     const canCalibrate = protocol.processingMode !== ProcessingMode.OnDevice;
 
@@ -308,7 +309,7 @@ export class PersonaUpdateAgent implements IAgent {
       buildToolDefinitions,
       this.turnPlan.filterTools,
       mode,
-      protocol.webSearchInChat === true,
+      usesGateway() && protocol.webSearchInChat === true,
       protocol.processingMode !== ProcessingMode.OnDevice,
     );
   }

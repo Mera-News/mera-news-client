@@ -32,7 +32,7 @@
 // the model chooses WHAT could be checked, the user chooses WHICH, and neither
 // the model nor a typed "yes" can start or narrate the check.
 
-import { cloudComplete } from '../llm/cloudComplete';
+import { cloudComplete, usesGateway } from '../llm/cloudComplete';
 import {
   ENOUGH_EVIDENCE,
   MAX_EVIDENCE_IN_PROMPT,
@@ -164,7 +164,8 @@ export async function handleQuickFactCheck(
     citations: [],
     evidenceCount: 0,
   });
-  if (!claim) return empty('search-unavailable');
+  // The check searches through the gateway, which a host with its own transport does not use.
+  if (!claim || !usesGateway()) return empty('search-unavailable');
 
   // ── Search rounds ────────────────────────────────────────────────────────
   //

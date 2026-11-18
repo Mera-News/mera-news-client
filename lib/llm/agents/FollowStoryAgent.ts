@@ -13,6 +13,7 @@
 // RN-free brain at lib/news-harness/follow-story.
 
 import { chatRunsInCloud } from '../chat-cloud';
+import { usesGateway } from '../cloudComplete';
 import { handleSearchNews } from '../../chat-tools/news-search-handler';
 import { handleWebSearch } from '../../chat-tools/web-search-handler';
 import { executeProposalActions } from '../../chat-tools/proposal-handlers';
@@ -63,7 +64,7 @@ export class FollowStoryAgent implements IAgent {
     return {
       mode,
       canSearch: mode === 'CLOUD',
-      webSearch: mode === 'CLOUD' && protocol.webSearchInChat === true,
+      webSearch: mode === 'CLOUD' && usesGateway() && protocol.webSearchInChat === true,
     };
   }
 

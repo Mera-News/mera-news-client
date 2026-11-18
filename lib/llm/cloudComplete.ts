@@ -58,6 +58,11 @@ function transport(): LlmTransport {
   return platform('llm-transport').llmTransport ?? gatewayTransport;
 }
 
+/** False when the host brings its own transport: nothing then goes to Mera's gateway. Read at call time. */
+export function usesGateway(): boolean {
+  return platform('llm-transport').llmTransport === undefined;
+}
+
 /** Whether scoring may submit async inference jobs to the active transport. */
 export function transportServesJobs(): boolean {
   return transport().asyncJobs !== false;

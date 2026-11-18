@@ -15,6 +15,7 @@
 
 import { getJwtToken } from '../platform/auth';
 import { INFERENCE_ENDPOINT } from '../config/endpoints';
+import { usesGateway } from '../llm/cloudComplete';
 import * as gatewayRateLimiter from '../llm/gateway-rate-limiter';
 import logger from '../logger';
 
@@ -106,6 +107,11 @@ function messageForStatus(status: number): string {
   }
 }
 
+/** The outcome for a search that was never sent. */
+function unavailable(): { ok: false; error: string; status: 503; code: SearchUnavailableCode } {
+  return { ok: false, error: messageForStatus(503), status: 503, code: SEARCH_UNAVAILABLE };
+}
+
 /**
  * STATUS ONLY, and that is the whole decision — do not "improve" this by
  * reading the gateway's `{ code }` out of the body.
@@ -187,6 +193,8 @@ function abortedBy(stop?: AbortSignal): AbortController {
  * the index had nothing.
  */
 export async function searchWeb(query: string, stop?: AbortSignal): Promise<WebSearchOutcome> {
+  // A host with its own model transport has no gateway to search through.
+  if (!usesGateway()) return unavailable();
   const trimmed = (query ?? '').trim();
   if (trimmed.length < MIN_QUERY_CHARS || trimmed.length > MAX_QUERY_CHARS) {
     return { ok: false, error: messageForStatus(400), status: 400 };
@@ -320,6 +328,7 @@ export type WebSearchBatchOutcome =
  * understood".
  */
 export async function searchWebBatch(queries: string[], stop?: AbortSignal): Promise<WebSearchBatchOutcome> {
+  if (!usesGateway()) return unavailable();
   const seen = new Set<string>();
   const cleaned: string[] = [];
   const rejected: WebSearchBatchEntry[] = [];

@@ -21,7 +21,7 @@ import type {
 import { isCombinedOriginFact, isLocationKey, isRelationalStatement, loadSkill, skillIds } from '@/lib/mera-harness';
 import { findSimilarFacts } from '../database/services/fact-similarity-service';
 import { PLACE_CANDIDATE_LIMIT, lookupPlace, searchPlaces } from '../place-service';
-import { cloudChatStream, type WireMessage } from '../llm/cloudComplete';
+import { cloudChatStream, usesGateway, type WireMessage } from '../llm/cloudComplete';
 import { REQUIRED_TOOL_REASK } from '@/lib/harnesses/text-tool-protocol';
 import { stepKindForTool, type PhaseSignal } from '@/lib/services/chat-phase';
 import type { LiveTool } from '@/lib/llm/chat-phase-store';
@@ -393,7 +393,7 @@ export function makeAgentToolPort(
     // GATE 1: offered only while "Web search in chat" is on, so the loop never
     // declares the tool otherwise. `handleWebSearch` re-checks the setting
     // before any await (gate 2), for a switch flipped mid-turn.
-    ...(useMeraProtocolStore.getState().webSearchInChat
+    ...(usesGateway() && useMeraProtocolStore.getState().webSearchInChat
       ? {
           webSearch: (args: { queries: string[] }) =>
             live('webSearch', args, () => {

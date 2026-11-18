@@ -21,6 +21,7 @@
 
 import { handleWebSearch } from '../../chat-tools/web-search-handler';
 import { chatRunsInCloud } from '../chat-cloud';
+import { usesGateway } from '../cloudComplete';
 import {
   buildTutorialHelpContext,
   buildTutorialHelpPrompt,
@@ -55,7 +56,7 @@ export class TutorialHelpAgent implements IAgent {
   private webSearchEnabled(): boolean {
     const protocol = useMeraProtocolStore.getState();
     return (
-      chatRunsInCloud() && protocol.webSearchInChat === true
+      chatRunsInCloud() && usesGateway() && protocol.webSearchInChat === true
     );
   }
 
