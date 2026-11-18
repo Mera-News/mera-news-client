@@ -32,6 +32,7 @@ var _rxjs = require("rxjs");
 var _index = _interopRequireDefault(require("../index"));
 var _logger = _interopRequireDefault(require("../../logger"));
 var _storyFoldKey = require("../../tracking/story-fold-key");
+var _marks = require("../../sync/marks");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Tracked-Story Service — WatermelonDB adapter for `tracked_stories` (schema
 // v39). Long-lived, user-owned "follow this story" state. Pure CRUD: this file
@@ -335,6 +336,7 @@ async function markSeen(id) {
         m.unseenCount = 0;
       });
     });
+    (0, _marks.recordMark)('seen', id);
   } catch (err) {
     _logger.default.warn('[tracked-story] markSeen failed', {
       id,
@@ -543,6 +545,10 @@ async function advanceSeenWatermark(id, watermarkMs) {
       await record.update(m => {
         m.seenPubWatermarkMs = Math.max(m.seenPubWatermarkMs ?? 0, watermarkMs);
       });
+    });
+    (0, _marks.recordMark)('watermark', {
+      id,
+      ms: watermarkMs
     });
   } catch (err) {
     _logger.default.warn('[tracked-story] advanceSeenWatermark failed', {

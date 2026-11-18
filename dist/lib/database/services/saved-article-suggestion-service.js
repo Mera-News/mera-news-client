@@ -5,7 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.RETENTION_ORIGINS = void 0;
 exports.deleteOrphanedRetention = deleteOrphanedRetention;
-exports.deleteSavedSuggestion = deleteSavedSuggestion;
+exports.deleteSavedSuggestion = void 0;
 exports.findSavedSuggestionByServerId = findSavedSuggestionByServerId;
 exports.getSavedList = getSavedList;
 exports.getSavedSuggestionByServerId = getSavedSuggestionByServerId;
@@ -16,11 +16,10 @@ exports.keepArticleForRetention = keepArticleForRetention;
 exports.keepArticleForTrackedStory = keepArticleForTrackedStory;
 exports.loadSavedItems = loadSavedItems;
 exports.loadSavedSuggestions = loadSavedSuggestions;
-exports.moveSavedToList = moveSavedToList;
+exports.moveSavedToList = void 0;
 exports.releaseFactCheckRetention = releaseFactCheckRetention;
 exports.releaseTrackedStoryRetention = releaseTrackedStoryRetention;
-exports.saveStandaloneArticle = saveStandaloneArticle;
-exports.saveSuggestion = saveSuggestion;
+exports.saveSuggestion = exports.saveStandaloneArticle = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _savedState = require("../../saved-state");
 var _index = _interopRequireDefault(require("../index"));
@@ -28,6 +27,7 @@ var _logger = _interopRequireDefault(require("../../logger"));
 var _articleSuggestionStatus = require("../article-suggestion-status");
 var _factCheckRecordService = require("./fact-check-record-service");
 var _trackedStoryService = require("./tracked-story-service");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Saved Article Suggestion Service — device-local "save for later".
 //
@@ -109,7 +109,7 @@ function listOf(row) {
  * `list` picks the list; left out, a new save goes to Read later and a re-save
  * stays where it is.
  */
-async function saveSuggestion(s, list) {
+async function saveSuggestionLocal(s, list) {
   const now = new Date();
   // Announce BEFORE awaiting the write so the bookmark flips on the same frame
   // as the tap; the write is local SQLite and does not fail in practice, and a
@@ -135,6 +135,7 @@ async function saveSuggestion(s, list) {
     });
   });
 }
+const saveSuggestion = exports.saveSuggestion = (0, _command.command)('saveSuggestion', saveSuggestionLocal);
 
 /**
  * Saves (or re-saves) a STANDALONE NewsArticle for later — the article has no
@@ -143,7 +144,7 @@ async function saveSuggestion(s, list) {
  * Identity is the article `_id` (== WMDB row id). Re-saving refreshes the
  * snapshot and bumps `savedAt`.
  */
-async function saveStandaloneArticle(article, _context, list) {
+async function saveStandaloneArticleLocal(article, _context, list) {
   const id = (article?._id ?? '').trim();
   if (!id) return;
   const now = new Date();
@@ -169,6 +170,11 @@ async function saveStandaloneArticle(article, _context, list) {
   });
 }
 
+// The unused context slot cannot be undefined between two arguments in JSON, so it goes as null.
+const saveStandaloneArticle = exports.saveStandaloneArticle = (0, _command.command)('saveStandaloneArticle', saveStandaloneArticleLocal, {
+  sendArgs: ([article,, list]) => list === undefined ? [article] : [article, null, list]
+});
+
 /**
  * Moves a save to the other list. Leaves `savedAt` alone: the date is what the
  * lists sort by, export prints and Date saved promises, and an Undo must put the
@@ -176,7 +182,7 @@ async function saveStandaloneArticle(article, _context, list) {
  * retention rather than a save: a late Undo must not turn a row nobody saved
  * into one.
  */
-async function moveSavedToList(serverId, list) {
+async function moveSavedToListLocal(serverId, list) {
   const row = await findRow(serverId);
   if (!row || isRetentionOrigin(row.origin)) return false;
   if (listOf(row) === list) return true;
@@ -188,6 +194,7 @@ async function moveSavedToList(serverId, list) {
   });
   return true;
 }
+const moveSavedToList = exports.moveSavedToList = (0, _command.command)('moveSavedToList', moveSavedToListLocal);
 
 // --- Read ---
 
@@ -282,7 +289,7 @@ async function loadSavedItems() {
 
 // --- Delete ---
 
-async function deleteSavedSuggestion(serverId) {
+async function deleteSavedSuggestionLocal(serverId) {
   const row = await findRow(serverId);
   if (!row) {
     // Nothing to delete. Still publish `false`: reaching here means some surface
@@ -362,6 +369,7 @@ async function deleteSavedSuggestion(serverId) {
   (0, _savedState.publishSavedState)(serverId, false);
   return true;
 }
+const deleteSavedSuggestion = exports.deleteSavedSuggestion = (0, _command.command)('deleteSavedSuggestion', deleteSavedSuggestionLocal);
 
 // Saved suggestions have no TTL — they persist until the user deletes them.
 

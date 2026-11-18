@@ -12,9 +12,9 @@ exports.hasLiked = hasLiked;
 exports.markFeedbackProcessed = markFeedbackProcessed;
 exports.markFeedbackProcessedFor = markFeedbackProcessedFor;
 exports.recordArticleFeedback = recordArticleFeedback;
-exports.recordFeedbackAnswer = recordFeedbackAnswer;
+exports.recordFeedbackAnswer = void 0;
 exports.recordFeedbackChangeLogIds = recordFeedbackChangeLogIds;
-exports.recordVerdictFeedback = recordVerdictFeedback;
+exports.recordVerdictFeedback = void 0;
 exports.removeArticleFeedback = removeArticleFeedback;
 exports.updateFeedbackContextPath = updateFeedbackContextPath;
 var _watermelondb = require("@nozbe/watermelondb");
@@ -22,6 +22,7 @@ var _index = _interopRequireDefault(require("../index"));
 var _logger = _interopRequireDefault(require("../../logger"));
 var _personaChangeLogService = require("./persona-change-log-service");
 var _feedbackDigest = require("../../news-harness/persona-management/feedback-digest");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Article-Feedback Service — local-only log of taps on the
 // `ArticleFeedbackPrompt` widget (like / improve / dislike). Drives the
@@ -298,13 +299,14 @@ async function recordFeedbackChangeLogIds(articleId, sentiment, changeLogIds) {
  * `recordArticleFeedback` so the card action rows (which allow like + dislike to
  * coexist independently) keep their existing behavior.
  */
-async function recordVerdictFeedback(input) {
+async function recordVerdictFeedbackLocal(input) {
   const articleId = (input.articleId ?? '').trim();
   if (!articleId) return;
   const opposite = input.sentiment === 'like' ? 'dislike' : 'like';
   await removeArticleFeedback(articleId, opposite);
   await recordArticleFeedback(input);
 }
+const recordVerdictFeedback = exports.recordVerdictFeedback = (0, _command.command)('recordVerdictFeedback', recordVerdictFeedbackLocal);
 
 /**
  * Merges a feedback-tree path into an existing verdict row's `context_json`
@@ -582,7 +584,7 @@ async function rewriteSnapshot(articleId, sentiment, change, method) {
  * never applies a tap a second time. A row whose answers applied nothing stays
  * open for the digest, which reads only `cause === 'config'`.
  */
-async function recordFeedbackAnswer(articleId, answer, opts) {
+async function recordFeedbackAnswerLocal(articleId, answer, opts) {
   await rewriteSnapshot(articleId, 'dislike', snapshot => {
     const answers = Array.isArray(snapshot.answers) ? snapshot.answers : [];
     snapshot.answers = [...answers, answer];
@@ -596,6 +598,7 @@ async function recordFeedbackAnswer(articleId, answer, opts) {
     };
   }, 'recordAnswer');
 }
+const recordFeedbackAnswer = exports.recordFeedbackAnswer = (0, _command.command)('recordFeedbackAnswer', recordFeedbackAnswerLocal);
 
 /**
  * Removes the last `count` answers (the summary toast's Undo: the session's

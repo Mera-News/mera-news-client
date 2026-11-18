@@ -11,7 +11,7 @@ exports.getChangeTargets = getChangeTargets;
 exports.getRecent = getRecent;
 exports.observeRecent = observeRecent;
 exports.prepareAppend = prepareAppend;
-exports.revertChange = revertChange;
+exports.revertChange = void 0;
 exports.wasFactRemoved = wasFactRemoved;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
@@ -21,6 +21,7 @@ var suppressionService = _interopRequireWildcard(require("./suppression-service"
 var publicationPreferenceService = _interopRequireWildcard(require("./publication-preference-service"));
 var _actionNames = require("../../news-harness/persona-management/action-names");
 var _personaMutationSweeps = require("./persona-mutation-sweeps");
+var _command = require("../../sync/command");
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
@@ -221,7 +222,7 @@ async function retireMintedTopic(row, topicId) {
  * Anything else throws — later changes extend this switch as new action types
  * gain rails.
  */
-async function revertChange(changeLogId) {
+async function revertChangeLocal(changeLogId) {
   const row = await changeLogCollection.find(changeLogId);
   if (row.reverted) return false;
   const action = parseAction(row);
@@ -460,3 +461,4 @@ async function revertChange(changeLogId) {
   await (0, _personaMutationSweeps.runSweepFor)((0, _personaMutationSweeps.sweepForRevert)(sweepInput), row.actionType);
   return true;
 }
+const revertChange = exports.revertChange = (0, _command.command)('revertChange', revertChangeLocal);

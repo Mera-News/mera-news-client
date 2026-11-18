@@ -5,18 +5,17 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.UNDO_WINDOW_MS = exports.UNDO_WINDOW_MIN_MS = exports.UNDO_WINDOW_MAX_MS = void 0;
 exports.__resetPendingForTests = __resetPendingForTests;
-exports.deleteTopicWithDecline = deleteTopicWithDecline;
+exports.deleteTopicWithDecline = void 0;
 exports.flushPendingDeletes = flushPendingDeletes;
 exports.getAllDeclinedNormalizedTexts = getAllDeclinedNormalizedTexts;
 exports.getDeclinedTopicTexts = getDeclinedTopicTexts;
 exports.listDeclinedTopics = listDeclinedTopics;
-exports.recordDecline = recordDecline;
-exports.removeDecline = removeDecline;
-exports.undoPendingDelete = undoPendingDelete;
+exports.undoPendingDelete = exports.removeDecline = exports.recordDecline = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _logger = _interopRequireDefault(require("../../logger"));
 var _topicService = require("./topic-service");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Topic deletion with a short undo, and the declines it leaves behind.
 //
@@ -84,7 +83,7 @@ function clampWindow(ms) {
  * Returns the row id and the previous `created_at` (null when newly created),
  * which is what lets an undo put an older decline back exactly as it was.
  */
-async function recordDecline(text, factId) {
+async function recordDeclineLocal(text, factId) {
   const display = text.trim();
   const normalized = (0, _topicService.normalizeTopicText)(display);
   if (!normalized) throw new Error('recordDecline: empty text');
@@ -115,6 +114,7 @@ async function recordDecline(text, factId) {
     previousCreatedAtMs: null
   };
 }
+const recordDecline = exports.recordDecline = (0, _command.command)('recordDecline', recordDeclineLocal);
 
 /**
  * Stage a topic for deletion and remember the decline.
@@ -130,7 +130,7 @@ async function recordDecline(text, factId) {
  * The row disappears from `observeByFact` and every other render/retrieve read
  * immediately; the caller holds the chip in its own state for the undo.
  */
-async function deleteTopicWithDecline(topicId, opts) {
+async function deleteTopicWithDeclineLocal(topicId, opts) {
   const topic = await topicsCollection.find(topicId);
 
   // Recorded before the stage write so an undo can restore an older decline
@@ -158,6 +158,7 @@ async function deleteTopicWithDecline(topicId, opts) {
     undoToken: topicId
   };
 }
+const deleteTopicWithDecline = exports.deleteTopicWithDecline = (0, _command.command)('deleteTopicWithDecline', deleteTopicWithDeclineLocal);
 
 /**
  * Cancel a staged delete: clear the marker and undo the decline.
@@ -165,7 +166,7 @@ async function deleteTopicWithDecline(topicId, opts) {
  * Returns false for an unknown token or one whose delete already committed.
  * Never throws — it is wired to a toast button.
  */
-async function undoPendingDelete(topicId) {
+async function undoPendingDeleteLocal(topicId) {
   try {
     const entry = pending.get(topicId);
     if (entry?.timer) clearTimeout(entry.timer);
@@ -205,6 +206,7 @@ async function undoPendingDelete(topicId) {
     return false;
   }
 }
+const undoPendingDelete = exports.undoPendingDelete = (0, _command.command)('undoPendingDelete', undoPendingDeleteLocal);
 
 /**
  * Commit every staged delete. Runs from this module's timer, from app start
@@ -338,7 +340,7 @@ function listDeclinedTopics() {
  * may offer the interest again. Callers wanting the chip back immediately
  * should mint it via `createTopics({ factId, text })`; the row carries both.
  */
-async function removeDecline(id) {
+async function removeDeclineLocal(id) {
   let row;
   try {
     row = await declinedCollection.find(id);
@@ -349,6 +351,7 @@ async function removeDecline(id) {
     await _index.default.batch([row.prepareDestroyPermanently()]);
   });
 }
+const removeDecline = exports.removeDecline = (0, _command.command)('removeDecline', removeDeclineLocal);
 
 /** Test seam: drop in-memory undo bookkeeping without touching the database. */
 function __resetPendingForTests() {

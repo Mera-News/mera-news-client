@@ -3,8 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.applyPersonaAction = applyPersonaAction;
-exports.applyPersonaActions = applyPersonaActions;
+exports.applyPersonaActions = exports.applyPersonaAction = void 0;
 var topicService = _interopRequireWildcard(require("./topic-service"));
 var factService = _interopRequireWildcard(require("./fact-service"));
 var suppressionService = _interopRequireWildcard(require("./suppression-service"));
@@ -16,6 +15,7 @@ var _logger = _interopRequireDefault(require("../../logger"));
 var _actionNames = require("../../news-harness/persona-management/action-names");
 var _PersonaSuppression = require("../models/PersonaSuppression");
 var _personaMutationSweeps = require("./persona-mutation-sweeps");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
@@ -85,7 +85,7 @@ function normalizeSuppressionKind(raw, value) {
  * leaves + feedback agent proposals). Routes each action_type to the right
  * service, and every mutation appends an invertible persona_change_log row.
  */
-async function applyPersonaAction(action, source) {
+async function applyPersonaActionLocal(action, source) {
   try {
     return await dispatch(action, source);
   } catch (error) {
@@ -101,9 +101,10 @@ async function applyPersonaAction(action, source) {
     };
   }
 }
+const applyPersonaAction = exports.applyPersonaAction = (0, _command.command)('applyPersonaAction', applyPersonaActionLocal);
 
 /** Convenience: apply a list, best-effort, returning per-action results. */
-async function applyPersonaActions(actions, source) {
+async function applyPersonaActionsLocal(actions, source) {
   const results = [];
   for (const action of actions) {
     // applyPersonaAction never throws — one bad action can't abort the batch.
@@ -111,6 +112,7 @@ async function applyPersonaActions(actions, source) {
   }
   return results;
 }
+const applyPersonaActions = exports.applyPersonaActions = (0, _command.command)('applyPersonaActions', applyPersonaActionsLocal);
 async function dispatch(action, source) {
   switch (action.action_type) {
     // -- Topic weight -------------------------------------------------------

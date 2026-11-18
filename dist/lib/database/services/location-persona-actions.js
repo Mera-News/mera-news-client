@@ -3,14 +3,13 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.addUserLocation = addUserLocation;
-exports.deleteUserLocation = deleteUserLocation;
-exports.setLocationWeightLogged = setLocationWeightLogged;
+exports.setLocationWeightLogged = exports.deleteUserLocation = exports.addUserLocation = void 0;
 var locationService = _interopRequireWildcard(require("./location-service"));
 var _normalizeKey = require("../../algorithms/normalize-key");
 var _personaActionExecutor = require("./persona-action-executor");
 var changeLogService = _interopRequireWildcard(require("./persona-change-log-service"));
 var _actionNames = require("../../news-harness/persona-management/action-names");
+var _command = require("../../sync/command");
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 // Location persona actions — the change-logged surface the
@@ -37,7 +36,7 @@ function labelFor(city, countryCode) {
  * weight is changed through the invertible `set_location_weight` action; on a
  * fresh insert an `add_location` audit row is appended.
  */
-async function addUserLocation(input) {
+async function addUserLocationLocal(input) {
   const all = await locationService.getAll();
   const existing = all.find(l => l.countryCode === input.countryCode && (0, _normalizeKey.normalizeKeyOrEmpty)(l.city) === (0, _normalizeKey.normalizeKeyOrEmpty)(input.city) && l.role === input.role);
   if (existing) {
@@ -82,9 +81,15 @@ async function addUserLocation(input) {
     updated: false
   };
 }
+const addUserLocation = exports.addUserLocation = (0, _command.command)('addUserLocation', addUserLocationLocal, {
+  returns: {
+    table: 'locations',
+    path: 'location'
+  }
+});
 
 /** Delete a user location, appending an audit-only (non-invertible) change-log row. */
-async function deleteUserLocation(location) {
+async function deleteUserLocationLocal(location) {
   await locationService.deleteLocation(location.id);
   await changeLogService.append({
     actionType: _actionNames.ACTION_NAMES.DELETE_LOCATION,
@@ -98,12 +103,14 @@ async function deleteUserLocation(location) {
     summary: `Removed location: ${labelFor(location.city, location.countryCode)}`
   });
 }
+const deleteUserLocation = exports.deleteUserLocation = (0, _command.command)('deleteUserLocation', deleteUserLocationLocal);
 
 /** Change a location's weight through the invertible `set_location_weight` action. */
-async function setLocationWeightLogged(locationId, weight) {
+async function setLocationWeightLoggedLocal(locationId, weight) {
   await (0, _personaActionExecutor.applyPersonaAction)({
     action_type: _actionNames.ACTION_NAMES.SET_LOCATION_WEIGHT,
     locationId,
     weight
   }, 'slider');
 }
+const setLocationWeightLogged = exports.setLocationWeightLogged = (0, _command.command)('setLocationWeightLogged', setLocationWeightLoggedLocal);

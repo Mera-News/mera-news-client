@@ -9,6 +9,7 @@ var _logger = _interopRequireDefault(require("../logger"));
 var _settingService = require("../database/services/setting-service");
 var _feedListSelector = require("./feed-list-selector");
 var _readSnapshot = require("../feed-ordering/read-snapshot");
+var _marks = require("../sync/marks");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // feed-order-store — the PERSISTED order + card-lifecycle state for the "For
 // you" vertical Feed tab. It turns the pure `FeedListItem[]` from
@@ -164,6 +165,7 @@ function cancelCardStatePersist() {
 }
 function persistCardStateNow(cardStates) {
   cancelCardStatePersist();
+  (0, _marks.recordMark)('cardState', cardStates);
   (0, _settingService.setSetting)(FEED_CARD_STATE_SETTING_KEY, serializeCardState(cardStates)).catch(err => _logger.default.captureException(err, {
     tags: {
       store: 'feed-order-store'

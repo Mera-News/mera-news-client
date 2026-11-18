@@ -3,16 +3,16 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.SUPPRESSION_DEFAULT_TTL_MS = exports.HARD_SUPPRESSION_STRENGTH = void 0;
-exports.addSuppression = addSuppression;
+exports.addSuppression = exports.SUPPRESSION_DEFAULT_TTL_MS = exports.HARD_SUPPRESSION_STRENGTH = void 0;
 exports.getActive = getActive;
 exports.getAll = getAll;
 exports.kindOf = kindOf;
 exports.observeActive = observeActive;
 exports.reactivateSuppression = reactivateSuppression;
-exports.retireSuppression = retireSuppression;
+exports.retireSuppression = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Suppression Service — WatermelonDB adapter for persona-v3
 // `persona_suppressions` (negative preferences / show-less escalations).
@@ -34,7 +34,7 @@ const HARD_SUPPRESSION_STRENGTH = exports.HARD_SUPPRESSION_STRENGTH = 0.8;
 function kindOf(s) {
   return s.kind ?? 'keyword';
 }
-async function addSuppression(input) {
+async function addSuppressionLocal(input) {
   const strength = Math.max(0, Math.min(1, input.strength));
   const defaultExpiry = strength >= HARD_SUPPRESSION_STRENGTH ? null : Date.now() + SUPPRESSION_DEFAULT_TTL_MS;
   return _index.default.write(async () => {
@@ -52,6 +52,9 @@ async function addSuppression(input) {
     });
   });
 }
+const addSuppression = exports.addSuppression = (0, _command.command)('addSuppression', addSuppressionLocal, {
+  returns: 'persona_suppressions'
+});
 
 /** Active, non-expired suppressions — what the scoring engine consumes. */
 async function getActive(now = Date.now()) {
@@ -68,7 +71,7 @@ async function getAll() {
 function observeActive() {
   return suppressionsCollection.query(_watermelondb.Q.where('status', 'active')).observe();
 }
-async function retireSuppression(suppressionId) {
+async function retireSuppressionLocal(suppressionId) {
   const record = await suppressionsCollection.find(suppressionId);
   await _index.default.write(async () => {
     await record.update(s => {
@@ -76,6 +79,7 @@ async function retireSuppression(suppressionId) {
     });
   });
 }
+const retireSuppression = exports.retireSuppression = (0, _command.command)('retireSuppression', retireSuppressionLocal);
 
 /**
  * Undo a retire: flip `status` back to 'active', keeping the ORIGINAL

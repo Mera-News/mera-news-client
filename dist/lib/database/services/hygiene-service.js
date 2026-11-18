@@ -3,15 +3,14 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.SWEEP_COOLDOWN_MS = exports.SANITY_RACE_MS = exports.MIN_PERSONA_AGE_MS = exports.MIN_FACTS_FOR_SWEEP = exports.HYGIENE_PENDING_PRESENTATION_CAP = void 0;
-exports.acceptProposal = acceptProposal;
+exports.acceptProposal = exports.SWEEP_COOLDOWN_MS = exports.SANITY_RACE_MS = exports.MIN_PERSONA_AGE_MS = exports.MIN_FACTS_FOR_SWEEP = exports.HYGIENE_PENDING_PRESENTATION_CAP = void 0;
 exports.addFollowInsteadProposal = addFollowInsteadProposal;
 exports.addSanityProposals = addSanityProposals;
 exports.followInsteadTakesFact = followInsteadTakesFact;
 exports.getFollowInsteadState = getFollowInsteadState;
 exports.getPendingCount = getPendingCount;
 exports.getPendingProposals = getPendingProposals;
-exports.rejectProposal = rejectProposal;
+exports.rejectProposal = void 0;
 exports.runHygieneSweep = runHygieneSweep;
 exports.subscribeHygieneChange = subscribeHygieneChange;
 var _onDeviceGate = require("../../llm/on-device-gate");
@@ -27,6 +26,7 @@ var _personaActionExecutor = require("./persona-action-executor");
 var sanityService = _interopRequireWildcard(require("./topic-sanity-service"));
 var replacementService = _interopRequireWildcard(require("./topic-replacement-service"));
 var changeLogService = _interopRequireWildcard(require("./persona-change-log-service"));
+var _command = require("../../sync/command");
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
@@ -692,7 +692,7 @@ async function applyIncoherentTopicsProposal(proposal) {
  * for destructive deletes, each logged to persona_change_log with source
  * 'digest'), then remove it from the pending set. Never throws.
  */
-async function acceptProposal(id) {
+async function acceptProposalLocal(id) {
   const pending = await readPending();
   const proposal = pending.find(p => p.id === id);
   if (!proposal) return {
@@ -771,12 +771,13 @@ async function acceptProposal(id) {
     ok
   };
 }
+const acceptProposal = exports.acceptProposal = (0, _command.command)('acceptProposal', acceptProposalLocal);
 
 /**
  * Remember a proposal's fingerprint so the next sweep never re-proposes it, and
  * drop it from the pending set. Never throws.
  */
-async function rejectProposal(id) {
+async function rejectProposalLocal(id) {
   const [pending, rejected] = await Promise.all([readPending(), readRejected()]);
   if (!rejected.includes(id)) {
     await writeRejected([...rejected, id]);
@@ -784,3 +785,4 @@ async function rejectProposal(id) {
   await refillFromBacklog(pending.filter(p => p.id !== id));
   notifyChange();
 }
+const rejectProposal = exports.rejectProposal = (0, _command.command)('rejectProposal', rejectProposalLocal);

@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.clearAllImpressions = clearAllImpressions;
+exports.clearAllImpressions = void 0;
 exports.deleteOlderThan = deleteOlderThan;
 exports.getAll = getAll;
 exports.getOpenedSeenBreakdown = getOpenedSeenBreakdown;
@@ -13,6 +13,8 @@ exports.recordOpen = recordOpen;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _logger = _interopRequireDefault(require("../../logger"));
+var _command = require("../../sync/command");
+var _marks = require("../../sync/marks");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Story-Impression Service — WatermelonDB adapter for persona-v3
 // `story_impressions` seen-state. Presentation/dedup ONLY: impressions never
@@ -80,6 +82,7 @@ async function upsertImpression(input, opened) {
 /** Records an open/read — upgrades `opened` in place. */
 async function recordOpen(input) {
   await upsertImpression(input, true);
+  (0, _marks.recordMark)('open', input);
 }
 
 /** All impressions (dedup/seen-set builds). */
@@ -188,13 +191,14 @@ async function getOpenedTitleNorms() {
 
 /** Clear reading history: every impression goes. A story that matched before
  *  can then match again, because this table is what remembers an open. */
-async function clearAllImpressions() {
+async function clearAllImpressionsLocal() {
   const rows = await impressionsCollection.query().fetch();
   if (rows.length === 0) return;
   await _index.default.write(async () => {
     await _index.default.batch(rows.map(r => r.prepareDestroyPermanently()));
   });
 }
+const clearAllImpressions = exports.clearAllImpressions = (0, _command.command)('clearAllImpressions', clearAllImpressionsLocal);
 
 /** Deletes impressions first seen before the cutoff. Returns deleted count. */
 async function deleteOlderThan(cutoffMs) {

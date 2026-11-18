@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.generateMoreAndWait = generateMoreAndWait;
-exports.generateMoreTopicsForFact = generateMoreTopicsForFact;
+exports.generateMoreTopicsForFact = void 0;
 exports.holdFactOnScreen = holdFactOnScreen;
 exports.promisesRemoval = promisesRemoval;
 exports.sweepTopicLifecycle = sweepTopicLifecycle;
@@ -20,6 +20,7 @@ var _InferenceQueue = require("../../inference/InferenceQueue");
 var _meraProtocolStore = require("../../stores/mera-protocol-store");
 var _graphqlTypes = require("../../generated/graphql-types");
 var _logger = _interopRequireDefault(require("../../logger"));
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Topic-Planning Service — the "generate more topics" action for
 // the in-chat cards and the Profile. Mints ADDITIONAL topics for one fact; the
@@ -39,7 +40,7 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
  * exclusion snapshot is passed. `skillId` is optional; the handler derives one
  * from the fact's attribute. Never throws: a failure is `skipped`.
  */
-async function generateMoreTopicsForFact(factId, factStatement, opts = {}) {
+async function generateMoreTopicsForFactLocal(factId, factStatement, opts = {}) {
   const extra = {
     ...(opts.skillId ? {
       skillId: opts.skillId
@@ -98,6 +99,7 @@ async function generateMoreTopicsForFact(factId, factStatement, opts = {}) {
     added: 0
   };
 }
+const generateMoreTopicsForFact = exports.generateMoreTopicsForFact = (0, _command.command)('generateMoreTopicsForFact', generateMoreTopicsForFactLocal);
 
 /** shortcut: a queue that never drains (a type deferred for long) ends the wait
  *  here and reads as what has landed so far; a real error on device reads as

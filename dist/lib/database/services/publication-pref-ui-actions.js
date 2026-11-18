@@ -3,9 +3,9 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.commitSourcePrefPurge = void 0;
 exports.getPublisherPrefLevel = getPublisherPrefLevel;
-exports.revertSourcePrefChange = revertSourcePrefChange;
-exports.setSourcePrefFromUi = setSourcePrefFromUi;
+exports.setSourcePrefFromUi = exports.revertSourcePrefChange = void 0;
 var _personaActionExecutor = require("./persona-action-executor");
 var publicationPreferenceService = _interopRequireWildcard(require("./publication-preference-service"));
 var changeLogService = _interopRequireWildcard(require("./persona-change-log-service"));
@@ -13,6 +13,7 @@ var _personaMutationSweeps = require("./persona-mutation-sweeps");
 var _actionNames = require("../../news-harness/persona-management/action-names");
 var _scopes = require("../../explore/scopes");
 var _publicationPrefLevel = require("../../algorithms/publication-pref-level");
+var _command = require("../../sync/command");
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 // Source-preference UI actions. The ONE entry point every
@@ -110,6 +111,30 @@ async function muteNamedPublication(publicationName) {
     applied: true,
     changeLogId: row.id
   };
+}
+
+// A purge that ran before an undo would have destroyed the muted rows, so each waits here for its
+// toast to close. The timer runs it if nothing does, as when a phone is killed mid-toast.
+const PURGE_SAFETY_MS = 60_000;
+const pendingPurges = new Map();
+async function commitSourcePrefPurgeLocal(changeLogId) {
+  const pending = pendingPurges.get(changeLogId);
+  if (!pending) return;
+  pendingPurges.delete(changeLogId);
+  clearTimeout(pending.timer);
+  await pending.run();
+}
+
+/** Runs the purge a mute left waiting, once. An id with nothing waiting does nothing. */
+const commitSourcePrefPurge = exports.commitSourcePrefPurge = (0, _command.command)('commitSourcePrefPurge', commitSourcePrefPurgeLocal);
+function holdPurge(changeLogId) {
+  const timer = setTimeout(() => void commitSourcePrefPurgeLocal(changeLogId), PURGE_SAFETY_MS);
+  timer.unref?.();
+  pendingPurges.set(changeLogId, {
+    run: purgeOnce(),
+    timer
+  });
+  return () => commitSourcePrefPurgeLocal(changeLogId);
 }
 
 /** One purge per action, however many names it wrote. */
@@ -240,7 +265,8 @@ async function setPublisherLevel(rawNames, level) {
     changeLogId: ids[0],
     changeLogIds: ids,
     ...(muted ? {
-      commitPurge: purgeOnce()
+      commitPurge: holdPurge(ids[0]),
+      purgePending: true
     } : {})
   };
 }
@@ -261,7 +287,7 @@ async function getPublisherPrefLevel(names) {
  * newest first, each compare-and-set (a newer change to that name wins and
  * is left alone). True when at least one row was reverted.
  */
-async function revertSourcePrefChange(result) {
+async function revertSourcePrefChangeLocal(result) {
   const ids = result.changeLogIds ?? (result.changeLogId ? [result.changeLogId] : []);
   let reverted = false;
   for (const id of [...ids].reverse()) {
@@ -269,6 +295,7 @@ async function revertSourcePrefChange(result) {
   }
   return reverted;
 }
+const revertSourcePrefChange = exports.revertSourcePrefChange = (0, _command.command)('revertSourcePrefChange', revertSourcePrefChangeLocal);
 
 /**
  * Set (or clear) the source-preference level for a publication or a country
@@ -276,7 +303,7 @@ async function revertSourcePrefChange(result) {
  * requires — never call `setPreferenceKind`/`setScopePreferenceKind` directly
  * from UI code.
  */
-async function setSourcePrefFromUi(target, level) {
+async function setSourcePrefFromUiLocal(target, level) {
   if (target.kind === 'publisher') return setPublisherLevel(target.names, level);
   if (level === 'muted') {
     return target.kind === 'publication' ? setPublisherLevel([target.publicationName], level) : {
@@ -289,3 +316,10 @@ async function setSourcePrefFromUi(target, level) {
   const kind = LEVEL_TO_PREF_KIND[level];
   return target.kind === 'publication' ? setNamedPublicationLevel(target.publicationName, kind) : setCountryScopeLevel(target.countryAlpha2, target.label, kind);
 }
+const setSourcePrefFromUi = exports.setSourcePrefFromUi = (0, _command.command)('setSourcePrefFromUi', setSourcePrefFromUiLocal, {
+  // A function cannot cross the wire, so the toast's close is sent as its own command.
+  onResult: result => result.purgePending && result.changeLogId ? {
+    ...result,
+    commitPurge: () => commitSourcePrefPurge(result.changeLogId)
+  } : result
+});

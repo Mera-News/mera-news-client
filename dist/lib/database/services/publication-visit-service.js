@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.clearAllVisits = clearAllVisits;
+exports.clearAllVisits = void 0;
 exports.getAllVisitedArticles = getAllVisitedArticles;
 exports.getTopVisitedPublications = getTopVisitedPublications;
 exports.getVisitCountForPublication = getVisitCountForPublication;
@@ -14,6 +14,8 @@ exports.recordPublicationVisit = recordPublicationVisit;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _logger = _interopRequireDefault(require("../../logger"));
+var _command = require("../../sync/command");
+var _marks = require("../../sync/marks");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Publication-Visit Service — local-only log of every "Read Article" tap.
 // Drives the Sources-tab most-visited card, the drill-down list, and the
@@ -77,6 +79,7 @@ async function recordPublicationVisit(input) {
         r.visitedAt = now;
       });
     });
+    (0, _marks.recordMark)('visit', input);
   } catch (error) {
     _logger.default.captureException(error, {
       tags: {
@@ -288,7 +291,7 @@ async function pruneStaleVisits(windowMs = DEFAULT_WINDOW_MS) {
  * Wipes every row in `publication_visits`. Wired into the "Clear viewing
  * history" button on the Manage Data screen.
  */
-async function clearAllVisits() {
+async function clearAllVisitsLocal() {
   try {
     const rows = await publicationVisitsCol.query().fetch();
     if (rows.length === 0) return;
@@ -305,6 +308,7 @@ async function clearAllVisits() {
     throw error;
   }
 }
+const clearAllVisits = exports.clearAllVisits = (0, _command.command)('clearAllVisits', clearAllVisitsLocal);
 async function getTopVisitedPublications(opts) {
   const limit = opts?.limit ?? Infinity;
   const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;

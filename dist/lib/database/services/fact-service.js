@@ -3,12 +3,10 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.PENDING_TOPICS_STALE_MS = exports.EMPTY_FACT_REQUIRED_RUNS = exports.EMPTY_FACT_MIN_AGE_MS = void 0;
-exports.addFact = addFact;
+exports.addFact = exports.PENDING_TOPICS_STALE_MS = exports.EMPTY_FACT_REQUIRED_RUNS = exports.EMPTY_FACT_MIN_AGE_MS = void 0;
 exports.appendFactMetadataTopics = appendFactMetadataTopics;
 exports.chatMayRemoveFact = chatMayRemoveFact;
-exports.deleteAllFacts = deleteAllFacts;
-exports.deleteFact = deleteFact;
+exports.deleteFact = exports.deleteAllFacts = void 0;
 exports.getFactIdsWithoutTopicStatus = getFactIdsWithoutTopicStatus;
 exports.getFactSectionSnapshots = getFactSectionSnapshots;
 exports.getFacts = getFacts;
@@ -18,24 +16,23 @@ exports.getTopicsStatus = getTopicsStatus;
 exports.hasAnyFacts = hasAnyFacts;
 exports.isNewsStopped = isNewsStopped;
 exports.isRemovableEmptyFact = isRemovableEmptyFact;
-exports.markFactPlacesWrong = markFactPlacesWrong;
+exports.markFactPlacesWrong = void 0;
 exports.markOrphanedFactsAsFailed = markOrphanedFactsAsFailed;
 exports.markTopicsReviewed = markTopicsReviewed;
 exports.observeFact = observeFact;
 exports.observeFacts = observeFacts;
 exports.observeTopicsStatus = observeTopicsStatus;
-exports.patchMetadata = patchMetadata;
+exports.patchMetadata = void 0;
 exports.removeEmptyFact = removeEmptyFact;
 exports.removeFactMetadataTopics = removeFactMetadataTopics;
-exports.removeFailedChatFact = removeFailedChatFact;
+exports.removeFailedChatFact = void 0;
 exports.replaceFact = replaceFact;
 exports.rescueStalePendingTopicFacts = rescueStalePendingTopicFacts;
 exports.restoreFactPlaces = restoreFactPlaces;
 exports.setFactNewsStopped = setFactNewsStopped;
-exports.setFactPlaces = setFactPlaces;
+exports.setFactPlaces = void 0;
 exports.stampPlacesTopicsFor = stampPlacesTopicsFor;
-exports.stopNewsForFact = stopNewsForFact;
-exports.updateFact = updateFact;
+exports.updateFact = exports.stopNewsForFact = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _operators = require("rxjs/operators");
 var _index = _interopRequireDefault(require("../index"));
@@ -43,6 +40,7 @@ var _logger = _interopRequireDefault(require("../../logger"));
 var _meraHarness = require("../../mera-harness");
 var _actionNames = require("../../news-harness/persona-management/action-names");
 var _factPlaces = require("../../news-harness/persona-management/fact-places");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Fact Service — WatermelonDB CRUD for facts.
 
@@ -67,7 +65,7 @@ function toFact(record) {
 
 // --- Facts CRUD ---
 
-async function addFact(statement, metadata, questionnaire,
+async function addFactLocal(statement, metadata, questionnaire,
 /** `topicsStatus` defaults to leaving the column NULL, NOT to 'pending'. A
  *  fact created without an enqueue would otherwise sit at pending until the
  *  rescue sweep turned it into a visible error the user never caused. Pass
@@ -90,13 +88,15 @@ opts) {
   });
   return toFact(record);
 }
-async function updateFact(id, updates) {
+const addFact = exports.addFact = (0, _command.command)('addFact', addFactLocal);
+async function updateFactLocal(id, updates) {
   const record = await factsCollection.find(id);
   const metadata = updates.metadata !== undefined ? updates.metadata : record.metadata;
   const reworded = updates.statement !== undefined && updates.statement !== record.statement;
   await record.updateFact(updates.statement ?? record.statement, reworded ? dropEmptyClock(metadata) : metadata);
   return toFact(record);
 }
+const updateFact = exports.updateFact = (0, _command.command)('updateFact', updateFactLocal);
 
 /** A reworded fact is a new question: its empty runs say nothing about it. */
 function dropEmptyClock(metadata) {
@@ -179,7 +179,7 @@ async function markTopicsReviewed(id, at = new Date()) {
     topicsReviewedAt: [at.toISOString()]
   });
 }
-async function deleteFact(id) {
+async function deleteFactLocal(id) {
   const record = await factsCollection.find(id);
   await record.destroyCascade();
   const purged = await purgeDeadTopicSuggestions();
@@ -190,6 +190,7 @@ async function deleteFact(id) {
     });
   }
 }
+const deleteFact = exports.deleteFact = (0, _command.command)('deleteFact', deleteFactLocal);
 
 /** The cascade takes a fact's topics; the suggestions those topics retrieved
  *  must go with them. Without this they linger for the full 48h window as
@@ -211,12 +212,13 @@ async function purgeDeadTopicSuggestions() {
  * with a `source_fact_id` goes, dangling ones included; a place added by hand
  * has none. The caller clears the suggestions, so this does not purge per fact.
  */
-async function deleteAllFacts() {
+async function deleteAllFactsLocal() {
   const records = await factsCollection.query().fetch();
   for (const record of records) await record.destroyCascade();
   const factPlaceRows = await _index.default.get('locations').query(_watermelondb.Q.where('source_fact_id', _watermelondb.Q.notEq(null))).fetch();
   await _index.default.write(() => _index.default.batch(factPlaceRows.map(r => r.prepareDestroyPermanently())));
 }
+const deleteAllFacts = exports.deleteAllFacts = (0, _command.command)('deleteAllFacts', deleteAllFactsLocal);
 
 /**
  * Mark facts that have no topics, no error, and no active topic_gen job with
@@ -390,7 +392,7 @@ async function chatMayRemoveFact(id, statement, opts = {}) {
  * `removeEmptyFact`, but on one empty run and with no inbox row: the reply and
  * the tombstone are the notice. False means it stayed. `deleteFact` has no undo.
  */
-async function removeFailedChatFact(id, statement, opts = {}) {
+async function removeFailedChatFactLocal(id, statement, opts = {}) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const changeLog = require("./persona-change-log-service");
   const removed = await _index.default.write(async () => {
@@ -410,6 +412,11 @@ async function removeFailedChatFact(id, statement, opts = {}) {
   if (removed) await purgeDeadTopicSuggestions();
   return removed;
 }
+
+// inOwnJob describes the phone's job context, which the pod does not share.
+const removeFailedChatFact = exports.removeFailedChatFact = (0, _command.command)('removeFailedChatFact', removeFailedChatFactLocal, {
+  sendArgs: ([id, statement]) => [id, statement]
+});
 
 /**
  * How long a fact may sit at 'pending' with no live job before the sweep
@@ -675,7 +682,7 @@ async function getFactsForTopicTexts(topicTexts) {
 // replaces `metadata` wholesale and would drop `topics`.
 
 /** Merge into one fact's metadata in a single write; `undefined` deletes a key. Returns the metadata BEFORE. */
-async function patchMetadata(factId, patch) {
+async function patchMetadataLocal(factId, patch) {
   return _index.default.write(async () => {
     let record;
     try {
@@ -698,6 +705,7 @@ async function patchMetadata(factId, patch) {
     return before;
   });
 }
+const patchMetadata = exports.patchMetadata = (0, _command.command)('patchMetadata', patchMetadataLocal);
 async function residenceReaderPlaces() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const {
@@ -751,7 +759,7 @@ const LOG_SOURCE = {
  * Set where a fact's news comes from. Always refreshes `places_source`; an equal
  * place set writes nothing else. A sweep never overwrites a user's choice.
  */
-async function setFactPlaces(factId, places, by, opts) {
+async function setFactPlacesLocal(factId, places, by, opts) {
   const next = (0, _factPlaces.normalizePlaces)(places);
   let record;
   try {
@@ -820,6 +828,7 @@ async function setFactPlaces(factId, places, by, opts) {
     changeLogId: row.id
   };
 }
+const setFactPlaces = exports.setFactPlaces = (0, _command.command)('setFactPlaces', setFactPlacesLocal);
 
 /** Undo of set_fact_places: put places, places_by and places_source back, then regenerate. */
 async function restoreFactPlaces(factId, before, expectedNow) {
@@ -842,7 +851,7 @@ async function restoreFactPlaces(factId, before, expectedNow) {
 }
 
 /** The sweep's answer was wrong for this fact: flag it and force a re-decide. A user's choice stays. */
-async function markFactPlacesWrong(factId) {
+async function markFactPlacesWrongLocal(factId) {
   let record;
   try {
     record = await factsCollection.find(factId);
@@ -859,6 +868,7 @@ async function markFactPlacesWrong(factId) {
   });
   return true;
 }
+const markFactPlacesWrong = exports.markFactPlacesWrong = (0, _command.command)('markFactPlacesWrong', markFactPlacesWrongLocal);
 
 /** Stamp the places the fact's current topics were generated for. */
 async function stampPlacesTopicsFor(factId, places) {
@@ -876,7 +886,7 @@ function isNewsStopped(fact) {
 }
 
 /** Retire the fact's active non-tracked topics (one logged, undoable retire_topic row each), then flag the fact. */
-async function stopNewsForFact(factId) {
+async function stopNewsForFactLocal(factId) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const topicService = require("./topic-service");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -911,3 +921,4 @@ async function stopNewsForFact(factId) {
     changeLogIds
   };
 }
+const stopNewsForFact = exports.stopNewsForFact = (0, _command.command)('stopNewsForFact', stopNewsForFactLocal);

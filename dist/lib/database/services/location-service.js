@@ -7,12 +7,13 @@ exports.deleteLocation = deleteLocation;
 exports.getAll = getAll;
 exports.observeAll = observeAll;
 exports.setPinnedForWeather = setPinnedForWeather;
-exports.setRole = setRole;
+exports.setRole = void 0;
 exports.setWeight = setWeight;
 exports.upsertLocation = upsertLocation;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _normalizeKey = require("../../algorithms/normalize-key");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Location Service — WatermelonDB adapter for persona-v3 `locations`.
 //
@@ -103,7 +104,7 @@ async function setPinnedForWeather(locationId) {
  * the twin stays, taking over the weather pin if this row held it. Not a
  * change-log row (owner: unlogged relabel).
  */
-async function setRole(locationId, role) {
+async function setRoleLocal(locationId, role) {
   const record = await locationsCollection.find(locationId);
   if (record.role === role) return;
   const twin = (await locationsCollection.query(_watermelondb.Q.where('country_code', record.countryCode)).fetch()).find(l => l.id !== locationId && l.role === role && l.countryCode === record.countryCode && (0, _normalizeKey.normalizeKeyOrEmpty)(l.city) === (0, _normalizeKey.normalizeKeyOrEmpty)(record.city));
@@ -126,6 +127,7 @@ async function setRole(locationId, role) {
     await _index.default.batch(ops);
   });
 }
+const setRole = exports.setRole = (0, _command.command)('setRole', setRoleLocal);
 async function deleteLocation(locationId) {
   const record = await locationsCollection.find(locationId);
   await _index.default.write(async () => {

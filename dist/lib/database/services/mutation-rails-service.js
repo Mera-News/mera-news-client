@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.nudgeFactWeight = nudgeFactWeight;
+exports.nudgeFactWeight = void 0;
 exports.nudgeTopic = nudgeTopic;
 exports.setTopicHighPriority = setTopicHighPriority;
 exports.setTopicWeightAbsolute = setTopicWeightAbsolute;
@@ -13,6 +13,7 @@ var topicService = _interopRequireWildcard(require("./topic-service"));
 var changeLogService = _interopRequireWildcard(require("./persona-change-log-service"));
 var _actionNames = require("../../news-harness/persona-management/action-names");
 var _mutationRails = require("../../news-harness/persona-management/mutation-rails");
+var _command = require("../../sync/command");
 var cache;
 function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
@@ -185,7 +186,7 @@ async function setTopicHighPriority(topicId, highPriority, source) {
  * revert restores the exact prior state — mirroring revertChange's
  * number|null handling for set_fact_weight).
  */
-async function nudgeFactWeight(factId, delta, source) {
+async function nudgeFactWeightLocal(factId, delta, source) {
   const fact = await factsCollection.find(factId);
   const before = fact.weight ?? null;
   const after = (0, _mutationRails.clampWeight)((before ?? 1) + delta);
@@ -210,3 +211,4 @@ async function nudgeFactWeight(factId, delta, source) {
     changeLogId: row.id
   };
 }
+const nudgeFactWeight = exports.nudgeFactWeight = (0, _command.command)('nudgeFactWeight', nudgeFactWeightLocal);

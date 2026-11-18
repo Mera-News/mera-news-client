@@ -4,14 +4,13 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.backfillTrackedStoryRetention = backfillTrackedStoryRetention;
-exports.deleteTrackedStoryById = deleteTrackedStoryById;
-exports.disownStoryMember = disownStoryMember;
+exports.disownStoryMember = exports.deleteTrackedStoryById = void 0;
 exports.isSubjectTracked = isSubjectTracked;
 exports.migrateLegacyTrackedStories = migrateLegacyTrackedStories;
 exports.observeSubjectTrackedId = observeSubjectTrackedId;
 exports.retainStoryMember = retainStoryMember;
 exports.syncFollowedStoryNow = syncFollowedStoryNow;
-exports.trackStoryWithProposal = trackStoryWithProposal;
+exports.trackStoryWithProposal = void 0;
 var _trackedStoryService = require("../database/services/tracked-story-service");
 var _topicService = require("../database/services/topic-service");
 var _articleSuggestionReads = require("../database/services/article-suggestion-reads");
@@ -23,6 +22,7 @@ var _InferenceQueue = require("../inference/InferenceQueue");
 var _meraProtocolStore = require("../stores/mera-protocol-store");
 var _graphqlTypes = require("../generated/graphql-types");
 var _logger = _interopRequireDefault(require("../logger"));
+var _command = require("../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Track-flow helper — the single entry point card/detail surfaces call to
 // follow (or unfollow) a story from a FeedbackSubject.
@@ -80,7 +80,7 @@ function snapshotFromSubject(subject) {
  * the originating article as its first snapshot. Returns once the row exists,
  * then starts a feed sync whose topic reconcile fills in the coverage.
  */
-async function trackStoryWithProposal(subject, scope, opts = {}) {
+async function trackStoryWithProposalLocal(subject, scope, opts = {}) {
   const label = (scope.label ?? '').trim();
   const searchText = (scope.searchText ?? '').trim();
   // The search text is what actually retrieves articles — without it there is
@@ -168,6 +168,7 @@ async function trackStoryWithProposal(subject, scope, opts = {}) {
   if (topicId && opts.syncFeed !== false) void syncFollowedStoryNow();
   return 'followed';
 }
+const trackStoryWithProposal = exports.trackStoryWithProposal = (0, _command.command)('trackStoryWithProposal', trackStoryWithProposalLocal);
 
 /**
  * Run a feed sync for a story just followed. A sync already in flight read the
@@ -254,12 +255,13 @@ known) {
  * retention row left behind is harmless and `deleteOrphanedRetention` (the
  * daily data-cleanup sweep) removes it.
  */
-async function disownStoryMember(trackedStoryId, articleId) {
+async function disownStoryMemberLocal(trackedStoryId, articleId) {
   const removed = await (0, _trackedStoryService.removeMemberSnapshot)(trackedStoryId, articleId);
   if (!removed) return false;
   await (0, _savedArticleSuggestionService.releaseTrackedStoryRetention)(articleId);
   return true;
 }
+const disownStoryMember = exports.disownStoryMember = (0, _command.command)('disownStoryMember', disownStoryMemberLocal);
 
 /**
  * DELETE a followed story by id — the destructive path behind every "delete this
@@ -279,7 +281,7 @@ async function disownStoryMember(trackedStoryId, articleId) {
  * Retention release failures never change the result either (see
  * {@link disownStoryMember}).
  */
-async function deleteTrackedStoryById(id) {
+async function deleteTrackedStoryByIdLocal(id) {
   if (!id) return true;
   let memberIds = [];
   try {
@@ -309,6 +311,7 @@ async function deleteTrackedStoryById(id) {
   }
   return true;
 }
+const deleteTrackedStoryById = exports.deleteTrackedStoryById = (0, _command.command)('deleteTrackedStoryById', deleteTrackedStoryByIdLocal);
 
 /** Is the story described by `subject` already followed (active only)? */
 async function isSubjectTracked(subject) {

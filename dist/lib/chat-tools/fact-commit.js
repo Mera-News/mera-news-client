@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.commitFactChoices = commitFactChoices;
+exports.commitFactChoices = void 0;
 var _factService = require("../database/services/fact-service");
 var _topicGenerationStatusService = require("../database/services/topic-generation-status-service");
 var _factConflict = require("../news-harness/persona-management/fact-conflict");
@@ -12,6 +12,7 @@ var _geoDerivationService = require("../database/services/geo-derivation-service
 var _floatingChatStore = require("../stores/floating-chat-store");
 var _logger = _interopRequireDefault(require("../logger"));
 var _toolHandlers = require("./tool-handlers");
+var _command = require("../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // fact-commit — the WRITE half of propose-then-save.
 //
@@ -34,7 +35,7 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
  * Idempotent by statement: a double tap, or a card resurrected after a failed
  * durable write, returns the existing fact instead of minting a second one.
  */
-async function commitFactChoices(choices, options = {}) {
+async function commitFactChoicesLocal(choices, options = {}) {
   const wanted = choices.filter(c => c.statement.trim().length > 0);
   if (wanted.length === 0) return {
     savedFacts: [],
@@ -124,3 +125,4 @@ async function commitFactChoices(choices, options = {}) {
     conflicts
   };
 }
+const commitFactChoices = exports.commitFactChoices = (0, _command.command)('commitFactChoices', commitFactChoicesLocal);

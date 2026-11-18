@@ -5,7 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.countActiveTopicsIncludingStaged = countActiveTopicsIncludingStaged;
 exports.countAllTopics = countAllTopics;
-exports.createTopics = createTopics;
+exports.createTopics = void 0;
 exports.destroyOrphanedTopics = destroyOrphanedTopics;
 exports.getActive = getActive;
 exports.getActiveTopicSnapshots = getActiveTopicSnapshots;
@@ -19,13 +19,13 @@ exports.getWeightsByIds = getWeightsByIds;
 exports.normalizeTopicText = normalizeTopicText;
 exports.observeByFact = observeByFact;
 exports.observeNegative = observeNegative;
-exports.reactivate = reactivate;
+exports.reactivate = void 0;
 exports.reassignTopics = reassignTopics;
 exports.repairUnweightedTopics = repairUnweightedTopics;
 exports.replaceTopicsForFact = replaceTopicsForFact;
-exports.retire = retire;
+exports.retire = void 0;
 exports.setHighPriority = setHighPriority;
-exports.setWeight = setWeight;
+exports.setWeight = void 0;
 exports.suppress = suppress;
 exports.syncLlmTopicsForFact = syncLlmTopicsForFact;
 var _watermelondb = require("@nozbe/watermelondb");
@@ -33,6 +33,7 @@ var _index = _interopRequireDefault(require("../index"));
 var _normalizeKey = require("../../algorithms/normalize-key");
 var _topicGeneration = require("../../news-harness/persona-management/topic-generation");
 var _config = require("../../news-harness/core/config");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Topic Service — WatermelonDB adapter for persona-v3 `topics`.
 //
@@ -104,7 +105,7 @@ function normalizeTopicText(s) {
  * text is how a caller legitimately revives an interest, and resurrecting the
  * retired row instead must stay an explicit `reactivate()` decision.
  */
-async function createTopics(inputs) {
+async function createTopicsLocal(inputs) {
   if (inputs.length === 0) return [];
 
   // NUL separator, written as an ESCAPE so this file stays plain text (a literal
@@ -260,6 +261,12 @@ async function createTopics(inputs) {
   });
   return results.filter(r => r !== undefined);
 }
+const createTopics = exports.createTopics = (0, _command.command)('createTopics', createTopicsLocal, {
+  returns: {
+    table: 'topics',
+    many: true
+  }
+});
 
 /** Returns all topic rows owned by a fact (any status). */
 async function getByFact(factId) {
@@ -404,7 +411,7 @@ async function getTopupTopicSnapshots() {
 async function getAllByNormalizedText(normalizedText) {
   return topicsCollection.query(_watermelondb.Q.where('normalized_text', normalizeTopicText(normalizedText))).fetch();
 }
-async function setWeight(topicId, weight) {
+async function setWeightLocal(topicId, weight) {
   const clamped = Math.max(-1, Math.min(1, weight));
   const record = await topicsCollection.find(topicId);
   await _index.default.write(async () => {
@@ -414,6 +421,7 @@ async function setWeight(topicId, weight) {
     });
   });
 }
+const setWeight = exports.setWeight = (0, _command.command)('setWeight', setWeightLocal);
 async function setHighPriority(topicId, highPriority) {
   const record = await topicsCollection.find(topicId);
   await _index.default.write(async () => {
@@ -434,9 +442,10 @@ async function setStatus(topicId, status) {
 }
 
 /** Retire a topic (dedup/history only — never retrieved or scored). */
-async function retire(topicId) {
+async function retireLocal(topicId) {
   await setStatus(topicId, 'retired');
 }
+const retire = exports.retire = (0, _command.command)('retire', retireLocal);
 /**
  * Mint replacement topics and retire the bad ones for ONE fact, in a SINGLE
  * write. The atomic half of the "replace, don't just delete" pass.
@@ -509,9 +518,10 @@ async function suppress(topicId) {
 }
 
 /** Reactivate a suppressed/retired topic. */
-async function reactivate(topicId) {
+async function reactivateLocal(topicId) {
   await setStatus(topicId, 'active');
 }
+const reactivate = exports.reactivate = (0, _command.command)('reactivate', reactivateLocal);
 
 /** Every topic id currently on the device — the liveness set the suggestion
  *  purge screens against (see article-suggestion-lifecycle). Includes retired and

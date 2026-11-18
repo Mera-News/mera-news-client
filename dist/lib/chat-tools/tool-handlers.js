@@ -14,7 +14,7 @@ exports.handleExplainMera = handleExplainMera;
 exports.handleIssueWarning = handleIssueWarning;
 exports.handleSaveExtractedFacts = handleSaveExtractedFacts;
 exports.handleUpdateUserConfig = handleUpdateUserConfig;
-exports.retryTopicGeneration = retryTopicGeneration;
+exports.retryTopicGeneration = void 0;
 exports.startTopicGeneration = startTopicGeneration;
 exports.triggerTopicGeneration = triggerTopicGeneration;
 var _factService = require("../database/services/fact-service");
@@ -31,6 +31,7 @@ var _factRules = require("../news-harness/persona-management/fact-rules");
 var _factChoiceResolution = require("./fact-choice-resolution");
 var _topicGenerationStatusService = require("../database/services/topic-generation-status-service");
 var _readingPlans = require("../subscription/reading-plans");
+var _command = require("../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Shared Tool Handlers — Used by both on-device LLM and cloud inference chat paths.
 // Extracted from on-device-chat-agent.ts so both paths share identical tool execution logic.
@@ -285,7 +286,7 @@ async function clearTopicGenError(factId) {
  * error, re-stamps 'pending', then enqueues through `startTopicGeneration`,
  * whose synchronous claim makes a double tap one job. Never rejects.
  */
-async function retryTopicGeneration(factId, factStatement, skillId) {
+async function retryTopicGenerationLocal(factId, factStatement, skillId) {
   try {
     await clearTopicGenError(factId);
     // Back to 'pending' for the duration of the run. Clearing the marker alone
@@ -304,6 +305,7 @@ async function retryTopicGeneration(factId, factStatement, skillId) {
     skillId
   }]);
 }
+const retryTopicGeneration = exports.retryTopicGeneration = (0, _command.command)('retryTopicGeneration', retryTopicGenerationLocal);
 
 /** Updates user language config immediately on the server (settings, not PII). */
 async function handleUpdateUserConfig(args) {

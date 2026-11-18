@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.cancelSubscription = cancelSubscription;
-exports.declinePublisher = declinePublisher;
+exports.declinePublisher = void 0;
 exports.findByPublisherId = findByPublisherId;
 exports.getActive = getActive;
 exports.getSubscribedSourceNameSet = getSubscribedSourceNameSet;
@@ -13,10 +13,11 @@ exports.normalizeSubscriptionName = normalizeSubscriptionName;
 exports.observeActive = observeActive;
 exports.parseSourceNames = parseSourceNames;
 exports.refreshSourceNames = refreshSourceNames;
-exports.upsertSubscription = upsertSubscription;
+exports.upsertSubscription = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _normalizeKey = require("../../algorithms/normalize-key");
+var _command = require("../../sync/command");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 const subscriptionsCollection = _index.default.get('user_publication_subscriptions');
 
@@ -62,7 +63,7 @@ function parseSourceNames(json) {
  * refreshes the source-name set, so the set never goes stale across a
  * cancel/re-add cycle.
  */
-async function upsertSubscription(input) {
+async function upsertSubscriptionLocal(input) {
   const existing = await findByPublisherId(input.publisherId);
   const sourceNamesJson = JSON.stringify(Array.from(new Set(input.sourceNames.map(normalizeSubscriptionName).filter(Boolean))));
   return _index.default.write(async () => {
@@ -97,6 +98,9 @@ async function upsertSubscription(input) {
     });
   });
 }
+const upsertSubscription = exports.upsertSubscription = (0, _command.command)('upsertSubscription', upsertSubscriptionLocal, {
+  returns: 'user_publication_subscriptions'
+});
 
 /** Any row for this publisher, whatever its status. */
 async function findByPublisherId(publisherId) {
@@ -135,7 +139,7 @@ async function cancelSubscription(subscriptionId) {
  * a user who already subscribes and then dismisses a stray prompt must not
  * lose the subscription.
  */
-async function declinePublisher(input) {
+async function declinePublisherLocal(input) {
   const existing = await findByPublisherId(input.publisherId);
   if (existing?.status === 'active') return;
   await _index.default.write(async () => {
@@ -161,6 +165,7 @@ async function declinePublisher(input) {
     });
   });
 }
+const declinePublisher = exports.declinePublisher = (0, _command.command)('declinePublisher', declinePublisherLocal);
 
 /** True when the prompt has already been answered for this publisher. */
 async function hasAnsweredForPublisher(publisherId) {

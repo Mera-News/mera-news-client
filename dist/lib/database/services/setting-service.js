@@ -3,12 +3,14 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.deleteSetting = deleteSetting;
+exports.deleteSetting = void 0;
 exports.getSetting = getSetting;
 exports.getSettingsByPrefix = getSettingsByPrefix;
-exports.setSetting = setSetting;
+exports.setSetting = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
+var _command = require("../../sync/command");
+var _tables = require("../../sync/tables");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 const settings = _index.default.get('settings');
 async function getSetting(key) {
@@ -33,7 +35,7 @@ async function getSettingsByPrefix(prefix) {
   for (const record of results) if (record.key.startsWith(prefix)) out[record.key] = record.value;
   return out;
 }
-async function setSetting(key, value) {
+async function setSettingLocal(key, value) {
   // Read-modify-write must happen inside a single write() so the query and the
   // mutation share one transaction. WatermelonDB serializes writes, so this
   // makes the check-then-update atomic — a concurrent deleteSetting() for the
@@ -68,7 +70,7 @@ async function setSetting(key, value) {
     }
   });
 }
-async function deleteSetting(key) {
+async function deleteSettingLocal(key) {
   try {
     await _index.default.write(async () => {
       // Query inside the write() so the fetch + destroy share one transaction —
@@ -84,3 +86,12 @@ async function deleteSetting(key) {
     if (!msg.includes('deleted record')) throw err;
   }
 }
+
+// The card state is a mark: it stays local and travels in the batch, so it is not sent as a command.
+const sentToPod = key => (0, _tables.isSyncSettingKey)(key) && key !== 'feed_card_state_v1';
+const setSetting = exports.setSetting = (0, _command.command)('setSetting', setSettingLocal, {
+  when: sentToPod
+});
+const deleteSetting = exports.deleteSetting = (0, _command.command)('deleteSetting', deleteSettingLocal, {
+  when: sentToPod
+});
