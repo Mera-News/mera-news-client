@@ -19,6 +19,7 @@ import type { i18n as I18n } from 'i18next';
 import type { InferParams, InferResult, TextEngine } from '../mera-protocol-toolkit/types';
 import type { JsonSchema } from '../mera-protocol-toolkit/core/structured-json';
 import type { LlmTransport } from '../llm/cloudComplete';
+import type { HostHarness } from '../harnesses/host-harness';
 
 // --- Shapes (each one the subset of the module it replaces that the package uses) ----------------
 
@@ -240,6 +241,11 @@ export interface PlatformHost {
    * A transport with `asyncJobs: false` makes scoring run inline through its `batch`.
    */
   llmTransport?: LlmTransport;
+  /**
+   * A harness folder whose slots override the cloud base, applied inside registerPlatform before
+   * any prompt module loads. One per process; a host that serves several models leaves it out.
+   */
+  harness?: HostHarness;
 
   recordForeground?(at: number): Promise<void>;
   runKeychainAccessibilityMigration?(): Promise<KeychainMigrationOutcome>;
@@ -262,6 +268,9 @@ let current: PlatformHost | null = null;
 
 export function registerPlatform(host: PlatformHost): void {
   if (current) throw new Error('registerPlatform was called twice');
+  // Required only when a host brings a harness, so every other host loads exactly what it did before.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  if (host.harness) (require('../harnesses/host-harness') as typeof import('../harnesses/host-harness')).applyHostHarness(host.harness);
   current = host;
   const g = globalThis as { __DEV__?: boolean };
   if (g.__DEV__ === undefined) g.__DEV__ = host.isDev ?? false;

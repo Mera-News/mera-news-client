@@ -77,6 +77,25 @@ test('a refused harness leaves nothing registered, so the same folder can be reg
   });
 });
 
+test('registerPlatform applies the host harness before any prompt module loads', () => {
+  jest.isolateModules(() => {
+    const { testHost, installTestPlatform } = require('../../helpers/platform-host');
+    testHost.harness = harness('acme', { [ROOT_SLOT]: 'From registration' });
+    installTestPlatform();
+    const prompts = require('@/lib/news-harness/prompts/prompts') as Record<string, unknown>;
+    expect(prompts.CLOUD_REASON_SYSTEM_PROMPT).toBe('From registration');
+  });
+});
+
+test('a refused harness leaves the platform unregistered', () => {
+  jest.isolateModules(() => {
+    const { testHost } = require('../../helpers/platform-host');
+    const { registerPlatform, platform } = require('@/lib/platform') as typeof import('@/lib/platform');
+    expect(() => registerPlatform({ ...testHost, harness: harness('acme', { 'scoring/no-such-slot': 'x' }) })).toThrow(/no-such-slot/);
+    expect(() => platform('test')).toThrow('registerPlatform');
+  });
+});
+
 test('an unknown slot id throws, naming it', () => {
   fresh((m) => {
     expect(() => m.applyHostHarness(harness('acme', { 'scoring/no-such-slot': 'x' }))).toThrow(m.HostHarnessError);
