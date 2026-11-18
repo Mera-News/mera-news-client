@@ -616,6 +616,9 @@ class _AppScheduler {
     // task should execute, regardless of which trigger path (tick, foreground,
     // network, scheduled retry) reached here.
     if (this.suspended) return;
+    // The tick and foreground paths check for a pause before awaiting the task's conditions, and a
+    // pause can land in that await. Checked again here, with nothing awaited before the reservation.
+    if (this.pausedTasks.has(task.name)) return;
     // Reserve the exclusive task synchronously, before the async createJob
     // below, so two near-simultaneous triggers (e.g. the startup _tick() and
     // onStoresHydrated→_onForeground()) can't both pass the isRunning() guard
