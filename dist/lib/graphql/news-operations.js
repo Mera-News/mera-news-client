@@ -3,14 +3,25 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.isNewsOperation = exports.NEWS_OPERATION_NAMES = exports.MERA_SERVICE_OPERATION_NAMES = exports.HOST_NEWS_OPERATION_NAMES = exports.ACCOUNT_OPERATION_NAMES = void 0;
+exports.isNewsOperation = exports.NEWS_OPERATION_NAMES = exports.NEWS_OPERATIONS_NOT_PUBLIC = exports.MERA_SERVICE_OPERATION_NAMES = exports.HOST_NEWS_OPERATION_NAMES = exports.ACCOUNT_OPERATION_NAMES = void 0;
 // Where each GraphQL operation the client sends may go. A host that sends news to a server other than
 // Mera's (a person's own news server, or a pod passing news through) forwards only NEWS operations.
 // ACCOUNT and MERA_SERVICE operations always go to Mera and never to a news server: an account call
 // carries the person's identity, and a Mera service (fact checks) is not something a news server offers.
 // Every operation in the client's documents is in exactly one list; a test scans the documents.
 
-const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticleIdsForTopics', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
+const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticleIdsForTopics', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'NewsServerStatus', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
+
+/**
+ * News operations Mera's own server answers but the public news server does not, with why. A host
+ * that checks news documents against the public news schema file checks these against Mera's schema instead.
+ * The client's test fails when one of them starts to validate publicly, so this list cannot rot.
+ */
+const NEWS_OPERATIONS_NOT_PUBLIC = exports.NEWS_OPERATIONS_NOT_PUBLIC = {
+  GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
+  PublicationDisplayNames: 'private to Mera',
+  GetArticleIdsForTopics: 'old topics fallback; whether to retire it is an open owner question'
+};
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a
  *  server that passes news through allows them with the list above. */

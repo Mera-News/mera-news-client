@@ -29,6 +29,8 @@
     "dist",
     "node",
     "types",
-    "schema.gql"
+    "schema.gql",
+    "news-schema.gql",
+    "news-schema.pin.json"
   ]
 }
