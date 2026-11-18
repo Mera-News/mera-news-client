@@ -131,6 +131,10 @@ class InferenceQueueImpl {
   private wakeResolver: (() => void) | null = null;
   private sleepTimer: ReturnType<typeof setTimeout> | null = null;
   private currentJobPromise: Promise<void> | null = null;
+  /** The type of the job in `currentJobPromise`, or null. */
+  private currentJobType: InferenceJobType | null = null;
+  /** Types a host keeps waiting (`hold`), on top of the defer gates. */
+  private heldTypes = new Set<InferenceJobType>();
   private drainCallbacks: Array<() => void> = [];
   /** Current idle backoff. See POLL_INTERVAL_MIN/MAX. */
   private idleDelay = POLL_INTERVAL_MIN;
@@ -315,6 +319,20 @@ class InferenceQueueImpl {
     this.drainCallbacks.push(callback);
   }
 
+  /**
+   * Keeps every job of these types waiting until the hold is lifted (`hold([])`); other types run
+   * as usual. A job of a held type that is already running finishes.
+   */
+  hold(types: readonly InferenceJobType[]): void {
+    this.heldTypes = new Set(types);
+    this.wake();
+  }
+
+  /** The type of the job running now, or null. */
+  runningType(): InferenceJobType | null {
+    return this.currentJobType;
+  }
+
   /** Test seam: clear every defer gate and backoff, and forget that this process already recovered. */
   __resetTypeGatesForTests(): void {
     this.recoveredThisProcess = false;
@@ -332,6 +350,7 @@ class InferenceQueueImpl {
       if (until > now) out.push(type);
       else this.gateUntil.delete(type);
     }
+    for (const type of this.heldTypes) if (!out.includes(type)) out.push(type);
     return out;
   }
 
@@ -417,8 +436,8 @@ class InferenceQueueImpl {
       // fast cadence rather than crawling out of the backoff one job at a time.
       this.idleDelay = POLL_INTERVAL_MIN;
 
-      // Check state again after dequeue (might have been paused/stopped while querying)
-      if (this.state !== 'running') continue;
+      // Check state again after dequeue (might have been paused/stopped or held while querying)
+      if (this.state !== 'running' || this.heldTypes.has(job.jobType)) continue;
 
       const isCombo = job.jobType === 'topic_combo';
 
@@ -493,8 +512,13 @@ class InferenceQueueImpl {
       })();
 
       this.currentJobPromise = jobExec;
-      await jobExec;
-      this.currentJobPromise = null;
+      this.currentJobType = job.jobType;
+      try {
+        await jobExec;
+      } finally {
+        this.currentJobPromise = null;
+        this.currentJobType = null;
+      }
     }
   }
 
