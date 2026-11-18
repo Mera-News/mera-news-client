@@ -95,8 +95,10 @@ describe('searchPlaces', () => {
     expect(serviceCaptures()).toHaveLength(1);
     expect(serviceCaptures()[0][1]).toMatchObject({
       tags: { service: 'place-service', method: 'searchPlaces' },
-      extra: { query: 'berlin', limit: 8 },
+      // The length only, never the place the person typed.
+      extra: { queryChars: 6, limit: 8 },
     });
+    expect(JSON.stringify(serviceCaptures())).not.toContain('berlin');
   });
 
   it('returns ok:false and logs on a transport failure', async () => {

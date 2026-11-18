@@ -66,7 +66,8 @@ export async function searchPlaces(query: string, limit = 8): Promise<SearchPlac
   } catch (error) {
     logger.captureException(error, {
       tags: { service: 'place-service', method: 'searchPlaces' },
-      extra: { query: trimmed, limit },
+      // The length, never the place the person typed.
+      extra: { queryChars: trimmed.length, limit },
     });
     return { ok: false };
   }

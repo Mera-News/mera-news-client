@@ -268,7 +268,8 @@ export function parseTopicsFromOutput(
     }
   }
 
-  logger.warn('Topic generation: failed to parse output', { output, factStatement });
+  // Sizes only: the output and the fact are the person's.
+  logger.warn('Topic generation: failed to parse output', { outputChars: output.length, factChars: factStatement.length });
   return [];
 }
 

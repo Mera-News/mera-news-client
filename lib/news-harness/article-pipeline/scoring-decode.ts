@@ -61,8 +61,9 @@ export function parseFeedVerifierResponse(
     }
   }
 
+  // Sizes only, never the text: what the model wrote is about the person.
   logger.warn('Feed verifier: failed to parse output — conservative keep', {
-    output: trimmed.slice(0, 200),
+    outputChars: trimmed.length,
     expected: expectedCount,
     id,
   });
@@ -590,7 +591,7 @@ export function parseBatchRelevanceResponse(
           expected: expectedCount,
           got: nums.length,
           id,
-          prompt,
+          promptChars: prompt?.length,
         },
       );
       const padded = [...nums];
@@ -601,10 +602,10 @@ export function parseBatchRelevanceResponse(
 
   if (stats) stats.totalFailures++;
   logger.warn('Batch relevance: failed to parse output — using fallback for all', {
-    output: trimmed,
+    outputChars: trimmed.length,
     expected: expectedCount,
     id,
-    prompt,
+    promptChars: prompt?.length,
   });
   return new Array<number>(expectedCount).fill(config.fallbackRelevance);
 }
@@ -858,7 +859,7 @@ export function parseReasonResult(
   if (DELIBERATION_OPENER.test(text)) {
     logger.warn('Reason generation: output is deliberation, not a reason', {
       id,
-      output: text.slice(0, 120),
+      outputChars: text.length,
     });
     if (stats) stats.rescoreUnparsed++;
     return { reason: '' };
@@ -910,7 +911,7 @@ export function parseReasonResult(
   if (REASON_NAMES_A_SCORE.test(text)) {
     logger.warn('Reason generation: reason names the score to the reader', {
       id,
-      output: text.slice(0, 120),
+      outputChars: text.length,
     });
     // The rescore SURVIVES a rejected reason. The two are separate judgements
     // arriving in one response: the model narrating its score to the reader is
@@ -923,9 +924,9 @@ export function parseReasonResult(
   }
 
   logger.warn('Reason generation: failed to parse LLM output', {
-    output: output.trim(),
+    outputChars: output.trim().length,
     id,
-    prompt,
+    promptChars: prompt?.length,
   });
 
   return { reason: '', rescore };

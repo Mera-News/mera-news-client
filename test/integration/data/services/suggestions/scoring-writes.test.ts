@@ -116,6 +116,8 @@ describe('the grounded-reason rule', () => {
       '[article-suggestion-service] dropped an ungrounded reason',
       expect.objectContaining({ source: 'score', suggestionId: 'a1' }),
     );
+    // Never the note or the title: a warning is a crash-report breadcrumb next to the account.
+    expect((logger.warn as jest.Mock).mock.calls[0][1]).toEqual({ source: 'score', suggestionId: 'a1', reasonChars: FOREIGN.length });
   });
 
   it('saveScoringResult still lands terminal when no note was owed at all', async () => {

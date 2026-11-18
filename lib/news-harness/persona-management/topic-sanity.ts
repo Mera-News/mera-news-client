@@ -170,18 +170,18 @@ export function decodeSanityVerdicts(
   } catch {
     const m = output.match(/\[[\s\S]*\]/);
     if (!m) {
-      logger.warn('[topic-sanity] unparseable verdict output', { output });
+      logger.warn('[topic-sanity] unparseable verdict output', { outputChars: output.length });
       return [];
     }
     try {
       parsed = JSON.parse(m[0]);
     } catch {
-      logger.warn('[topic-sanity] unparseable verdict array', { output });
+      logger.warn('[topic-sanity] unparseable verdict array', { outputChars: output.length });
       return [];
     }
   }
   if (!Array.isArray(parsed)) {
-    logger.warn('[topic-sanity] verdicts were not an array', { output });
+    logger.warn('[topic-sanity] verdicts were not an array', { outputChars: output.length });
     return [];
   }
 
