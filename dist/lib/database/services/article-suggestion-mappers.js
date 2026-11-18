@@ -180,8 +180,8 @@ source) {
   _logger.default.warn('[article-suggestion-service] dropped an ungrounded reason', {
     source,
     suggestionId: row.id,
-    title: (row.titleEn ?? '').slice(0, 80),
-    reason: reason.slice(0, 120)
+    // Never the note or the title: together they say what concerns the person.
+    reasonChars: reason.length
   });
   return '';
 }

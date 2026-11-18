@@ -461,9 +461,8 @@ async function handleIssueWarning(args) {
   const reason = args.reason ?? 'No reason provided';
   const userId = await getStoredUserId();
   if (!userId) {
-    _logger.default.warn('[issueWarning] No userId available — failing open', {
-      reason
-    });
+    // Never the reason: the model writes it from the person's chat.
+    _logger.default.warn('[issueWarning] No userId available — failing open');
     return {
       blocked: false,
       warningCount: 0,
@@ -477,7 +476,6 @@ async function handleIssueWarning(args) {
     // banner updates live) and persist to WatermelonDB (survives restart).
     _userStore.useUserStore.getState().setUserPersona(persona);
     _logger.default.warn('[issueWarning] Warning issued', {
-      reason,
       warningCount: persona.llmWarningCount,
       blocked: persona.blockedByLlm
     });

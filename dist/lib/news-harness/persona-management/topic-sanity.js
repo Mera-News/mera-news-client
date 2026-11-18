@@ -128,7 +128,7 @@ function decodeSanityVerdicts(output, topicIds, logger = _ports.NOOP_LOGGER) {
     const m = output.match(/\[[\s\S]*\]/);
     if (!m) {
       logger.warn('[topic-sanity] unparseable verdict output', {
-        output
+        outputChars: output.length
       });
       return [];
     }
@@ -136,14 +136,14 @@ function decodeSanityVerdicts(output, topicIds, logger = _ports.NOOP_LOGGER) {
       parsed = JSON.parse(m[0]);
     } catch {
       logger.warn('[topic-sanity] unparseable verdict array', {
-        output
+        outputChars: output.length
       });
       return [];
     }
   }
   if (!Array.isArray(parsed)) {
     logger.warn('[topic-sanity] verdicts were not an array', {
-      output
+      outputChars: output.length
     });
     return [];
   }

@@ -217,9 +217,11 @@ function parseTopicsFromOutput(output, factStatement, logger = _ports.NOOP_LOGGE
       }
     }
   }
+
+  // Sizes only: the output and the fact are the person's.
   logger.warn('Topic generation: failed to parse output', {
-    output,
-    factStatement
+    outputChars: output.length,
+    factChars: factStatement.length
   });
   return [];
 }

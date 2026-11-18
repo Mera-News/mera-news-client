@@ -86,8 +86,9 @@ async function searchPlaces(query, limit = 8) {
         service: 'place-service',
         method: 'searchPlaces'
       },
+      // The length, never the place the person typed.
       extra: {
-        query: trimmed,
+        queryChars: trimmed.length,
         limit
       }
     });
