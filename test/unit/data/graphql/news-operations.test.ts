@@ -79,6 +79,7 @@ describe('the operation classes', () => {
       'GetTopHeadlinesForCountry',
       'GetTopHeadlinesForCountryWindowed',
       'GetWorldHeadlines',
+      'NewsServerStatus',
       'PlaceSearch',
       'PublicationDisplayNames',
       'PublicationSourcesForNewsPublisher',
