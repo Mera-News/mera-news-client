@@ -409,9 +409,15 @@ async function removeDeclineLocal(id: string): Promise<void> {
 
 export const removeDecline = command('removeDecline', removeDeclineLocal);
 
-/** Test seam: drop in-memory undo bookkeeping without touching the database. */
-export function __resetPendingForTests(): void {
+/** Drops every staged delete's timer and its bookkeeping, without touching the database. A reset
+ *  calls it: a flush left from before would commit the next account's own staged deletes early. */
+export function cancelPendingDeletes(): void {
   for (const e of pending.values()) if (e.timer) clearTimeout(e.timer);
   pending.clear();
+}
+
+/** Test seam: drop in-memory undo bookkeeping without touching the database. */
+export function __resetPendingForTests(): void {
+  cancelPendingDeletes();
   inFlightFlush = null;
 }

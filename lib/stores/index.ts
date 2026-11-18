@@ -73,6 +73,7 @@ export const clearAllStores = async () => {
     // Work the previous person left waiting goes first: a mute's purge would otherwise run in the
     // next account's database, and a paired phone's unsent display marks are theirs too.
     require('../database/services/publication-pref-ui-actions').cancelPendingPurges();
+    require('../database/services/topic-decline-service').cancelPendingDeletes();
     require('../sync/marks').defaultMarkBatch.takeBatch();
 
     // Wipe all WatermelonDB data (drops and recreates all tables)

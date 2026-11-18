@@ -9,6 +9,7 @@ import {
   UNDO_WINDOW_MIN_MS,
   UNDO_WINDOW_MS,
   __resetPendingForTests,
+  cancelPendingDeletes,
   deleteTopicWithDecline,
   flushPendingDeletes,
   getAllDeclinedNormalizedTexts,
@@ -26,6 +27,7 @@ import {
   observeByFact,
 } from '@/lib/database/services/topic-service';
 import { trackStory } from '@/lib/database/services/tracked-story-service';
+import { clearAllStores } from '@/lib/stores';
 import { useFakeClock, useStrictClock } from '@/test/helpers';
 
 import {
@@ -130,6 +132,33 @@ describe('the undo window, on a clock that only moves when driven', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
   };
+
+  it('a reset drops a staged delete\'s timer: it never flushes the next account\'s own staged delete early', async () => {
+    const { topics: before } = await seedFact('Follows Dutch life', ['Dutch Politics']);
+    useStrictClock(Date.now());
+    await drive(deleteTopicWithDecline(before[0].id));
+    await drive(clearAllStores());
+
+    // The next account stages its own delete with a long window. A flush from the timer left over
+    // would commit every staged row, this one included, at 5 s.
+    const { topics: after } = await drive(seedFact('Follows Italian life', ['Italian Politics']));
+    await drive(deleteTopicWithDecline(after[0].id, { undoWindowMs: 60_000 }));
+    await jest.advanceTimersByTimeAsync(6_000);
+    await settleTimerFlush();
+    expect(await staged(after[0])).toBe(true);
+    expect(await drive(undoPendingDelete(after[0].id))).toBe(true);
+  });
+
+  it('cancelPendingDeletes drops every staged delete\'s timer and is safe with none', async () => {
+    const { topics } = await seedFact('Follows Dutch life', ['Dutch Politics']);
+    useStrictClock(Date.now());
+    await drive(deleteTopicWithDecline(topics[0].id));
+    cancelPendingDeletes();
+    cancelPendingDeletes();
+    await jest.advanceTimersByTimeAsync(6_000);
+    await settleTimerFlush();
+    expect(await staged(topics[0])).toBe(true);
+  });
 
   it('exposes a 5 s default with 1 s and 60 s bounds', () => {
     expect([UNDO_WINDOW_MS, UNDO_WINDOW_MIN_MS, UNDO_WINDOW_MAX_MS]).toEqual([5_000, 1_000, 60_000]);
