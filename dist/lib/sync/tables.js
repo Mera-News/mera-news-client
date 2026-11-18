@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.SyncVersionError = exports.SYNC_TABLES = exports.SHARED_SETTING_KEYS = exports.PROFILE_TABLES = exports.POD_OWNED_SETTING_KEYS = exports.PHONE_WINS_SETTING_KEYS = exports.PHONE_ONLY_TABLES = exports.MARK_TABLES = void 0;
+exports.SyncVersionError = exports.SYNC_TABLES = exports.SHARED_SETTING_KEYS = exports.POD_OWNED_SETTING_KEYS = exports.PHONE_WINS_SETTING_KEYS = exports.PHONE_ONLY_TABLES = exports.MARK_TABLES = void 0;
 exports.assertSameVersions = assertSameVersions;
 exports.isAppliedSettingKey = isAppliedSettingKey;
 exports.isSharedSettingKey = isSharedSettingKey;
@@ -18,9 +18,6 @@ const SYNC_TABLES = exports.SYNC_TABLES = [...['article_suggestions', 'article_s
   name: 'notifications',
   mode: 'merge'
 }, replace('settings')];
-
-/** The tables a person's profile is made of: what a pod's profile is replaced with at pairing. */
-const PROFILE_TABLES = exports.PROFILE_TABLES = ['facts', 'topics', 'declined_topics', 'persona_suppressions', 'locations', 'persona_summary_strings', 'persona_change_log', 'publication_preferences', 'user_publication_subscriptions', 'tracked_stories', 'saved_article_suggestions'];
 
 /** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
 const PHONE_ONLY_TABLES = exports.PHONE_ONLY_TABLES = ['conversations', 'messages', 'user_personas', 'scheduler_jobs', 'inference_jobs', 'translation_cache'];
