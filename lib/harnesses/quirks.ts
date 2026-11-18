@@ -1,5 +1,8 @@
 // Request transforms a model needs and the base harness does not, named in harness.json
-// `params.quirks`. Empty: both shipped Qwen harnesses send exactly what cloud-base sends.
+// `params.quirks`. The gateway never applies quirks; the OpenAI transport does, and the transport
+// sets a private `__enableThinking` on the body for them to read and removes it before sending.
 export type Quirk = (body: Record<string, unknown>) => Record<string, unknown>;
 
-export const QUIRKS: Record<string, Quirk> = {};
+export const QUIRKS: Record<string, Quirk> = {
+  'thinking-off-kwarg': (body) => ({ ...body, chat_template_kwargs: { enable_thinking: body.__enableThinking === true } }),
+};
