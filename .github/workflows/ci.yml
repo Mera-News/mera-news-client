@@ -7,11 +7,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22.13.0', '24.x']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -36,3 +39,52 @@ jobs:
           npx --yes license-checker-rseidelsohn@4.4.2 --production --excludePrivatePackages
           --excludePackages "@nozbe/sqlite@3.46.0"
           --onlyAllow "MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;Zlib;(MIT AND Zlib);CC0-1.0;BlueOak-1.0.0"
+
+  artefact:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: [test, licenses]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/artefact.mjs "$RUNNER_TEMP/artefact"
+      - run: node scripts/artefact-smoke.mjs "$RUNNER_TEMP/artefact"
+      # The dist branch holds only built files and never merges into dev. Each commit keeps the
+      # author, committer and dates of the source commit it was built from.
+      - name: Publish to the dist branch
+        run: |
+          out="$RUNNER_TEMP/dist"
+          git fetch origin dist || true
+          if git rev-parse --verify --quiet origin/dist; then
+            git worktree add "$out" origin/dist
+            git -C "$out" switch -C dist
+          else
+            # The first build: an empty branch. switch --orphan works on every git the runners ship.
+            git worktree add --detach "$out" HEAD
+            git -C "$out" switch --orphan dist
+          fi
+          find "$out" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R "$RUNNER_TEMP/artefact/." "$out/"
+          # Stage the built package by name; anything else in the tree is a build error.
+          git -C "$out" add --all -- package.json dist node types schema.gql LICENSE TRADEMARK.md COMMERCIAL.md README.md
+          if [ -n "$(git -C "$out" status --porcelain --untracked-files=all | grep -v '^[MADR] ')" ]; then
+            echo "unexpected files in the built package"; git -C "$out" status --porcelain; exit 1
+          fi
+          if git -C "$out" diff --cached --quiet; then exit 0; fi
+          export GIT_AUTHOR_NAME="$(git log -1 --format=%an "$GITHUB_SHA")"
+          export GIT_AUTHOR_EMAIL="$(git log -1 --format=%ae "$GITHUB_SHA")"
+          export GIT_AUTHOR_DATE="$(git log -1 --format=%aI "$GITHUB_SHA")"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+          git -C "$out" commit -m "Build ${GITHUB_SHA::7}"
+          git -C "$out" push origin dist
