@@ -2016,7 +2016,9 @@ async function handleRelevanceResults(batch, server, context, io) {
       await (0, _articleSuggestionScoringWrites.saveScoringResult)(id, {
         relevance,
         reason: '',
-        reasonSkipped: skipNotes
+        reasonSkipped: skipNotes,
+        // The Feed orders a band by it, as on the inline path.
+        rawScore: rawRelevanceMap[id]
       });
     } catch (err) {
       if ((0, _inferenceResults.isRecordNotFoundError)(err)) continue;
@@ -2283,7 +2285,8 @@ async function handleReasonResults(batch, server, context) {
           await (0, _articleSuggestionScoringWrites.saveScoringResult)(id, {
             relevance,
             reason,
-            reasonSkipped: false
+            reasonSkipped: false,
+            rawScore: rescored
           });
         } else {
           await (0, _articleSuggestionScoringWrites.saveReason)(id, reason);
