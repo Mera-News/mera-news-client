@@ -517,17 +517,17 @@ describe('buildRelevanceCalls', () => {
 });
 
 describe('buildReasonCallsForSubset', () => {
-  it('returns empty calls when every candidate is under the threshold', async () => {
+  it('returns empty calls when no candidate exceeds the threshold', async () => {
     const rows = await seedAndLoad(['a', 'b']);
-    const result = await buildReasonCallsForSubset(rows, { a: 0.29, b: 0.2 }, 0.3);
+    const result = await buildReasonCallsForSubset(rows, { a: 0.3, b: 0.2 }, 0.3);
     expect(result.calls).toHaveLength(0);
     expect(result.eligibleCandidates).toHaveLength(0);
   });
 
-  it('includes candidates at or above the threshold, as the inline path does', async () => {
-    const rows = await seedAndLoad(['a', 'b', 'c', 'd']);
-    const result = await buildReasonCallsForSubset(rows, { a: 0.5, b: 0.3, c: 0.31, d: 0.29 }, 0.3);
-    expect(result.eligibleCandidates.map((c) => c.id).sort()).toEqual(['a', 'b', 'c']);
+  it('includes only candidates whose relevance STRICTLY exceeds the threshold', async () => {
+    const rows = await seedAndLoad(['a', 'b', 'c']);
+    const result = await buildReasonCallsForSubset(rows, { a: 0.5, b: 0.3, c: 0.31 }, 0.3);
+    expect(result.calls.map((c) => c.id).sort()).toEqual(['reason:0', 'reason:1']);
   });
 
   it('skips ineligible candidates (no title)', async () => {

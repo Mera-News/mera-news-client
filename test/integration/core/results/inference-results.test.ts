@@ -679,7 +679,7 @@ describe('REASON_RELEVANCE_THRESHOLD', () => {
     expect(REASON_RELEVANCE_THRESHOLD).toBe(0.4);
   });
 
-  it('is the gate the inline scoring path uses, so both paths owe a note to the same rows', () => {
+  it('is the same number as the inline scoring path\'s gate (the gateway path compares strictly, the inline path inclusively)', () => {
     expect(DEFAULT_HARNESS_CONFIG.articlePipeline.reasonRelevanceThreshold).toBe(REASON_RELEVANCE_THRESHOLD);
   });
 });
