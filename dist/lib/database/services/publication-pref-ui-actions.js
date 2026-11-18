@@ -3,6 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.cancelPendingPurges = cancelPendingPurges;
 exports.commitSourcePrefPurge = void 0;
 exports.getPublisherPrefLevel = getPublisherPrefLevel;
 exports.setSourcePrefFromUi = exports.revertSourcePrefChange = void 0;
@@ -123,6 +124,15 @@ async function commitSourcePrefPurgeLocal(changeLogId) {
   pendingPurges.delete(changeLogId);
   clearTimeout(pending.timer);
   await pending.run();
+}
+
+/** Drops every waiting purge and its timer. A reset calls it, so a purge belonging to the person who
+ *  logged out never runs in the next account's database, and no timer outlives its owner. */
+function cancelPendingPurges() {
+  for (const {
+    timer
+  } of pendingPurges.values()) clearTimeout(timer);
+  pendingPurges.clear();
 }
 
 /** Runs the purge a mute left waiting, once. An id with nothing waiting does nothing. */
