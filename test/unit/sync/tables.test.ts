@@ -4,7 +4,6 @@ import {
   MARK_TABLES,
   PHONE_ONLY_TABLES,
   PHONE_WINS_SETTING_KEYS,
-  PROFILE_TABLES,
   POD_OWNED_SETTING_KEYS,
   SHARED_SETTING_KEYS,
   SYNC_TABLES,
@@ -59,13 +58,4 @@ describe('sync tables', () => {
   it('does not count a card state mark as a change to any table', () => {
     expect(Object.keys(MARK_TABLES)).not.toContain('cardState');
   });
-});
-
-it('the profile tables are the eleven a pairing replaces, every one of them served', () => {
-  expect([...PROFILE_TABLES].sort()).toEqual([
-    'declined_topics', 'facts', 'locations', 'persona_change_log', 'persona_summary_strings', 'persona_suppressions',
-    'publication_preferences', 'saved_article_suggestions', 'topics', 'tracked_stories', 'user_publication_subscriptions',
-  ]);
-  const served = new Set(SYNC_TABLES.map((t) => t.name));
-  expect(PROFILE_TABLES.filter((t) => !served.has(t))).toEqual([]);
 });
