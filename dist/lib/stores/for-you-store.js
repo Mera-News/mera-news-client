@@ -11,13 +11,13 @@ var _articleSuggestionLifecycle = require("../database/services/article-suggesti
 var _articleSuggestionStatus = require("../database/article-suggestion-status");
 var _factRowsSelector = require("./fact-rows-selector");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
-// TYPE-ONLY, and that is what makes it safe: scoring-pipeline reaches this
+var cache;
+function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; } // TYPE-ONLY, and that is what makes it safe: scoring-pipeline reaches this
 // store through a lazy `require` inside pushUiProgress precisely to avoid a
 // load-time cycle, and a type import is erased before any of that runs. It is
 // preferred over a second structural copy here (which is what
 // `PipelineBatchProgress` below is) because the chunk projection's shape is
 // owned by the module that computes it and two copies can only drift.
-
 // The render gate — the single source of truth the pre-filters below are kept
 // in lockstep with, rather than a second hardcoded copy of the cutoff. Only a
 // type import flows the other way (fact-rows-selector takes `ForYouSuggestion`
@@ -28,7 +28,6 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
 // header's "N relevant" sentence, so comparing them against a different gate
 // than the feed renders at is exactly the documented incident where the header
 // advertised rows the feed then refused to show (see FEED_WINDOW_MS).
-
 /** Article-keyed feed row hydrated from local WatermelonDB. Populated by the
  *  sync service from articlesForTopicsByIds, with client-side scoring fields.
  *
@@ -361,7 +360,7 @@ const useForYouStore = exports.useForYouStore = (0, _zustand.create)()((set, get
         getPipelineBatchProgress,
         getPipelineChunkStates,
         getReasonsInFlightIds
-      } = await import("../services/scoring-pipeline");
+      } = await Promise.resolve().then(() => _interopRequireWildcard(require("../services/scoring-pipeline")));
       const [meta, pipelineUi, batchProgress, chunkStates, reasonsInFlightIds] = await Promise.all([(0, _articleSuggestionLifecycle.loadFeedMetadata)(), getPipelineUiState(), getPipelineBatchProgress(), getPipelineChunkStates(),
       // Seeded at boot like the progress fields, so a cold open after
       // a background run shows its pending notes as being written on

@@ -37,16 +37,13 @@ var _retry = require("../../utils/retry");
 var _idle = require("../idle");
 var _trackedStoryReconcile = require("./tracked-story-reconcile");
 var _trackActions = require("../../tracking/track-actions");
-var cache;
-function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; }
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
-// Individual steps of the feed sync flow, extracted from SuggestionSyncService.
+var cache;
+function _interopRequireWildcard(e, t) { if (!t && e && e.__esModule) return e; var r, c, a = Object.defineProperty, n = { __proto__: null, default: e }; if (Object(e) !== e) return n; if (cache || "function" != typeof WeakMap || (cache = new WeakMap()), cache) { if (cache.has(e)) return cache.get(e); cache.set(e, n); } for (c in e) "default" !== c && {}.hasOwnProperty.call(e, c) && ((r = a && Object.getOwnPropertyDescriptor(e, c)) && (r.get || r.set) ? a(n, c, r) : n[c] = e[c]); return n; } // Individual steps of the feed sync flow, extracted from SuggestionSyncService.
 // Each step is a pure async function that can be aborted via AbortSignal.
-
 // The ONE admission predicate ("may this row enter scoring"), shared with the
 // enqueue path and the bundle builders so a headline cannot be admitted by one
 // and dropped by another.
-
 /**
  * Retries for the ArticleService calls below. ONE, not three, and not zero.
  *
@@ -1041,7 +1038,7 @@ async function stepScore(ctx) {
   if (ctx.signal.aborted) throw (0, _retry.createCancellationError)();
   const {
     runScoringPass
-  } = await import("../../services/SuggestionSyncService");
+  } = await Promise.resolve().then(() => _interopRequireWildcard(require("../../services/SuggestionSyncService")));
   return runScoringPass();
 }
 
