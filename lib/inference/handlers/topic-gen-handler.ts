@@ -265,7 +265,12 @@ async function runTopicGen(payload: TopicGenPayload): Promise<TopicGenResult> {
     // later without spending an attempt, and the fact stays pending.
     if (isOnDeviceDeferrable(err) || isDeferrableError(err)) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    logger.warn('[topic-gen] run failed', { factId: payload.factId, message });
+    // The kind and status only: a gateway error carries the provider's body, which can echo the request.
+    logger.warn('[topic-gen] run failed', {
+      factId: payload.factId,
+      error: err instanceof Error ? err.name : typeof err,
+      status: (err as { statusCode?: unknown } | null)?.statusCode,
+    });
     // Generate more and a scheduled retry change nothing: the fact's topics and
     // its status are not this run's to touch, and an error is never an empty.
     if (!append && !background) {
@@ -294,8 +299,8 @@ async function runTopicGen(payload: TopicGenPayload): Promise<TopicGenResult> {
   }
 
   const topics = freshTopics(generated, ownTopics, declined);
-  // Persona content, so DEBUG only: console under EXPO_PUBLIC_VERBOSE_LOGS, a breadcrumb in dev builds, nothing in prod.
-  logger.debug('[topic-gen] generated', { fact: fact.statement, returned: generated, kept: topics });
+  // Counts only: a debug line is a breadcrumb in development builds and on anyone's console.
+  logger.debug('[topic-gen] generated', { factId: payload.factId, returned: generated.length, kept: topics.length });
   if (topics.length > 0) {
     await completeTopicGeneration(payload.factId, topics);
     useFloatingChatStore.getState().notifyFactMutation();

@@ -327,6 +327,30 @@ describe('cloud: the skill core, isolated', () => {
       expect(captured).not.toHaveBeenCalled();
     });
 
+    it('a failed run logs the error\'s kind and status, never its text or the fact', async () => {
+      const fact = await emptied();
+      const warn = jest.spyOn(logger, 'warn');
+      const debug = jest.spyOn(logger, 'debug');
+      server.use(...mockGateway(() => ({ status: 400, body: { error: 'echoed: paediatric nurse' } })));
+
+      await run({ factId: fact.id, factStatement: JOB, useCloud: true, background: true });
+
+      const failed = warn.mock.calls.find(([m]) => m === '[topic-gen] run failed');
+      expect(failed?.[1]).toEqual({ factId: fact.id, error: 'Error', status: 400 });
+      expect(JSON.stringify([warn.mock.calls, debug.mock.calls])).not.toMatch(/paediatric|nurse/i);
+    });
+
+    it('a generated run logs counts, never the fact', async () => {
+      const nurse = await pendingFact(JOB);
+      const debug = jest.spyOn(logger, 'debug');
+      reply('["NHS staffing"]');
+
+      await run({ factId: nurse.id, factStatement: JOB, useCloud: true });
+
+      expect(debug).toHaveBeenCalledWith('[topic-gen] generated', expect.objectContaining({ factId: nurse.id }));
+      expect(JSON.stringify(debug.mock.calls)).not.toMatch(/paediatric/i);
+    });
+
     it('a blank background ladder counts as unreadable, so its retries end', async () => {
       const fact = await emptied();
       reply('   ');
