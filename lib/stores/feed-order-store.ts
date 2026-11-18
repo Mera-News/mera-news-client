@@ -211,7 +211,7 @@ function storyKeysOf(item: FeedListItem): string[] {
   return keys;
 }
 
-function serializeCardState(cardStates: Record<string, CardStateRecord>): string {
+export function serializeCardState(cardStates: Record<string, CardStateRecord>): string {
   const states: Record<string, WireState> = {};
   for (const [id, r] of Object.entries(cardStates)) {
     states[id] = r.keys?.length ? [r.state === 'viewed' ? 'v' : 's', r.at, r.keys] : [r.state === 'viewed' ? 'v' : 's', r.at];

@@ -1,5 +1,6 @@
 import type { RecordPublicationVisitInput } from '../database/services/publication-visit-service';
 import type { RecordImpressionInput } from '../database/services/story-impression-service';
+import { platform } from '../platform';
 import { MARK_TABLES } from './tables';
 
 export interface MarksBatch {
@@ -68,4 +69,9 @@ export type MarkBatch = ReturnType<typeof createMarkBatch>;
 
 /** The batch the app's mark writers append to. */
 export const defaultMarkBatch: MarkBatch = createMarkBatch();
-export const recordMark = defaultMarkBatch.recordMark;
+
+/** Holds a mark for the pod. Only a phone paired to a pod sends marks, so anywhere else nothing is
+ *  kept: nothing would ever take the batch, and it would grow for the life of the process. */
+export function recordMark<K extends MarkInput['kind']>(kind: K, payload: Extract<MarkInput, { kind: K }>['payload']): void {
+  if (platform('lib/sync/marks').podCommand) defaultMarkBatch.recordMark(kind, payload as never); // same signature; TS cannot relate the two generic payloads
+}

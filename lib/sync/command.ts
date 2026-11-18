@@ -5,7 +5,7 @@ import database from '../database';
 import { platform, type PlatformHost } from '../platform';
 
 /** An integer, so the older side of a mismatch can be told. Bumped by hand whenever a command is added, removed or renamed; a hash test pins the names. */
-export const COMMAND_REGISTRY_VERSION = 2;
+export const COMMAND_REGISTRY_VERSION = 3;
 
 export class CommandArgumentsError extends Error {
   constructor(readonly command: string, detail: string) {

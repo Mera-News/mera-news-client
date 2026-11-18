@@ -14,6 +14,7 @@ const hash = createHash('sha256').update(names.join('\n')).digest('hex').slice(0
 const PINNED: Record<number, string> = {
   1: '2110780830d5943d',
   2: '2e2fa9f2017bb8e1',
+  3: '099b442f530aab1d',
 };
 
 it('pins the names of the current version', () => {

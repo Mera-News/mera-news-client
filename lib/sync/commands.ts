@@ -3,7 +3,7 @@
 //
 // Writers that are deliberately not registered:
 // - recordOpen, recordPublicationVisit, markSeen, advanceSeenWatermark and the feed card state are
-//   display marks. They write here first and travel in the batch of marks (lib/sync/marks).
+//   display marks. They write on the phone first and travel in one `marks` command (below).
 // - setWeight in location-service is only called inside registered writers, which run on the pod.
 // - replaceFact, removeEmptyFact, untrackStory, keepArticleForTrackedStory and removeArticleFeedback
 //   are only called inside registered writers or by tasks the pod runs itself.
@@ -34,13 +34,26 @@ import { saveSuggestion, saveStandaloneArticle, moveSavedToList, deleteSavedSugg
 import { commitSourcePrefPurge, setSourcePrefFromUi, revertSourcePrefChange } from '../database/services/publication-pref-ui-actions';
 import { upsertSubscription, declinePublisher } from '../database/services/user-publication-subscription-service';
 import { recordVerdictFeedback, recordFeedbackAnswer } from '../database/services/article-feedback-service';
-import { clearAllImpressions } from '../database/services/story-impression-service';
-import { clearAllVisits } from '../database/services/publication-visit-service';
+import { clearAllImpressions, recordOpen } from '../database/services/story-impression-service';
+import { clearAllVisits, recordPublicationVisit } from '../database/services/publication-visit-service';
+import { advanceSeenWatermark, markSeen } from '../database/services/tracked-story-service';
+import { FEED_CARD_STATE_SETTING_KEY, serializeCardState } from '../stores/feed-order-store';
+import type { MarksBatch } from './marks';
 
 export { COMMAND_REGISTRY_VERSION } from './command';
 
 /** Asks the pod for a read. Answers `paused` without starting one while reads are paused. */
 export const resync = command('resync', () => AppScheduler.trigger('feed-sync'));
+
+/** Applies a phone's batch of display marks through the same writers, in the order they were made. */
+async function applyMarks(batch: MarksBatch): Promise<void> {
+  for (const open of batch.opens) await recordOpen(open);
+  for (const visit of batch.visits) await recordPublicationVisit(visit);
+  for (const id of batch.seen) await markSeen(id);
+  for (const { id, ms } of batch.watermarks) await advanceSeenWatermark(id, ms);
+  if (batch.cardState) await setSetting(FEED_CARD_STATE_SETTING_KEY, serializeCardState(batch.cardState as Parameters<typeof serializeCardState>[0]));
+}
+export const marks = command('marks', applyMarks);
 
 export const COMMANDS = {
   acceptProposal,
@@ -65,6 +78,7 @@ export const COMMANDS = {
   disownStoryMember,
   generateMoreTopicsForFact,
   markFactPlacesWrong,
+  marks,
   moveSavedToList,
   nudgeFactWeight,
   patchMetadata,

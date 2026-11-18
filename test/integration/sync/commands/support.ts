@@ -85,6 +85,13 @@ export const CALLS: Record<string, (c: Ctx) => unknown[]> = {
   updateFact: (c) => [c.factId, { statement: 'Follows chess openings' }],
   setFactPlaces: (c) => [c.factId, ['Oslo'], 'user'],
   markFactPlacesWrong: (c) => [c.factId],
+  marks: (c) => [{
+    opens: [{ articleId: c.suggestion.articleId, surface: 'feed' }],
+    visits: [{ publicationName: 'Seed Pub' }],
+    seen: [c.storyId],
+    watermarks: [{ id: c.storyId, ms: 1_791_547_206_000 }],
+    cardState: { [c.suggestion.articleId]: { state: 'viewed', at: 1_791_547_206_000 } },
+  }],
   stopNewsForFact: (c) => [c.factId],
   removeFailedChatFact: (c) => [c.factId, 'Follows chess', { inOwnJob: true }],
   patchMetadata: (c) => [c.factId, { interests: ['chess'] }],

@@ -1,4 +1,5 @@
 // The five display writers stay local and each adds one entry to the mark batch.
+import database from '@/lib/database';
 import { defaultMarkBatch } from '@/lib/sync/marks';
 import { recordOpen } from '@/lib/database/services/story-impression-service';
 import { recordPublicationVisit } from '@/lib/database/services/publication-visit-service';
@@ -47,4 +48,13 @@ it('a card state persist sets the card state, last value wins', async () => {
   useFeedOrderStore.getState().markViewed('c1', 1_800_000_000_000);
   useFeedOrderStore.getState().flushPersist();
   expect(taken()).toMatchObject({ cardState: { c1: { state: 'viewed' } } });
+});
+
+it('with no pod paired a mark writer still writes, and holds no mark, since nothing would ever take it', async () => {
+  delete testHost.podCommand;
+  await recordOpen({ articleId: 'a2', surface: 'feed' });
+  await recordPublicationVisit({ publicationName: 'Die Zeit', countryCode: 'DE', articleId: 'a2' });
+  expect(defaultMarkBatch.hasPending()).toBe(false);
+  const impressions = await database.get('story_impressions').query().fetch();
+  expect(impressions.some((r: any) => r.articleId === 'a2')).toBe(true);
 });
