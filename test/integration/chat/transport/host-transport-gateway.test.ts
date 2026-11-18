@@ -21,6 +21,11 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 40; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
+/** Waits for a request the negative controls must see; a slow machine needs more than a few turns. */
+async function eventually(cond: () => boolean, ms = 5_000): Promise<void> {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
 /** Requests that reached the gateway's search route, whether or not the mock recorded them. */
 function watchSearchRequests(): () => number {
   let n = 0;
@@ -110,7 +115,7 @@ describe('without a host transport', () => {
   it('prewarm reaches the gateway', async () => {
     server.use(...mockGateway(() => 'unexpected'));
     prewarmCloudChat({ ping: true });
-    await flush();
+    await eventually(() => attestationRequests() + gatewayCalls().length > 0);
     expect(attestationRequests() + gatewayCalls().length).toBeGreaterThan(0);
   });
 
