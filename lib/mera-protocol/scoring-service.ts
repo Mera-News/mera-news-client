@@ -10,7 +10,7 @@
 
 import { completeLocal } from '../llm/completeLocal';
 import { isOnDeviceDeferrable } from '../inference/job-defer';
-import { cloudComplete, cloudBatchComplete } from '../llm/cloudComplete';
+import { cloudComplete, cloudBatchComplete, transportServesJobs } from '../llm/cloudComplete';
 import logger from '../logger';
 import {
   CLOUD_RELEVANCE_SYSTEM_PROMPT,
@@ -915,7 +915,8 @@ async function scoreUnscoredRows(
   const totalUnscored = await countUnscoredSuggestions();
   if (totalUnscored === 0) {
     onProgress?.(0, 0);
-    if (isOnDeviceMode()) await sweepNotes(batchSize);
+    // In the cloud the async orphaned-reasons sweep owes these notes; with no jobs, this pass does.
+    if (isOnDeviceMode() || !transportServesJobs()) await sweepNotes(batchSize);
     return 0;
   }
 

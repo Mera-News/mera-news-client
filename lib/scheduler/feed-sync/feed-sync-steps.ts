@@ -949,7 +949,10 @@ export async function stepHydratePersistEnqueue(
   // run, like the other run-scoped inputs above.
   const onDeviceScoring =
     useMeraProtocolStore.getState().processingMode === ProcessingMode.OnDevice;
-  const cloudEnqueue = !opts.suppressEnqueue && !onDeviceScoring;
+  // A transport with no async jobs scores inline in stepScore, the same way.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { transportServesJobs } = require('@/lib/llm/cloudComplete') as typeof import('@/lib/llm/cloudComplete');
+  const cloudEnqueue = !opts.suppressEnqueue && !onDeviceScoring && transportServesJobs();
 
   // Already-read index: ONE read of `story_impressions` for the whole run,
   // shared by the pre-persist screen (per chunk) and the unscored-backfill

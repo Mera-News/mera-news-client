@@ -119,6 +119,17 @@ class _AppScheduler {
     this.tasks.set(definition.name, definition as TaskDefinition);
   }
 
+  /** Changes a registered task's cadence or run timeout; the next tick and run use the new values. */
+  configureTask(name: string, change: { frequency?: number; timeout?: number }): void {
+    const task = this.tasks.get(name);
+    if (!task) throw new Error(`[AppScheduler] no task named ${name}`);
+    this.tasks.set(name, {
+      ...task,
+      ...(change.frequency !== undefined && { frequency: change.frequency }),
+      ...(change.timeout !== undefined && { timeout: change.timeout }),
+    });
+  }
+
   /** Temporarily stop a task from firing (tick, foreground, network, trigger)
    *  without disposing the scheduler. Idempotent. */
   pauseTask(name: string): void {

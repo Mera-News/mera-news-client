@@ -1,7 +1,8 @@
 // cloudComplete — cloud LLM completion, batch completion, and streaming chat: the three calls
 // every caller makes, and their request types. Each one hands the call to the transport
-// (LlmTransport below); today that is Mera's inference gateway (gateway-transport.ts), where the
-// router, the profiles, the rate limiter, end-to-end encryption and the async jobs live.
+// (LlmTransport below): the host's own when it brings one, else Mera's inference gateway
+// (gateway-transport.ts), where the router, the profiles, the rate limiter, end-to-end encryption
+// and the async jobs live.
 
 import type { CloudPurpose } from './on-device-gate';
 import type { BatchCall, ToolDefinition } from './types';
@@ -10,6 +11,7 @@ import type { CloudCallOptions } from './gateway-fetch';
 import type { Lane } from './router';
 import type { SseEvent } from './chat-response';
 import { gatewayTransport } from './gateway-transport';
+import { platform } from '@/lib/platform';
 
 // Everything that moved out is re-exported, so this module's export list is unchanged.
 export {
@@ -47,6 +49,18 @@ export interface LlmTransport {
   batch(calls: BatchCall[], route: Lane, options: CloudCallOptions): Promise<BatchCompletionResult[]>;
   /** One chat leg as events. Nothing runs until the first `next()`. */
   chat(request: CloudChatStreamRequest): AsyncGenerator<SseEvent>;
+  /** False: this transport cannot run the gateway's async jobs, so scoring calls `batch` inline. */
+  asyncJobs?: false;
+}
+
+/** The host's transport when it brings one, else Mera's gateway. Read at every call. */
+function transport(): LlmTransport {
+  return platform('llm-transport').llmTransport ?? gatewayTransport;
+}
+
+/** Whether scoring may submit async inference jobs to the active transport. */
+export function transportServesJobs(): boolean {
+  return transport().asyncJobs !== false;
 }
 
 export interface CloudCompleteRequest {
@@ -70,7 +84,7 @@ export function cloudComplete(
   request: CloudCompleteRequest,
   options: CloudCallOptions = {},
 ): Promise<string> {
-  return gatewayTransport.complete(request, options);
+  return transport().complete(request, options);
 }
 
 /** Batch completion: many calls in one request where the transport can, results in item order. */
@@ -79,7 +93,7 @@ export function cloudBatchComplete(
   route: Lane = 'background',
   options: CloudCallOptions = {},
 ): Promise<BatchCompletionResult[]> {
-  return gatewayTransport.batch(calls, route, options);
+  return transport().batch(calls, route, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,5 +158,5 @@ export interface CloudChatStreamRequest {
 
 /** Streaming chat: one leg of a chat turn as events (see the gateway transport for the detail). */
 export function cloudChatStream(request: CloudChatStreamRequest): AsyncGenerator<SseEvent> {
-  return gatewayTransport.chat(request);
+  return transport().chat(request);
 }

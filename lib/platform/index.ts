@@ -18,6 +18,7 @@ import type { DecisionRequest, DecisionResult } from 'llama.rn';
 import type { i18n as I18n } from 'i18next';
 import type { InferParams, InferResult, TextEngine } from '../mera-protocol-toolkit/types';
 import type { JsonSchema } from '../mera-protocol-toolkit/core/structured-json';
+import type { LlmTransport } from '../llm/cloudComplete';
 
 // --- Shapes (each one the subset of the module it replaces that the package uses) ----------------
 
@@ -233,6 +234,12 @@ export interface PlatformHost {
    *   all three), retry once, then throw `ERR_STRUCTURED_OUTPUT`.
    */
   onDeviceModel?: OnDeviceModel;
+
+  /**
+   * Where cloud model calls go. Left out, they go to Mera's inference gateway. Read at every call.
+   * A transport with `asyncJobs: false` makes scoring run inline through its `batch`.
+   */
+  llmTransport?: LlmTransport;
 
   recordForeground?(at: number): Promise<void>;
   runKeychainAccessibilityMigration?(): Promise<KeychainMigrationOutcome>;

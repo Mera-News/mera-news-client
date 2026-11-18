@@ -11,6 +11,7 @@ import type {
 import { classifyScoringError } from '@/lib/services/scoring-error';
 import logger from '@/lib/logger';
 import { processAllUnscored } from '@/lib/mera-protocol/scoring-service';
+import { transportServesJobs } from '@/lib/llm/cloudComplete';
 import { runBackgroundCycle } from '@/lib/background/run-inference-handler';
 import { useForYouStore } from '@/lib/stores/for-you-store';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
@@ -31,7 +32,8 @@ export async function runScoringPass(batchSize = 20): Promise<number> {
   const onDevice =
     useMeraProtocolStore.getState().processingMode === ProcessingMode.OnDevice;
 
-  if (!onDevice) {
+  // A transport with no async jobs scores inline below, like the phone does.
+  if (!onDevice && transportServesJobs()) {
     const setScoringError = useForYouStore.getState().setScoringError;
 
     const result = await runBackgroundCycle('scoring-pass');
