@@ -23,7 +23,9 @@ function createSyncSession(options) {
   const {
     local
   } = options;
-  const known = {};
+  const known = {
+    ...options.initialHashes
+  };
   let touched = new Set();
   let queue = Promise.resolve();
 
@@ -37,6 +39,7 @@ function createSyncSession(options) {
 
   // With a pod paired, a local write to a served table is replaced by the next pull, so it is a bug.
   let applying = false;
+  const MERGE_TABLES = new Set(_tables.SYNC_TABLES.filter(t => t.mode === 'merge').map(t => t.name));
   const strayTables = _tables.SYNC_TABLES.map(t => t.name).filter(n => n !== 'settings' && !Object.values(_tables.MARK_TABLES).includes(n));
   // Watched from the start and judged when a change arrives: the app sets the sink after it creates
   // the session, since the sink is this session's `command`.
@@ -44,9 +47,13 @@ function createSyncSession(options) {
   const watch = _database.default.withChangesForTables(strayTables).subscribe(changes => {
     if (applying || !changes?.length || !(0, _platform.platform)('lib/sync/session').podCommand) return;
     for (const {
-      record
+      record,
+      type
     } of changes) {
       const table = record.constructor.table;
+      // A row the phone deletes from a merge table stays deleted (the merge never re-adds it), so a
+      // prune is safe. A create or an update there, or any write to a replace table, is not.
+      if (type === 'destroyed' && MERGE_TABLES.has(table)) continue;
       if (reported.has(table)) continue;
       reported.add(table);
       _logger.default.warn(`a local write to ${table} in pod mode will be replaced by the next pull`);

@@ -7,9 +7,11 @@ exports.applySnapshot = applySnapshot;
 var _watermelondb = require("@nozbe/watermelondb");
 var _RawRecord = require("@nozbe/watermelondb/RawRecord");
 var _database = _interopRequireDefault(require("../database"));
-var _schema = _interopRequireDefault(require("../database/schema"));
 var _tables = require("./tables");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+// Whatever a server sends, only these are ever written: a phone's own tables (its chats among them) are not.
+const SYNCED = new Set(_tables.SYNC_TABLES.map(t => t.name));
+
 // Local to the phone and never served: the ids of the notifications the last applied snapshot held.
 // A served row the phone lacks but has seen before was deleted on the phone. Ids, not times: the
 // pod stamps a notification with its wall clock, which can step back.
@@ -27,7 +29,7 @@ async function applySnapshot(snapshot, options) {
   await _database.default.write(async () => {
     const prepared = [];
     for (const [name, table] of Object.entries(snapshot.tables)) {
-      if (!table.rows || options.skip?.has(name) || !(name in _schema.default.tables)) continue;
+      if (!table.rows || options.skip?.has(name) || !SYNCED.has(name)) continue;
       const col = collection(name);
       let seen = new Set();
       if (name === 'notifications') {
@@ -104,7 +106,7 @@ async function applySnapshot(snapshot, options) {
 // Checked before anything is prepared, so a bad snapshot fails with every table untouched.
 function assertRowsUsable(snapshot) {
   for (const [name, table] of Object.entries(snapshot.tables)) {
-    if (!table.rows || name === 'settings' || !(name in _schema.default.tables)) continue;
+    if (!table.rows || name === 'settings' || !SYNCED.has(name)) continue;
     const ids = new Set();
     for (const row of table.rows) {
       if (typeof row.id !== 'string' || row.id === '' || ids.has(row.id)) throw new Error(`Snapshot table ${name} has a missing or repeated row id`);
