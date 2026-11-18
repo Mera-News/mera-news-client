@@ -104,6 +104,8 @@ export interface ComputeAndScoreOptions {
   nowMs?: number;
   /** Full fact-bank statements — used by the legacy score call. */
   factStatements?: string[];
+  /** YYYY-MM-DD for the score call's "Today:" line; omitted, no line. */
+  today?: string;
   logger?: HarnessLogger;
   /** Skip the LLM round trip entirely and let every math score stand. Used by
    *  the deterministic math-only eval. (Was `skipJudge`; it now skips the only
@@ -249,6 +251,9 @@ export async function computeAndScore(
         chunkItems.map((c) => c.legacy!),
         facts,
         pipe.relevanceSystemPrompt,
+        pipe,
+        undefined,
+        opts.today,
       );
       return {
         id: `score:${idx}`,

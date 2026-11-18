@@ -54,6 +54,7 @@ import {
   type LocationRuleContext,
 } from '@/lib/news-harness/scoring-engine/location-rule';
 import { factLineWithPlaces, factPlaces } from '@/lib/news-harness/persona-management/fact-places';
+import { localDay, withAddedDate } from '@/lib/news-harness/article-pipeline/scoring';
 import { countriesInBloc } from '@/lib/place-service';
 import { Q } from '@nozbe/watermelondb';
 import database from '@/lib/database';
@@ -317,12 +318,15 @@ export function buildStageCandidates(
   }));
 }
 
-/** The fact bank: plain statements for Kev, place-named lines for the cloud prompts. */
-async function loadAllFactStatements(withPlaces: boolean): Promise<string[]> {
+/** The fact bank: plain statements for Kev; for the cloud prompts, place-named lines that end with
+ *  the day each fact was saved, so a trip can end. Every scoring path reads it from here. */
+export async function loadAllFactStatements(withPlaces = true): Promise<string[]> {
   const facts = await getFacts();
   return facts
     .filter((f) => typeof f.statement === 'string' && f.statement.trim().length > 0)
-    .map((f) => (withPlaces ? factLineWithPlaces(f) : f.statement));
+    .map((f) =>
+      withPlaces ? withAddedDate(factLineWithPlaces(f), f.createdAt ? Date.parse(f.createdAt) : null) : f.statement,
+    );
 }
 
 /**
@@ -468,6 +472,8 @@ export async function computeAndScoreForCandidates(
       relevanceScorer: onDevice ? scoreWithKev : undefined,
       nowMs: opts?.nowMs,
       factStatements,
+      // The day the reader is living in: with each fact's added date, it lets a trip end.
+      today: onDevice ? undefined : localDay(opts?.nowMs ?? Date.now()),
       logger: appHarnessLogger,
       skipLlm: opts?.skipLlm,
     },

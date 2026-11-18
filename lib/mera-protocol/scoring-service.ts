@@ -35,8 +35,6 @@ import {
   getUnscoredSuggestionsWithFacts,
   type ScoringCandidate,
 } from '../database/services/article-suggestion-reads';
-import { factLineWithPlaces } from '@/lib/news-harness/persona-management/fact-places';
-import { getFacts } from '../database/services/fact-service';
 import { isCulledHeadlineRelevance } from '../feed-ordering/importance-filter';
 import { useMeraProtocolStore } from '../stores/mera-protocol-store';
 import { ProcessingMode } from '../generated/graphql-types';
@@ -49,7 +47,6 @@ import {
   buildPublicationLabel,
   buildUserContext,
   localDay,
-  withAddedDate,
   isEligible,
   relatedFactLine,
   isScorableCandidate,
@@ -81,7 +78,7 @@ import type {
   DecodedResults,
   ScoringResult,
 } from '@/lib/news-harness/article-pipeline/scoring';
-import { computeAndScoreForCandidates } from './stage-scoring';
+import { computeAndScoreForCandidates, loadAllFactStatements } from './stage-scoring';
 import { yieldToInteractions } from '@/lib/scheduler/idle';
 import {
   copyNoteToSiblings,
@@ -141,15 +138,6 @@ const SCORE_BATCH_MAX_TOKENS = ARTICLE_CFG.scoreBatchMaxTokens;
 
 // --- Fact loading ---
 
-/** The fact bank. Cloud prompts get place-named lines; the on-device note keeps plain statements. */
-async function loadAllFactStatements(withPlaces = true): Promise<string[]> {
-  const facts = await getFacts();
-  return facts
-    .filter((f) => typeof f.statement === 'string' && f.statement.trim().length > 0)
-    .map((f) =>
-      withPlaces ? withAddedDate(factLineWithPlaces(f), f.createdAt ? Date.parse(f.createdAt) : null) : f.statement,
-    );
-}
 
 // --- Batch scoring + reason generation ---
 //
