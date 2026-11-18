@@ -57,6 +57,7 @@ import {
   type FeedbackAnswer,
 } from '../../news-harness/persona-management/feedback-digest';
 import type { SystemMistakeView } from '../../news-harness/core/types';
+import { command } from '../../sync/command';
 
 const articleFeedbackCol = database.get<ArticleFeedbackModel>('article_feedback');
 
@@ -318,7 +319,7 @@ export type VerdictSentiment = 'like' | 'dislike';
  * `recordArticleFeedback` so the card action rows (which allow like + dislike to
  * coexist independently) keep their existing behavior.
  */
-export async function recordVerdictFeedback(
+async function recordVerdictFeedbackLocal(
   input: RecordArticleFeedbackInput & { sentiment: VerdictSentiment },
 ): Promise<void> {
   const articleId = (input.articleId ?? '').trim();
@@ -327,6 +328,8 @@ export async function recordVerdictFeedback(
   await removeArticleFeedback(articleId, opposite);
   await recordArticleFeedback(input);
 }
+
+export const recordVerdictFeedback = command('recordVerdictFeedback', recordVerdictFeedbackLocal);
 
 /**
  * Merges a feedback-tree path into an existing verdict row's `context_json`
@@ -608,7 +611,7 @@ async function rewriteSnapshot(
  * never applies a tap a second time. A row whose answers applied nothing stays
  * open for the digest, which reads only `cause === 'config'`.
  */
-export async function recordFeedbackAnswer(
+async function recordFeedbackAnswerLocal(
   articleId: string,
   answer: FeedbackAnswer,
   opts: { applied: boolean; factId?: string | null },
@@ -629,6 +632,8 @@ export async function recordFeedbackAnswer(
     'recordAnswer',
   );
 }
+
+export const recordFeedbackAnswer = command('recordFeedbackAnswer', recordFeedbackAnswerLocal);
 
 /**
  * Removes the last `count` answers (the summary toast's Undo: the session's

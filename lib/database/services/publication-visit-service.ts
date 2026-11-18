@@ -8,6 +8,8 @@ import { Q } from '@nozbe/watermelondb';
 import database from '../index';
 import logger from '../../logger';
 import type PublicationVisitModel from '../models/PublicationVisit';
+import { command } from '../../sync/command';
+import { recordMark } from '../../sync/marks';
 
 const publicationVisitsCol = database.get<PublicationVisitModel>('publication_visits');
 
@@ -95,6 +97,7 @@ export async function recordPublicationVisit(
         r.visitedAt = now;
       });
     });
+    recordMark('visit', input);
   } catch (error) {
     logger.captureException(error, {
       tags: { service: 'publication-visit', method: 'record' },
@@ -346,7 +349,7 @@ export async function pruneStaleVisits(
  * Wipes every row in `publication_visits`. Wired into the "Clear viewing
  * history" button on the Manage Data screen.
  */
-export async function clearAllVisits(): Promise<void> {
+async function clearAllVisitsLocal(): Promise<void> {
   try {
     const rows = await publicationVisitsCol.query().fetch();
     if (rows.length === 0) return;
@@ -360,6 +363,8 @@ export async function clearAllVisits(): Promise<void> {
     throw error;
   }
 }
+
+export const clearAllVisits = command('clearAllVisits', clearAllVisitsLocal);
 
 export async function getTopVisitedPublications(opts?: {
   limit?: number;

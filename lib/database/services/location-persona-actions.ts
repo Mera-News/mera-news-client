@@ -19,6 +19,7 @@ import * as changeLogService from './persona-change-log-service';
 import { ACTION_NAMES } from '../../news-harness/persona-management/action-names';
 import type LocationModel from '../models/Location';
 import type { LocationRole } from '../models/Location';
+import { command } from '../../sync/command';
 
 /** Human label for change-log summaries (English only — summaries are stored raw). */
 function labelFor(city: string | null | undefined, countryCode: string): string {
@@ -38,7 +39,7 @@ export interface AddLocationResult {
  * weight is changed through the invertible `set_location_weight` action; on a
  * fresh insert an `add_location` audit row is appended.
  */
-export async function addUserLocation(
+async function addUserLocationLocal(
   input: UpsertLocationInput,
 ): Promise<AddLocationResult> {
   const all = await locationService.getAll();
@@ -78,8 +79,12 @@ export async function addUserLocation(
   return { location, updated: false };
 }
 
+export const addUserLocation = command('addUserLocation', addUserLocationLocal, {
+  returns: { table: 'locations', path: 'location' },
+});
+
 /** Delete a user location, appending an audit-only (non-invertible) change-log row. */
-export async function deleteUserLocation(location: {
+async function deleteUserLocationLocal(location: {
   id: string;
   city: string | null;
   countryCode: string;
@@ -94,10 +99,14 @@ export async function deleteUserLocation(location: {
   });
 }
 
+export const deleteUserLocation = command('deleteUserLocation', deleteUserLocationLocal);
+
 /** Change a location's weight through the invertible `set_location_weight` action. */
-export async function setLocationWeightLogged(locationId: string, weight: number): Promise<void> {
+async function setLocationWeightLoggedLocal(locationId: string, weight: number): Promise<void> {
   await applyPersonaAction(
     { action_type: ACTION_NAMES.SET_LOCATION_WEIGHT, locationId, weight },
     'slider',
   );
 }
+
+export const setLocationWeightLogged = command('setLocationWeightLogged', setLocationWeightLoggedLocal);

@@ -26,6 +26,7 @@ import {
 import type SavedArticleSuggestionModel from '../models/SavedArticleSuggestion';
 import type { ForYouSuggestion, ClusterMembership } from '../../stores/for-you-store';
 import type { NewsArticle } from '../../generated/graphql-types';
+import { command } from '../../sync/command';
 
 const savedSuggestionsCol = database.get<SavedArticleSuggestionModel>(
   'saved_article_suggestions',
@@ -105,7 +106,7 @@ function listOf(row: SavedArticleSuggestionModel): SavedList {
  * `list` picks the list; left out, a new save goes to Read later and a re-save
  * stays where it is.
  */
-export async function saveSuggestion(s: ForYouSuggestion, list?: SavedList): Promise<void> {
+async function saveSuggestionLocal(s: ForYouSuggestion, list?: SavedList): Promise<void> {
   const now = new Date();
   // Announce BEFORE awaiting the write so the bookmark flips on the same frame
   // as the tap; the write is local SQLite and does not fail in practice, and a
@@ -133,6 +134,8 @@ export async function saveSuggestion(s: ForYouSuggestion, list?: SavedList): Pro
   });
 }
 
+export const saveSuggestion = command('saveSuggestion', saveSuggestionLocal);
+
 /**
  * Saves (or re-saves) a STANDALONE NewsArticle for later — the article has no
  * personalization (no relevance/reason/facts), so the snapshot leaves those
@@ -140,7 +143,7 @@ export async function saveSuggestion(s: ForYouSuggestion, list?: SavedList): Pro
  * Identity is the article `_id` (== WMDB row id). Re-saving refreshes the
  * snapshot and bumps `savedAt`.
  */
-export async function saveStandaloneArticle(
+async function saveStandaloneArticleLocal(
   article: NewsArticle,
   _context?: StandaloneSaveContext,
   list?: SavedList,
@@ -171,6 +174,11 @@ export async function saveStandaloneArticle(
   });
 }
 
+// The unused context slot cannot be undefined between two arguments in JSON, so it goes as null.
+export const saveStandaloneArticle = command('saveStandaloneArticle', saveStandaloneArticleLocal, {
+  sendArgs: ([article, , list]) => (list === undefined ? [article] : [article, null, list]),
+});
+
 /**
  * Moves a save to the other list. Leaves `savedAt` alone: the date is what the
  * lists sort by, export prints and Date saved promises, and an Undo must put the
@@ -178,7 +186,7 @@ export async function saveStandaloneArticle(
  * retention rather than a save: a late Undo must not turn a row nobody saved
  * into one.
  */
-export async function moveSavedToList(serverId: string, list: SavedList): Promise<boolean> {
+async function moveSavedToListLocal(serverId: string, list: SavedList): Promise<boolean> {
   const row = await findRow(serverId);
   if (!row || isRetentionOrigin(row.origin)) return false;
   if (listOf(row) === list) return true;
@@ -190,6 +198,8 @@ export async function moveSavedToList(serverId: string, list: SavedList): Promis
   });
   return true;
 }
+
+export const moveSavedToList = command('moveSavedToList', moveSavedToListLocal);
 
 // --- Read ---
 
@@ -300,7 +310,7 @@ export async function loadSavedItems(): Promise<SavedItem[]> {
 
 // --- Delete ---
 
-export async function deleteSavedSuggestion(serverId: string): Promise<boolean> {
+async function deleteSavedSuggestionLocal(serverId: string): Promise<boolean> {
   const row = await findRow(serverId);
   if (!row) {
     // Nothing to delete. Still publish `false`: reaching here means some surface
@@ -388,6 +398,8 @@ export async function deleteSavedSuggestion(serverId: string): Promise<boolean> 
   publishSavedState(serverId, false);
   return true;
 }
+
+export const deleteSavedSuggestion = command('deleteSavedSuggestion', deleteSavedSuggestionLocal);
 
 // Saved suggestions have no TTL — they persist until the user deletes them.
 

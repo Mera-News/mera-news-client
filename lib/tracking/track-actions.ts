@@ -40,6 +40,7 @@ import { ProcessingMode } from '../generated/graphql-types';
 import type { FeedbackSubject } from './feedback-subject';
 import type { ForYouSuggestion } from '../stores/for-you-store';
 import logger from '../logger';
+import { command } from '../sync/command';
 
 /** Seed weight for a topic minted from "Track story" — high enough to retrieve
  *  strongly (see retrieval-profile), below a hand-pinned 1.0. */
@@ -89,7 +90,7 @@ function snapshotFromSubject(subject: FeedbackSubject): TrackedStoryMemberSnapsh
  * the originating article as its first snapshot. Returns once the row exists,
  * then starts a feed sync whose topic reconcile fills in the coverage.
  */
-export async function trackStoryWithProposal(
+async function trackStoryWithProposalLocal(
   subject: FeedbackSubject,
   scope: AcceptedTrackScope,
   opts: {
@@ -188,6 +189,8 @@ export async function trackStoryWithProposal(
   return 'followed';
 }
 
+export const trackStoryWithProposal = command('trackStoryWithProposal', trackStoryWithProposalLocal);
+
 /**
  * Run a feed sync for a story just followed. A sync already in flight read the
  * topics before this one existed, so wait it out and run once more. Story ids
@@ -268,7 +271,7 @@ export async function retainStoryMember(
  * retention row left behind is harmless and `deleteOrphanedRetention` (the
  * daily data-cleanup sweep) removes it.
  */
-export async function disownStoryMember(
+async function disownStoryMemberLocal(
   trackedStoryId: string,
   articleId: string,
 ): Promise<boolean> {
@@ -277,6 +280,8 @@ export async function disownStoryMember(
   await releaseTrackedStoryRetention(articleId);
   return true;
 }
+
+export const disownStoryMember = command('disownStoryMember', disownStoryMemberLocal);
 
 /**
  * DELETE a followed story by id — the destructive path behind every "delete this
@@ -296,7 +301,7 @@ export async function disownStoryMember(
  * Retention release failures never change the result either (see
  * {@link disownStoryMember}).
  */
-export async function deleteTrackedStoryById(id: string): Promise<boolean> {
+async function deleteTrackedStoryByIdLocal(id: string): Promise<boolean> {
   if (!id) return true;
   let memberIds: string[] = [];
   try {
@@ -323,6 +328,8 @@ export async function deleteTrackedStoryById(id: string): Promise<boolean> {
   }
   return true;
 }
+
+export const deleteTrackedStoryById = command('deleteTrackedStoryById', deleteTrackedStoryByIdLocal);
 
 /** Is the story described by `subject` already followed (active only)? */
 export async function isSubjectTracked(subject: FeedbackSubject): Promise<boolean> {

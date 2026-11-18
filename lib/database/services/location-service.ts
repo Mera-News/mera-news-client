@@ -8,6 +8,7 @@ import database from '../index';
 import { normalizeKeyOrEmpty } from '@/lib/algorithms/normalize-key';
 import type LocationModel from '../models/Location';
 import type { LocationProvenance, LocationRole } from '../models/Location';
+import { command } from '../../sync/command';
 
 const locationsCollection = database.get<LocationModel>('locations');
 
@@ -122,7 +123,7 @@ export async function setPinnedForWeather(locationId: string): Promise<void> {
  * the twin stays, taking over the weather pin if this row held it. Not a
  * change-log row (owner: unlogged relabel).
  */
-export async function setRole(locationId: string, role: LocationRole): Promise<void> {
+async function setRoleLocal(locationId: string, role: LocationRole): Promise<void> {
   const record = await locationsCollection.find(locationId);
   if (record.role === role) return;
   const twin = (await locationsCollection.query(Q.where('country_code', record.countryCode)).fetch()).find(
@@ -153,6 +154,8 @@ export async function setRole(locationId: string, role: LocationRole): Promise<v
     await database.batch(ops);
   });
 }
+
+export const setRole = command('setRole', setRoleLocal);
 
 export async function deleteLocation(locationId: string): Promise<void> {
   const record = await locationsCollection.find(locationId);

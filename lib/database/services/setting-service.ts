@@ -1,6 +1,8 @@
 import { Q } from '@nozbe/watermelondb';
 import database from '../index';
 import type Setting from '../models/Setting';
+import { command } from '../../sync/command';
+import { isSyncSettingKey } from '../../sync/tables';
 
 const settings = database.get<Setting>('settings');
 
@@ -31,7 +33,7 @@ export async function getSettingsByPrefix(
   return out;
 }
 
-export async function setSetting(key: string, value: string): Promise<void> {
+async function setSettingLocal(key: string, value: string): Promise<void> {
   // Read-modify-write must happen inside a single write() so the query and the
   // mutation share one transaction. WatermelonDB serializes writes, so this
   // makes the check-then-update atomic — a concurrent deleteSetting() for the
@@ -68,7 +70,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
   });
 }
 
-export async function deleteSetting(key: string): Promise<void> {
+async function deleteSettingLocal(key: string): Promise<void> {
   try {
     await database.write(async () => {
       // Query inside the write() so the fetch + destroy share one transaction —
@@ -84,3 +86,9 @@ export async function deleteSetting(key: string): Promise<void> {
     if (!msg.includes('deleted record')) throw err;
   }
 }
+
+// The card state is a mark: it stays local and travels in the batch, so it is not sent as a command.
+const sentToPod = (key: string) => isSyncSettingKey(key) && key !== 'feed_card_state_v1';
+
+export const setSetting = command('setSetting', setSettingLocal, { when: sentToPod });
+export const deleteSetting = command('deleteSetting', deleteSettingLocal, { when: sentToPod });

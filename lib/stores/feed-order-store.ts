@@ -64,6 +64,7 @@ import {
   type FeedListItem,
 } from './feed-list-selector';
 import { parseCardState } from '@/lib/feed-ordering/read-snapshot';
+import { recordMark } from '@/lib/sync/marks';
 
 /** The only verdict left: the feedback sheet's first answer. Verdicts are
  *  session-only here, so no pre-v6 like survives a restart. */
@@ -235,6 +236,7 @@ function cancelCardStatePersist(): void {
 
 function persistCardStateNow(cardStates: Record<string, CardStateRecord>): void {
   cancelCardStatePersist();
+  recordMark('cardState', cardStates);
   setSetting(FEED_CARD_STATE_SETTING_KEY, serializeCardState(cardStates)).catch((err) =>
     logger.captureException(err, { tags: { store: 'feed-order-store' } }),
   );

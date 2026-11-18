@@ -44,6 +44,7 @@ import {
   resolvePrefLevel,
   type SourcePrefUiLevel,
 } from '../../algorithms/publication-pref-level';
+import { command } from '../../sync/command';
 
 /**
  * `'none'` clears whatever is currently set (a no-op write if nothing was
@@ -96,6 +97,9 @@ export interface SetSourcePrefResult {
   /** Set when a mute was written. Call it once the Undo window closes; a
    *  second call does nothing, and after an undo it purges nothing new. */
   readonly commitPurge?: () => Promise<void>;
+  /** True when a mute left a purge waiting for `commitPurge`. It survives JSON, so a phone paired to a
+   *  pod can tell and builds its own `commitPurge` from `changeLogId`. */
+  readonly purgePending?: boolean;
 }
 
 const LEVEL_TO_PREF_KIND = {
@@ -130,6 +134,29 @@ async function muteNamedPublication(publicationName: string): Promise<SetSourceP
     summary: `Set publication preference: ${publicationName} → mute`,
   });
   return { applied: true, changeLogId: row.id };
+}
+
+// A purge that ran before an undo would have destroyed the muted rows, so each waits here for its
+// toast to close. The timer runs it if nothing does, as when a phone is killed mid-toast.
+const PURGE_SAFETY_MS = 60_000;
+const pendingPurges = new Map<string, { run: () => Promise<void>; timer: ReturnType<typeof setTimeout> }>();
+
+async function commitSourcePrefPurgeLocal(changeLogId: string): Promise<void> {
+  const pending = pendingPurges.get(changeLogId);
+  if (!pending) return;
+  pendingPurges.delete(changeLogId);
+  clearTimeout(pending.timer);
+  await pending.run();
+}
+
+/** Runs the purge a mute left waiting, once. An id with nothing waiting does nothing. */
+export const commitSourcePrefPurge = command('commitSourcePrefPurge', commitSourcePrefPurgeLocal);
+
+function holdPurge(changeLogId: string): () => Promise<void> {
+  const timer = setTimeout(() => void commitSourcePrefPurgeLocal(changeLogId), PURGE_SAFETY_MS);
+  timer.unref?.();
+  pendingPurges.set(changeLogId, { run: purgeOnce(), timer });
+  return () => commitSourcePrefPurgeLocal(changeLogId);
 }
 
 /** One purge per action, however many names it wrote. */
@@ -242,7 +269,7 @@ async function setPublisherLevel(
     if (!res.applied) return { applied: false, changeLogId: ids[0], changeLogIds: ids };
   }
   // Nothing differed: the state already is `level`, which is a success.
-  return { applied: true, changeLogId: ids[0], changeLogIds: ids, ...(muted ? { commitPurge: purgeOnce() } : {}) };
+  return { applied: true, changeLogId: ids[0], changeLogIds: ids, ...(muted ? { commitPurge: holdPurge(ids[0]), purgePending: true } : {}) };
 }
 
 /**
@@ -261,7 +288,7 @@ export async function getPublisherPrefLevel(names: readonly string[]): Promise<S
  * newest first, each compare-and-set (a newer change to that name wins and
  * is left alone). True when at least one row was reverted.
  */
-export async function revertSourcePrefChange(result: SetSourcePrefResult): Promise<boolean> {
+async function revertSourcePrefChangeLocal(result: SetSourcePrefResult): Promise<boolean> {
   const ids = result.changeLogIds ?? (result.changeLogId ? [result.changeLogId] : []);
   let reverted = false;
   for (const id of [...ids].reverse()) {
@@ -270,13 +297,15 @@ export async function revertSourcePrefChange(result: SetSourcePrefResult): Promi
   return reverted;
 }
 
+export const revertSourcePrefChange = command('revertSourcePrefChange', revertSourcePrefChangeLocal);
+
 /**
  * Set (or clear) the source-preference level for a publication or a country
  * scope, from any ↑/↓ control in the app. The single entry point the design
  * requires — never call `setPreferenceKind`/`setScopePreferenceKind` directly
  * from UI code.
  */
-export async function setSourcePrefFromUi(
+async function setSourcePrefFromUiLocal(
   target: SourcePrefUiTarget,
   level: SourcePrefUiLevel,
 ): Promise<SetSourcePrefResult> {
@@ -294,3 +323,11 @@ export async function setSourcePrefFromUi(
     ? setNamedPublicationLevel(target.publicationName, kind)
     : setCountryScopeLevel(target.countryAlpha2, target.label, kind);
 }
+
+export const setSourcePrefFromUi = command('setSourcePrefFromUi', setSourcePrefFromUiLocal, {
+  // A function cannot cross the wire, so the toast's close is sent as its own command.
+  onResult: (result) =>
+    result.purgePending && result.changeLogId
+      ? { ...result, commitPurge: () => commitSourcePrefPurge(result.changeLogId!) }
+      : result,
+});

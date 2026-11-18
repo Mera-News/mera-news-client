@@ -5,6 +5,7 @@ import { normalizeKeyOrEmpty } from '@/lib/algorithms/normalize-key';
 import UserPublicationSubscriptionModel, {
   type UserPublicationSubscriptionStatus,
 } from '../models/UserPublicationSubscription';
+import { command } from '../../sync/command';
 
 const subscriptionsCollection = database.get<UserPublicationSubscriptionModel>(
   'user_publication_subscriptions',
@@ -62,7 +63,7 @@ export interface UpsertSubscriptionInput {
  * refreshes the source-name set, so the set never goes stale across a
  * cancel/re-add cycle.
  */
-export async function upsertSubscription(
+async function upsertSubscriptionLocal(
   input: UpsertSubscriptionInput,
 ): Promise<UserPublicationSubscriptionModel> {
   const existing = await findByPublisherId(input.publisherId);
@@ -102,6 +103,8 @@ export async function upsertSubscription(
     });
   });
 }
+
+export const upsertSubscription = command('upsertSubscription', upsertSubscriptionLocal, { returns: 'user_publication_subscriptions' });
 
 /** Any row for this publisher, whatever its status. */
 export async function findByPublisherId(
@@ -144,7 +147,7 @@ export async function cancelSubscription(subscriptionId: string): Promise<void> 
  * a user who already subscribes and then dismisses a stray prompt must not
  * lose the subscription.
  */
-export async function declinePublisher(input: {
+async function declinePublisherLocal(input: {
   readonly publisherId: string;
   readonly publisherName: string;
   readonly countryCode: string;
@@ -176,6 +179,8 @@ export async function declinePublisher(input: {
     });
   });
 }
+
+export const declinePublisher = command('declinePublisher', declinePublisherLocal);
 
 /** True when the prompt has already been answered for this publisher. */
 export async function hasAnsweredForPublisher(publisherId: string): Promise<boolean> {

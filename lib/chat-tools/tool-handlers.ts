@@ -23,6 +23,7 @@ import {
 import { factChoiceGroupId } from './fact-choice-resolution';
 import { beginTopicGeneration } from '../database/services/topic-generation-status-service';
 import { formatMb, getReadingPlans, planRatio } from '../subscription/reading-plans';
+import { command } from '../sync/command';
 
 // MAX_FACT_LENGTH's canonical home is the harness fact-rules module; re-exported
 // here so existing importers of it from tool-handlers keep working.
@@ -293,7 +294,7 @@ async function clearTopicGenError(factId: string): Promise<void> {
  * error, re-stamps 'pending', then enqueues through `startTopicGeneration`,
  * whose synchronous claim makes a double tap one job. Never rejects.
  */
-export async function retryTopicGeneration(
+async function retryTopicGenerationLocal(
   factId: string,
   factStatement: string,
   skillId?: string,
@@ -312,6 +313,8 @@ export async function retryTopicGeneration(
   }
   await startTopicGeneration([{ id: factId, statement: factStatement, skillId }]);
 }
+
+export const retryTopicGeneration = command('retryTopicGeneration', retryTopicGenerationLocal);
 
 /** Updates user language config immediately on the server (settings, not PII). */
 export async function handleUpdateUserConfig(

@@ -27,6 +27,7 @@ import type { PublicationPreferenceProvenance, SourceScopeKind } from '../models
 import { SUPPRESSION_KINDS } from '../models/PersonaSuppression';
 import type { PersonaSuppressionKind } from '../models/PersonaSuppression';
 import { runSweepFor, sweepForMutation } from './persona-mutation-sweeps';
+import { command } from '../../sync/command';
 
 /** Default weight for a minted NEGATIVE topic when the action omits one. */
 const DEFAULT_NEGATIVE_TOPIC_WEIGHT = -0.6;
@@ -121,7 +122,7 @@ function normalizeSuppressionKind(
  * leaves + feedback agent proposals). Routes each action_type to the right
  * service, and every mutation appends an invertible persona_change_log row.
  */
-export async function applyPersonaAction(
+async function applyPersonaActionLocal(
   action: PersonaAction,
   source: PersonaChangeLogSource,
 ): Promise<ApplyActionResult> {
@@ -135,8 +136,10 @@ export async function applyPersonaAction(
   }
 }
 
+export const applyPersonaAction = command('applyPersonaAction', applyPersonaActionLocal);
+
 /** Convenience: apply a list, best-effort, returning per-action results. */
-export async function applyPersonaActions(
+async function applyPersonaActionsLocal(
   actions: PersonaAction[],
   source: PersonaChangeLogSource,
 ): Promise<ApplyActionResult[]> {
@@ -147,6 +150,8 @@ export async function applyPersonaActions(
   }
   return results;
 }
+
+export const applyPersonaActions = command('applyPersonaActions', applyPersonaActionsLocal);
 
 async function dispatch(
   action: PersonaAction,

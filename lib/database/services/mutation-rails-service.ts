@@ -18,6 +18,7 @@ import {
   nudgeTopicWeight,
   clampWeight,
 } from '../../news-harness/persona-management/mutation-rails';
+import { command } from '../../sync/command';
 
 const topicsCollection = database.get<TopicModel>('topics');
 const factsCollection = database.get<FactModel>('facts');
@@ -168,7 +169,7 @@ export async function setTopicHighPriority(
  * revert restores the exact prior state — mirroring revertChange's
  * number|null handling for set_fact_weight).
  */
-export async function nudgeFactWeight(
+async function nudgeFactWeightLocal(
   factId: string,
   delta: number,
   source: PersonaChangeLogSource,
@@ -190,3 +191,5 @@ export async function nudgeFactWeight(
   });
   return { applied: true, changeLogId: row.id };
 }
+
+export const nudgeFactWeight = command('nudgeFactWeight', nudgeFactWeightLocal);

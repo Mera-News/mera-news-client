@@ -17,6 +17,8 @@ import database from '../index';
 import logger from '../../logger';
 import type StoryImpressionModel from '../models/StoryImpression';
 import type { ImpressionSurface } from '../models/StoryImpression';
+import { command } from '../../sync/command';
+import { recordMark } from '../../sync/marks';
 
 const impressionsCollection = database.get<StoryImpressionModel>('story_impressions');
 
@@ -84,6 +86,7 @@ async function upsertImpression(
 /** Records an open/read — upgrades `opened` in place. */
 export async function recordOpen(input: RecordImpressionInput): Promise<void> {
   await upsertImpression(input, true);
+  recordMark('open', input);
 }
 
 /** All impressions (dedup/seen-set builds). */
@@ -221,13 +224,15 @@ export async function getOpenedTitleNorms(): Promise<string[]> {
 
 /** Clear reading history: every impression goes. A story that matched before
  *  can then match again, because this table is what remembers an open. */
-export async function clearAllImpressions(): Promise<void> {
+async function clearAllImpressionsLocal(): Promise<void> {
   const rows = await impressionsCollection.query().fetch();
   if (rows.length === 0) return;
   await database.write(async () => {
     await database.batch(rows.map((r) => r.prepareDestroyPermanently()));
   });
 }
+
+export const clearAllImpressions = command('clearAllImpressions', clearAllImpressionsLocal);
 
 /** Deletes impressions first seen before the cutoff. Returns deleted count. */
 export async function deleteOlderThan(cutoffMs: number): Promise<number> {

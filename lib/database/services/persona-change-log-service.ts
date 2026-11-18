@@ -28,6 +28,7 @@ import {
   sweepForRevert,
   type SweepDecisionInput,
 } from './persona-mutation-sweeps';
+import { command } from '../../sync/command';
 
 const changeLogCollection = database.get<PersonaChangeLogModel>('persona_change_log');
 const factsCollection = database.get<FactModel>('facts');
@@ -249,7 +250,7 @@ async function retireMintedTopic(row: PersonaChangeLogModel, topicId: string): P
  * Anything else throws — later changes extend this switch as new action types
  * gain rails.
  */
-export async function revertChange(changeLogId: string): Promise<boolean> {
+async function revertChangeLocal(changeLogId: string): Promise<boolean> {
   const row = await changeLogCollection.find(changeLogId);
   if (row.reverted) return false;
   const action = parseAction(row);
@@ -482,3 +483,5 @@ export async function revertChange(changeLogId: string): Promise<boolean> {
   await runSweepFor(sweepForRevert(sweepInput), row.actionType);
   return true;
 }
+
+export const revertChange = command('revertChange', revertChangeLocal);

@@ -32,6 +32,7 @@ import * as sanityService from './topic-sanity-service';
 import type { SanityAuditResult } from './topic-sanity-service';
 import * as replacementService from './topic-replacement-service';
 import * as changeLogService from './persona-change-log-service';
+import { command } from '../../sync/command';
 
 // ── KV keys + tunables ────────────────────────────────────────────────────
 
@@ -709,7 +710,7 @@ export interface AcceptResult {
  * for destructive deletes, each logged to persona_change_log with source
  * 'digest'), then remove it from the pending set. Never throws.
  */
-export async function acceptProposal(id: string): Promise<AcceptResult> {
+async function acceptProposalLocal(id: string): Promise<AcceptResult> {
   const pending = await readPending();
   const proposal = pending.find((p) => p.id === id);
   if (!proposal) return { applied: false, ok: false };
@@ -766,11 +767,13 @@ export async function acceptProposal(id: string): Promise<AcceptResult> {
   return { applied: true, ok };
 }
 
+export const acceptProposal = command('acceptProposal', acceptProposalLocal);
+
 /**
  * Remember a proposal's fingerprint so the next sweep never re-proposes it, and
  * drop it from the pending set. Never throws.
  */
-export async function rejectProposal(id: string): Promise<void> {
+async function rejectProposalLocal(id: string): Promise<void> {
   const [pending, rejected] = await Promise.all([readPending(), readRejected()]);
   if (!rejected.includes(id)) {
     await writeRejected([...rejected, id]);
@@ -778,3 +781,5 @@ export async function rejectProposal(id: string): Promise<void> {
   await refillFromBacklog(pending.filter((p) => p.id !== id));
   notifyChange();
 }
+
+export const rejectProposal = command('rejectProposal', rejectProposalLocal);

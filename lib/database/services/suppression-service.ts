@@ -10,6 +10,7 @@ import type {
   PersonaSuppressionSource,
   PersonaSuppressionKind,
 } from '../models/PersonaSuppression';
+import { command } from '../../sync/command';
 
 const suppressionsCollection = database.get<PersonaSuppressionModel>('persona_suppressions');
 
@@ -43,7 +44,7 @@ export function kindOf(s: {
   return s.kind ?? 'keyword';
 }
 
-export async function addSuppression(
+async function addSuppressionLocal(
   input: AddSuppressionInput,
 ): Promise<PersonaSuppressionModel> {
   const strength = Math.max(0, Math.min(1, input.strength));
@@ -65,6 +66,8 @@ export async function addSuppression(
   });
 }
 
+export const addSuppression = command('addSuppression', addSuppressionLocal, { returns: 'persona_suppressions' });
+
 /** Active, non-expired suppressions — what the scoring engine consumes. */
 export async function getActive(now = Date.now()): Promise<PersonaSuppressionModel[]> {
   const rows = await suppressionsCollection.query(Q.where('status', 'active')).fetch();
@@ -81,7 +84,7 @@ export function observeActive() {
   return suppressionsCollection.query(Q.where('status', 'active')).observe();
 }
 
-export async function retireSuppression(suppressionId: string): Promise<void> {
+async function retireSuppressionLocal(suppressionId: string): Promise<void> {
   const record = await suppressionsCollection.find(suppressionId);
   await database.write(async () => {
     await record.update((s) => {
@@ -89,6 +92,8 @@ export async function retireSuppression(suppressionId: string): Promise<void> {
     });
   });
 }
+
+export const retireSuppression = command('retireSuppression', retireSuppressionLocal);
 
 /**
  * Undo a retire: flip `status` back to 'active', keeping the ORIGINAL

@@ -21,6 +21,7 @@ import type DeclinedTopicModel from '../models/DeclinedTopic';
 import type FactModel from '../models/Fact';
 import type TrackedStoryModel from '../models/TrackedStory';
 import { normalizeTopicText } from './topic-service';
+import { command } from '../../sync/command';
 
 const topicsCollection = database.get<TopicModel>('topics');
 const declinedCollection = database.get<DeclinedTopicModel>('declined_topics');
@@ -86,7 +87,7 @@ function clampWindow(ms: number | undefined): number {
  * Returns the row id and the previous `created_at` (null when newly created),
  * which is what lets an undo put an older decline back exactly as it was.
  */
-export async function recordDecline(
+async function recordDeclineLocal(
   text: string,
   factId: string | null,
 ): Promise<{ id: string; previousCreatedAtMs: number | null }> {
@@ -124,6 +125,8 @@ export async function recordDecline(
   return { id: created.id, previousCreatedAtMs: null };
 }
 
+export const recordDecline = command('recordDecline', recordDeclineLocal);
+
 /**
  * Stage a topic for deletion and remember the decline.
  *
@@ -138,7 +141,7 @@ export async function recordDecline(
  * The row disappears from `observeByFact` and every other render/retrieve read
  * immediately; the caller holds the chip in its own state for the undo.
  */
-export async function deleteTopicWithDecline(
+async function deleteTopicWithDeclineLocal(
   topicId: string,
   opts?: { undoWindowMs?: number },
 ): Promise<StageDeleteResult> {
@@ -174,13 +177,15 @@ export async function deleteTopicWithDecline(
   return { undoToken: topicId };
 }
 
+export const deleteTopicWithDecline = command('deleteTopicWithDecline', deleteTopicWithDeclineLocal);
+
 /**
  * Cancel a staged delete: clear the marker and undo the decline.
  *
  * Returns false for an unknown token or one whose delete already committed.
  * Never throws — it is wired to a toast button.
  */
-export async function undoPendingDelete(topicId: string): Promise<boolean> {
+async function undoPendingDeleteLocal(topicId: string): Promise<boolean> {
   try {
     const entry = pending.get(topicId);
     if (entry?.timer) clearTimeout(entry.timer);
@@ -226,6 +231,8 @@ export async function undoPendingDelete(topicId: string): Promise<boolean> {
     return false;
   }
 }
+
+export const undoPendingDelete = command('undoPendingDelete', undoPendingDeleteLocal);
 
 /**
  * Commit every staged delete. Runs from this module's timer, from app start
@@ -388,7 +395,7 @@ export function listDeclinedTopics() {
  * may offer the interest again. Callers wanting the chip back immediately
  * should mint it via `createTopics({ factId, text })`; the row carries both.
  */
-export async function removeDecline(id: string): Promise<void> {
+async function removeDeclineLocal(id: string): Promise<void> {
   let row: DeclinedTopicModel;
   try {
     row = await declinedCollection.find(id);
@@ -399,6 +406,8 @@ export async function removeDecline(id: string): Promise<void> {
     await database.batch([row.prepareDestroyPermanently()]);
   });
 }
+
+export const removeDecline = command('removeDecline', removeDeclineLocal);
 
 /** Test seam: drop in-memory undo bookkeeping without touching the database. */
 export function __resetPendingForTests(): void {

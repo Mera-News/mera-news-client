@@ -20,6 +20,7 @@ import {
   placesSourceHash,
   type PlacesBy,
 } from '../../news-harness/persona-management/fact-places';
+import { command } from '../../sync/command';
 
 const factsCollection = database.get<FactModel>('facts');
 
@@ -45,7 +46,7 @@ function toFact(record: FactModel): Fact {
 
 // --- Facts CRUD ---
 
-export async function addFact(
+async function addFactLocal(
   statement: string,
   metadata?: Record<string, string[]>,
   questionnaire?: {
@@ -77,7 +78,9 @@ export async function addFact(
   return toFact(record);
 }
 
-export async function updateFact(
+export const addFact = command('addFact', addFactLocal);
+
+async function updateFactLocal(
   id: string,
   updates: Partial<Pick<Fact, 'statement' | 'metadata'>>,
 ): Promise<Fact> {
@@ -87,6 +90,8 @@ export async function updateFact(
   await record.updateFact(updates.statement ?? record.statement, reworded ? dropEmptyClock(metadata) : metadata);
   return toFact(record);
 }
+
+export const updateFact = command('updateFact', updateFactLocal);
 
 /** A reworded fact is a new question: its empty runs say nothing about it. */
 function dropEmptyClock(metadata: Fact['metadata']): Fact['metadata'] {
@@ -161,7 +166,7 @@ export async function markTopicsReviewed(id: string, at: Date = new Date()): Pro
   });
 }
 
-export async function deleteFact(id: string): Promise<void> {
+async function deleteFactLocal(id: string): Promise<void> {
   const record = await factsCollection.find(id);
   await record.destroyCascade();
   const purged = await purgeDeadTopicSuggestions();
@@ -169,6 +174,8 @@ export async function deleteFact(id: string): Promise<void> {
     logger.warn('[fact-service] Purged suggestions for deleted fact', { factId: id, purged });
   }
 }
+
+export const deleteFact = command('deleteFact', deleteFactLocal);
 
 /** The cascade takes a fact's topics; the suggestions those topics retrieved
  *  must go with them. Without this they linger for the full 48h window as
@@ -191,12 +198,14 @@ async function purgeDeadTopicSuggestions(): Promise<number> {
  * with a `source_fact_id` goes, dangling ones included; a place added by hand
  * has none. The caller clears the suggestions, so this does not purge per fact.
  */
-export async function deleteAllFacts(): Promise<void> {
+async function deleteAllFactsLocal(): Promise<void> {
   const records = await factsCollection.query().fetch();
   for (const record of records) await record.destroyCascade();
   const factPlaceRows = await database.get('locations').query(Q.where('source_fact_id', Q.notEq(null))).fetch();
   await database.write(() => database.batch(factPlaceRows.map((r) => r.prepareDestroyPermanently())));
 }
+
+export const deleteAllFacts = command('deleteAllFacts', deleteAllFactsLocal);
 
 /**
  * Mark facts that have no topics, no error, and no active topic_gen job with
@@ -385,7 +394,7 @@ export async function chatMayRemoveFact(id: string, statement: string, opts: { i
  * `removeEmptyFact`, but on one empty run and with no inbox row: the reply and
  * the tombstone are the notice. False means it stayed. `deleteFact` has no undo.
  */
-export async function removeFailedChatFact(id: string, statement: string, opts: { inOwnJob?: boolean } = {}): Promise<boolean> {
+async function removeFailedChatFactLocal(id: string, statement: string, opts: { inOwnJob?: boolean } = {}): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const changeLog = require('./persona-change-log-service') as typeof import('./persona-change-log-service');
   const removed = await database.write(async () => {
@@ -405,6 +414,11 @@ export async function removeFailedChatFact(id: string, statement: string, opts: 
   if (removed) await purgeDeadTopicSuggestions();
   return removed;
 }
+
+// inOwnJob describes the phone's job context, which the pod does not share.
+export const removeFailedChatFact = command('removeFailedChatFact', removeFailedChatFactLocal, {
+  sendArgs: ([id, statement]) => [id, statement],
+});
 
 /**
  * How long a fact may sit at 'pending' with no live job before the sweep
@@ -727,7 +741,7 @@ export async function getFactsForTopicTexts(topicTexts: string[]): Promise<Fact[
 // replaces `metadata` wholesale and would drop `topics`.
 
 /** Merge into one fact's metadata in a single write; `undefined` deletes a key. Returns the metadata BEFORE. */
-export async function patchMetadata(factId: string, patch: LooseMetadata): Promise<LooseMetadata | null> {
+async function patchMetadataLocal(factId: string, patch: LooseMetadata): Promise<LooseMetadata | null> {
   return database.write(async () => {
     let record: FactModel;
     try {
@@ -745,6 +759,8 @@ export async function patchMetadata(factId: string, patch: LooseMetadata): Promi
     return before;
   });
 }
+
+export const patchMetadata = command('patchMetadata', patchMetadataLocal);
 
 async function residenceReaderPlaces() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -786,7 +802,7 @@ const LOG_SOURCE = { sweep: 'llm', user: 'user', chat: 'chat' } as const;
  * Set where a fact's news comes from. Always refreshes `places_source`; an equal
  * place set writes nothing else. A sweep never overwrites a user's choice.
  */
-export async function setFactPlaces(
+async function setFactPlacesLocal(
   factId: string,
   places: readonly string[],
   by: PlacesBy,
@@ -840,6 +856,8 @@ export async function setFactPlaces(
   return { applied: true, changeLogId: row.id };
 }
 
+export const setFactPlaces = command('setFactPlaces', setFactPlacesLocal);
+
 /** Undo of set_fact_places: put places, places_by and places_source back, then regenerate. */
 export async function restoreFactPlaces(
   factId: string,
@@ -862,7 +880,7 @@ export async function restoreFactPlaces(
 }
 
 /** The sweep's answer was wrong for this fact: flag it and force a re-decide. A user's choice stays. */
-export async function markFactPlacesWrong(factId: string): Promise<boolean> {
+async function markFactPlacesWrongLocal(factId: string): Promise<boolean> {
   let record: FactModel;
   try {
     record = await factsCollection.find(factId);
@@ -873,6 +891,8 @@ export async function markFactPlacesWrong(factId: string): Promise<boolean> {
   await patchMetadata(factId, { places_wrong: true, places_source: undefined });
   return true;
 }
+
+export const markFactPlacesWrong = command('markFactPlacesWrong', markFactPlacesWrongLocal);
 
 /** Stamp the places the fact's current topics were generated for. */
 export async function stampPlacesTopicsFor(factId: string, places: readonly string[]): Promise<void> {
@@ -888,7 +908,7 @@ export function isNewsStopped(fact: { metadata?: Record<string, unknown> | null 
 }
 
 /** Retire the fact's active non-tracked topics (one logged, undoable retire_topic row each), then flag the fact. */
-export async function stopNewsForFact(factId: string): Promise<{ changeLogIds: string[] }> {
+async function stopNewsForFactLocal(factId: string): Promise<{ changeLogIds: string[] }> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const topicService = require('./topic-service') as typeof import('./topic-service');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -915,3 +935,5 @@ export async function stopNewsForFact(factId: string): Promise<{ changeLogIds: s
   changeLogIds.push(row.id);
   return { changeLogIds };
 }
+
+export const stopNewsForFact = command('stopNewsForFact', stopNewsForFactLocal);

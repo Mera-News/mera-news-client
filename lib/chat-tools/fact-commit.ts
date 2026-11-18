@@ -21,6 +21,7 @@ import { runGeoDerivationSweep } from '../database/services/geo-derivation-servi
 import { useFloatingChatStore } from '../stores/floating-chat-store';
 import logger from '../logger';
 import { triggerTopicGeneration } from './tool-handlers';
+import { command } from '../sync/command';
 
 export interface FactChoiceCommit {
   /** The reading the user tapped. */
@@ -67,7 +68,7 @@ export interface FactCommitOptions {
  * Idempotent by statement: a double tap, or a card resurrected after a failed
  * durable write, returns the existing fact instead of minting a second one.
  */
-export async function commitFactChoices(
+async function commitFactChoicesLocal(
   choices: FactChoiceCommit[],
   options: FactCommitOptions = {},
 ): Promise<FactCommitResult> {
@@ -157,3 +158,5 @@ export async function commitFactChoices(
 
   return { savedFacts, conflicts };
 }
+
+export const commitFactChoices = command('commitFactChoices', commitFactChoicesLocal);

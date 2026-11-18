@@ -11,6 +11,7 @@ import type TrackedStoryModel from '../models/TrackedStory';
 import type { TrackedStoryMemberSnapshot } from '../models/TrackedStory';
 import logger from '../../logger';
 import { foldKeysOf } from '../../tracking/story-fold-key';
+import { recordMark } from '../../sync/marks';
 
 export type { TrackedStoryMemberSnapshot } from '../models/TrackedStory';
 
@@ -379,6 +380,7 @@ export async function markSeen(id: string): Promise<void> {
         m.unseenCount = 0;
       });
     });
+    recordMark('seen', id);
   } catch (err) {
     logger.warn('[tracked-story] markSeen failed', { id, error: String(err) });
   }
@@ -597,6 +599,7 @@ export async function advanceSeenWatermark(id: string, watermarkMs: number): Pro
         m.seenPubWatermarkMs = Math.max(m.seenPubWatermarkMs ?? 0, watermarkMs);
       });
     });
+    recordMark('watermark', { id, ms: watermarkMs });
   } catch (err) {
     logger.warn('[tracked-story] advanceSeenWatermark failed', { id, error: String(err) });
   }

@@ -12,6 +12,7 @@ import type FactModel from '../models/Fact';
 import type { TopicProvenance, TopicStatus } from '../models/Topic';
 import { planLlmTopicRows } from '../../news-harness/persona-management/topic-generation';
 import { DEFAULT_HARNESS_CONFIG } from '../../news-harness/core/config';
+import { command } from '../../sync/command';
 
 const topicsCollection = database.get<TopicModel>('topics');
 
@@ -105,7 +106,7 @@ export interface CreateTopicInput {
  * text is how a caller legitimately revives an interest, and resurrecting the
  * retired row instead must stay an explicit `reactivate()` decision.
  */
-export async function createTopics(inputs: CreateTopicInput[]): Promise<TopicModel[]> {
+async function createTopicsLocal(inputs: CreateTopicInput[]): Promise<TopicModel[]> {
   if (inputs.length === 0) return [];
 
   // NUL separator, written as an ESCAPE so this file stays plain text (a literal
@@ -265,6 +266,8 @@ export async function createTopics(inputs: CreateTopicInput[]): Promise<TopicMod
 
   return results.filter((r): r is TopicModel => r !== undefined);
 }
+
+export const createTopics = command('createTopics', createTopicsLocal, { returns: { table: 'topics', many: true } });
 
 /** Returns all topic rows owned by a fact (any status). */
 export async function getByFact(factId: string): Promise<TopicModel[]> {
@@ -444,7 +447,7 @@ export async function getAllByNormalizedText(normalizedText: string): Promise<To
     .fetch();
 }
 
-export async function setWeight(topicId: string, weight: number): Promise<void> {
+async function setWeightLocal(topicId: string, weight: number): Promise<void> {
   const clamped = Math.max(-1, Math.min(1, weight));
   const record = await topicsCollection.find(topicId);
   await database.write(async () => {
@@ -454,6 +457,8 @@ export async function setWeight(topicId: string, weight: number): Promise<void> 
     });
   });
 }
+
+export const setWeight = command('setWeight', setWeightLocal);
 
 export async function setHighPriority(topicId: string, highPriority: boolean): Promise<void> {
   const record = await topicsCollection.find(topicId);
@@ -476,9 +481,11 @@ async function setStatus(topicId: string, status: TopicStatus): Promise<void> {
 }
 
 /** Retire a topic (dedup/history only — never retrieved or scored). */
-export async function retire(topicId: string): Promise<void> {
+async function retireLocal(topicId: string): Promise<void> {
   await setStatus(topicId, 'retired');
 }
+
+export const retire = command('retire', retireLocal);
 
 export interface ReplaceTopicsResult {
   /** Rows actually created (after the dedupe floor). */
@@ -570,9 +577,11 @@ export async function suppress(topicId: string): Promise<void> {
 }
 
 /** Reactivate a suppressed/retired topic. */
-export async function reactivate(topicId: string): Promise<void> {
+async function reactivateLocal(topicId: string): Promise<void> {
   await setStatus(topicId, 'active');
 }
+
+export const reactivate = command('reactivate', reactivateLocal);
 
 /** Every topic id currently on the device — the liveness set the suggestion
  *  purge screens against (see article-suggestion-lifecycle). Includes retired and

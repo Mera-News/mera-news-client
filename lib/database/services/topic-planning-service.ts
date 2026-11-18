@@ -34,6 +34,7 @@ import { useMeraProtocolStore } from '../../stores/mera-protocol-store';
 import { ProcessingMode } from '../../generated/graphql-types';
 import logger from '../../logger';
 import type { Fact } from '../../mera-protocol-toolkit/types';
+import { command } from '../../sync/command';
 
 export interface GenerateMoreOutcome {
   /** 'inline' when cloud generation completed synchronously (rows already
@@ -49,7 +50,7 @@ export interface GenerateMoreOutcome {
  * exclusion snapshot is passed. `skillId` is optional; the handler derives one
  * from the fact's attribute. Never throws: a failure is `skipped`.
  */
-export async function generateMoreTopicsForFact(
+async function generateMoreTopicsForFactLocal(
   factId: string,
   factStatement: string,
   opts: { skillId?: string; count?: number } = {},
@@ -95,6 +96,8 @@ export async function generateMoreTopicsForFact(
   inferenceQueue.notify();
   return { mode: 'queued', added: 0 };
 }
+
+export const generateMoreTopicsForFact = command('generateMoreTopicsForFact', generateMoreTopicsForFactLocal);
 
 /** shortcut: a queue that never drains (a type deferred for long) ends the wait
  *  here and reads as what has landed so far; a real error on device reads as
