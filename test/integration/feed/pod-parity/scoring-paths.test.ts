@@ -254,9 +254,7 @@ describe('scoring on a host transport matches scoring through the gateway', () =
     expect(host.relevance).toEqual(gateway.relevance);
     const relevanceOf = (c: typeof gateway) => Object.fromEntries(Object.entries(c.byArticle).map(([id, r]) => [id, r.relevance]));
     expect(relevanceOf(host)).toEqual(relevanceOf(gateway));
-    // Membership, not order: the gateway path stores no raw score, so its Feed ranks ties by age
-    // and id (the case below), while the inline path ranks by the score it keeps.
-    expect([...host.feed].sort()).toEqual([...gateway.feed].sort());
+    expect(host.feed).toEqual(gateway.feed);
     for (const id of host.feed) expect(host.byArticle[id].reason).not.toBe('');
     for (const id of gateway.feed) expect(gateway.byArticle[id].reason).not.toBe('');
   });
@@ -289,8 +287,8 @@ describe('scoring on a host transport matches scoring through the gateway', () =
     expect(gateway.byArticle.atg.status).toBe('complete');
   });
 
-  // Fails until the gateway path stores the raw score the Feed ranks by.
-  it.failing('through the gateway, a scored row keeps its raw score', async () => {
+  // The Feed ranks within a band by the raw score, so both paths must store it.
+  it('through the gateway, a scored row keeps its raw score', async () => {
     const gateway = await runGatewayPath();
     expect(gateway.byArticle.f1a.rawScore).toBe(0.87);
   });

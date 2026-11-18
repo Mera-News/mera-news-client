@@ -2284,6 +2284,8 @@ async function handleRelevanceResults(
         relevance,
         reason: '',
         reasonSkipped: skipNotes,
+        // The Feed orders a band by it, as on the inline path.
+        rawScore: rawRelevanceMap[id],
       });
     } catch (err) {
       if (isRecordNotFoundError(err)) continue;
@@ -2551,7 +2553,7 @@ async function handleReasonResults(
         if (rescored !== undefined) {
           const relevance = bucketScore(rescored);
           reasonRelevanceMap[id] = relevance;
-          await saveScoringResult(id, { relevance, reason, reasonSkipped: false });
+          await saveScoringResult(id, { relevance, reason, reasonSkipped: false, rawScore: rescored });
         } else {
           await saveReason(id, reason);
         }
