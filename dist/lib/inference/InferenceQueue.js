@@ -110,6 +110,10 @@ class InferenceQueueImpl {
     this.wakeResolver = null;
     this.sleepTimer = null;
     this.currentJobPromise = null;
+    /** The type of the job in `currentJobPromise`, or null. */
+    this.currentJobType = null;
+    /** Types a host keeps waiting (`hold`), on top of the defer gates. */
+    this.heldTypes = new Set();
     this.drainCallbacks = [];
     /** Current idle backoff. See POLL_INTERVAL_MIN/MAX. */
     this.idleDelay = POLL_INTERVAL_MIN;
@@ -294,6 +298,20 @@ class InferenceQueueImpl {
     this.drainCallbacks.push(callback);
   }
 
+  /**
+   * Keeps every job of these types waiting until the hold is lifted (`hold([])`); other types run
+   * as usual. A job of a held type that is already running finishes.
+   */
+  hold(types) {
+    this.heldTypes = new Set(types);
+    this.wake();
+  }
+
+  /** The type of the job running now, or null. */
+  runningType() {
+    return this.currentJobType;
+  }
+
   /** Test seam: clear every defer gate and backoff, and forget that this process already recovered. */
   __resetTypeGatesForTests() {
     this.recoveredThisProcess = false;
@@ -310,6 +328,7 @@ class InferenceQueueImpl {
     for (const [type, until] of this.gateUntil) {
       if (until > now) out.push(type);else this.gateUntil.delete(type);
     }
+    for (const type of this.heldTypes) if (!out.includes(type)) out.push(type);
     return out;
   }
   deferType(type, reason) {
@@ -395,8 +414,8 @@ class InferenceQueueImpl {
       // fast cadence rather than crawling out of the backoff one job at a time.
       this.idleDelay = POLL_INTERVAL_MIN;
 
-      // Check state again after dequeue (might have been paused/stopped while querying)
-      if (this.state !== 'running') continue;
+      // Check state again after dequeue (might have been paused/stopped or held while querying)
+      if (this.state !== 'running' || this.heldTypes.has(job.jobType)) continue;
       const isCombo = job.jobType === 'topic_combo';
 
       // Combo pre-check, BEFORE markRunning so a "not now" spends no attempt.
@@ -467,8 +486,13 @@ class InferenceQueueImpl {
         }
       })();
       this.currentJobPromise = jobExec;
-      await jobExec;
-      this.currentJobPromise = null;
+      this.currentJobType = job.jobType;
+      try {
+        await jobExec;
+      } finally {
+        this.currentJobPromise = null;
+        this.currentJobType = null;
+      }
     }
   }
 
