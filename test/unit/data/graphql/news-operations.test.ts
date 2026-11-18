@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   ACCOUNT_OPERATION_NAMES,
+  HOST_NEWS_OPERATION_NAMES,
   MERA_SERVICE_OPERATION_NAMES,
   NEWS_OPERATION_NAMES,
   isNewsOperation,
@@ -85,8 +86,13 @@ describe('the operation classes', () => {
     ]);
   });
 
+  it('keeps the host news list out of the client documents, so each name has one home', () => {
+    expect(HOST_NEWS_OPERATION_NAMES.filter((name) => operations.has(name))).toEqual([]);
+  });
+
   it('answers news only for a listed news operation', () => {
     expect(isNewsOperation('GetArticleIdsForPersona')).toBe(true);
+    expect(isNewsOperation('PublicationProfile')).toBe(true);
     expect(isNewsOperation('GetUserPersona')).toBe(false);
     expect(isNewsOperation('GetFactCheck')).toBe(false);
     expect(isNewsOperation('SomethingNew')).toBe(false);

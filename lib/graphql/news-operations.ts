@@ -32,6 +32,10 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
   'SearchNews',
 ];
 
+/** News operations whose documents live in the app, not here. The app's own test checks them; a
+ *  server that passes news through allows them with the list above. */
+export const HOST_NEWS_OPERATION_NAMES: readonly string[] = ['GetNewsPublishers', 'PublicationProfile', 'SearchPublishers'];
+
 export const ACCOUNT_OPERATION_NAMES: readonly string[] = [
   'ActiveFeedbackRequests',
   'AdvanceOnboardingStage',
@@ -58,7 +62,7 @@ export const MERA_SERVICE_OPERATION_NAMES: readonly string[] = [
   'RequestFactCheckAgain',
 ];
 
-const NEWS = new Set(NEWS_OPERATION_NAMES);
+const NEWS = new Set([...NEWS_OPERATION_NAMES, ...HOST_NEWS_OPERATION_NAMES]);
 
 /** True only for an operation a news server may be sent. Unknown names are not news. */
 export const isNewsOperation = (operationName: string | null | undefined): boolean => !!operationName && NEWS.has(operationName);
