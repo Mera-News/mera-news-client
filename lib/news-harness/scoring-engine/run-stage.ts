@@ -35,7 +35,7 @@ import type { LlmPort, HarnessLogger } from '../core/ports';
 import { NOOP_LOGGER } from '../core/ports';
 import type { BatchCall, ScoringCandidate } from '../core/types';
 import type { HarnessConfig } from '../core/config';
-import { buildScoreCallForChunk, chunk } from '../article-pipeline/scoring';
+import { buildScoreCallForChunk, chunk, relevanceSystemPromptFor, resolveScoringVariant } from '../article-pipeline/scoring';
 import { parseBatchRelevanceResponse } from '../article-pipeline/scoring-decode';
 import {
   applyEntityPenalty,
@@ -247,10 +247,12 @@ export async function computeAndScore(
     const facts = opts.factStatements ?? [];
     const chunks = chunk(scorable, pipe.articlesPerScorePrompt);
     const calls: BatchCall[] = chunks.map((chunkItems, idx) => {
+      const legacy = chunkItems.map((c) => c.legacy!);
+      // A chunk of top headlines only gets the headline prompt, as the gateway's pipeline sends.
       const { prompt, system } = buildScoreCallForChunk(
-        chunkItems.map((c) => c.legacy!),
+        legacy,
         facts,
-        pipe.relevanceSystemPrompt,
+        relevanceSystemPromptFor(pipe, resolveScoringVariant(legacy)),
         pipe,
         undefined,
         opts.today,

@@ -3,6 +3,7 @@
 // can end. The model is a rule the test states, so each case can only pass for its reason.
 import { loadSuggestions } from '@/lib/database/services/article-suggestion-reads';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
+import { DEFAULT_HARNESS_CONFIG } from '@/lib/news-harness/core/config';
 import { advanceUntilDone, server, testHost } from '@/test/helpers';
 import {
   art,
@@ -81,8 +82,7 @@ describe('inline scoring on a host transport', () => {
     server.use(servePersona({ topics, headlines: [{ scope: 'GLOBAL', ids: headlines }] }), ...served.handlers);
   }
 
-  // Fails until the inline pass admits top headlines the way the gateway's pipeline does.
-  it.failing('asks the model about a top headline no fact matched, and excludes it when it scores low', async () => {
+  it('asks the model about a top headline no fact matched, and excludes it when it scores low', async () => {
     const transport = hostTransport(byTitle);
     testHost.llmTransport = transport;
     await seedInterest('I follow Formula 1', ['formula 1']);
@@ -97,6 +97,18 @@ describe('inline scoring on a host transport', () => {
     expect(rows['low-tennis'].status).toBe('excluded');
     expect(rows['High-gold'].status).toBe('complete');
     expect(rows['High-gold'].relevance).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('scores a batch of top headlines only with the headline prompt', async () => {
+    const transport = hostTransport(byTitle);
+    testHost.llmTransport = transport;
+    await seedInterest('I follow Formula 1', ['formula 1']);
+    serveStories({ 'formula 1': [] }, ['High-gold', 'low-tennis']);
+
+    await advanceUntilDone(startMachine());
+
+    const systems = transport.calls.filter((c) => c.id?.startsWith('score:')).map((c) => c.system);
+    expect(systems).toEqual([DEFAULT_HARNESS_CONFIG.articlePipeline.headlineRelevanceSystemPrompt]);
   });
 
   it('writes no note for a row below the 0.4 gate, and one for a row at it', async () => {

@@ -106,6 +106,8 @@ const ARTICLE_CFG = DEFAULT_HARNESS_CONFIG.articlePipeline;
 
 const isOnDeviceMode = () =>
   useMeraProtocolStore.getState().processingMode === ProcessingMode.OnDevice;
+/** Whether this lane's pass can score a row: Kev needs a linked fact, the cloud takes a headline too. */
+const scorableOnThisLane = (c: ScoringCandidate) => (isOnDeviceMode() ? isEligible(c) : isScorableCandidate(c));
 /** The Skip notes switch is off. This module gates on-device notes; the cloud gate is in scoring-pipeline. */
 const notesOn = () => !useMeraProtocolStore.getState().skipNotes;
 
@@ -346,10 +348,11 @@ export async function batchScoreAndReason(
   let culledHeadlineIds = new Set<string>();
   let locationCaughtIds = new Set<string>();
 
-  // Ineligible ones get a fixed low score, never hit the engine/LLM.
+  // Ineligible ones get a fixed low score, never hit the engine/LLM. In the cloud a top headline
+  // no fact matched is scored, as the gateway's pipeline does; Kev needs a fact to read.
   const eligible: ScoringCandidate[] = [];
   for (const c of candidates) {
-    if (isEligible(c)) eligible.push(c);
+    if (scorableOnThisLane(c)) eligible.push(c);
     else scoreMap.set(c.id, INELIGIBLE_RELEVANCE);
   }
   if (eligible.length === 0) {
@@ -928,7 +931,7 @@ async function scoreUnscoredRows(
     // would hand its fixed low score to the whole story; they go after the elected ones.
     const unscored = await getUnscoredSuggestionsWithFacts();
     if (unscored.length === 0) break;
-    const unscorable = new Set(unscored.filter((c) => !isEligible(c)).map((c) => c.id));
+    const unscorable = new Set(unscored.filter((c) => !scorableOnThisLane(c)).map((c) => c.id));
     const gate = await gateUnscoredForScoring(new Set([...unscorable, ...failedThisPass]));
     if (gate.propagatedCount > 0) await reconcilePropagatedHardFilters();
     settledByGate += gate.propagatedCount + gate.readCount;

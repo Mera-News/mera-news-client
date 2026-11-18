@@ -1300,9 +1300,9 @@ describe('processAllUnscored - top-headline cull', () => {
     expect((await stored()).h.status).toBe('excluded');
   });
 
-  // The inline stage scores every row with the standard relevance prompt; only the reason pass
-  // (and the E2EE builders, which production runs) pick the headline variant.
-  it('saves a MEDIUM-band headline normally, with the headline reason prompt', async () => {
+  // A batch of headlines only is scored and explained with the headline prompts, as the
+  // gateway's pipeline sends them.
+  it('saves a MEDIUM-band headline normally, with the headline prompts', async () => {
     gateway({ scores: { h: 0.6 } });
     await headline(['h']);
 
@@ -1310,7 +1310,7 @@ describe('processAllUnscored - top-headline cull', () => {
 
     const row = (await stored()).h;
     expect([row.status, row.relevance, row.rawScore, row.reason]).toEqual(['complete', 0.6, 0.6, 'Why story h matters here.']);
-    expect(gatewayCalls('batch').map(systemOf)).toEqual([ART.relevanceSystemPrompt, ART.headlineReasonSystemPrompt]);
+    expect(gatewayCalls('batch').map(systemOf)).toEqual([ART.headlineRelevanceSystemPrompt, ART.headlineReasonSystemPrompt]);
   });
 
   it('never culls a non-headline row at the same LOW score', async () => {
@@ -1333,13 +1333,21 @@ describe('processAllUnscored - top-headline cull', () => {
     expect((await stored()).h.status).toBe('unscored');
   });
 
-  it('leaves a factless (ineligible) headline unculled: it was never scored', async () => {
-    gateway();
+  it('scores a headline no fact matched, as the gateway pipeline does, and culls it when low', async () => {
+    gateway({ scores: { h: 0.2 } });
     await seed(['h'], { headline: 'COUNTRY' });
 
     expect(await run(processAllUnscored())).toBe(1);
 
-    // INELIGIBLE_RELEVANCE (0.2) is below the discard floor, so it persists unbucketed.
+    expect((await stored()).h.status).toBe('excluded');
+  });
+
+  it('on the phone, still gives a headline no fact matched the fixed low score without asking Kev', async () => {
+    await useMode('on-device');
+    await seed(['h'], { headline: 'COUNTRY' });
+
+    expect(await run(processAllUnscored())).toBe(1);
+
     const row = (await stored()).h;
     expect(row.relevance).toBe(0.2);
     expect(row.status).not.toBe('excluded');
