@@ -75,7 +75,7 @@ jobs:
           find "$out" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -R "$RUNNER_TEMP/artefact/." "$out/"
           # Stage the built package by name; anything else in the tree is a build error.
-          git -C "$out" add --all -- package.json dist node types schema.gql LICENSE TRADEMARK.md COMMERCIAL.md README.md
+          git -C "$out" add --all -- package.json dist node types schema.gql news-schema.gql news-schema.pin.json LICENSE TRADEMARK.md COMMERCIAL.md README.md
           if [ -n "$(git -C "$out" status --porcelain --untracked-files=all | grep -v '^[MADR] ')" ]; then
             echo "unexpected files in the built package"; git -C "$out" status --porcelain; exit 1
           fi
