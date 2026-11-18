@@ -9,6 +9,7 @@ var _networkStore = require("../stores/network-store");
 var _userStore = require("../stores/user-store");
 var _databaseStore = require("../stores/database-store");
 var _auth = require("../platform/auth");
+var _platform = require("../platform");
 var _appRestart = require("../app-restart");
 var _schedulerStore = require("./scheduler-store");
 var persistence = _interopRequireWildcard(require("./scheduler-persistence"));
@@ -552,16 +553,20 @@ class _AppScheduler {
   }
   async _conditionsMet(task) {
     for (const cond of task.conditions ?? []) {
-      if (!(await this._checkCondition(cond))) {
+      if (!(await this._checkCondition(cond, task.name))) {
         _logger.default.debug(`[AppScheduler] task=${task.name} blocked by condition type=${cond.type}`);
         return false;
       }
     }
     return true;
   }
-  async _checkCondition(cond) {
+  async _checkCondition(cond, taskName) {
     if (cond.type === 'network') return _networkStore.useNetworkStore.getState().isConnected;
-    if (cond.type === 'authenticated') return this._checkAuthenticated();
+    if (cond.type === 'authenticated') {
+      // A task the host says reaches only the person's own servers has nothing to sign in to.
+      if ((0, _platform.platform)('lib/scheduler/AppScheduler').taskNeedsMeraSignIn?.(taskName) === false) return true;
+      return this._checkAuthenticated();
+    }
     if (cond.type === 'db-ready') return _databaseStore.useDatabaseStore.getState().ready;
     if (cond.type === 'custom') return cond.check();
     return true;
