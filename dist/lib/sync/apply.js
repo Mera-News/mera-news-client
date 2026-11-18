@@ -26,17 +26,29 @@ async function applySnapshot(snapshot, options) {
   (0, _tables.assertSameVersions)(options.local, snapshot, 'phone');
   const applied = {};
   assertRowsUsable(snapshot);
+  const erase = options.erase;
+  // An erase replaces every served table, so a snapshot missing one would leave it empty.
+  if (erase) for (const t of _tables.SYNC_TABLES) if (!snapshot.tables[t.name]?.rows) throw new Error(`Snapshot has no rows for ${t.name}, so the phone cannot be erased`);
+  const keepTables = new Set([..._tables.PAIRING_KEEP_TABLES, ...(erase?.keepTables ?? [])]);
+  const keepKeys = new Set([..._tables.PAIRING_KEEP_SETTING_KEYS, ...(erase?.keepSettingKeys ?? [])]);
+  // Written by an erase, whatever the phone held.
+  const written = erase ? {
+    onboarding_done: 'true',
+    [_tables.PAIRING_ERASED_KEY]: String(Date.now())
+  } : {};
   await _database.default.write(async () => {
     const prepared = [];
     for (const [name, table] of Object.entries(snapshot.tables)) {
-      if (!table.rows || options.skip?.has(name) || !SYNCED.has(name)) continue;
+      if (!table.rows || !erase && options.skip?.has(name) || !SYNCED.has(name)) continue;
+      // Erasing, the pod's rows are the whole table: no merge, and no row held back as seen.
+      const mode = erase ? 'replace' : table.mode;
       const col = collection(name);
       let seen = new Set();
       if (name === 'notifications') {
         const [mark] = await collection('settings').query(_watermelondb.Q.where('key', NOTIFICATIONS_SEEN_KEY)).fetch();
         const before = mark?.value;
         try {
-          seen = new Set(before ? JSON.parse(before) : []);
+          seen = new Set(before && !erase ? JSON.parse(before) : []);
         } catch {
           seen = new Set();
         }
@@ -58,8 +70,13 @@ async function applySnapshot(snapshot, options) {
       });
       if (name === 'settings') {
         const keep = new Map(table.rows.filter(r => (0, _tables.isAppliedSettingKey)(String(r.key))).map(r => [String(r.key), r.value]));
+        for (const [key, value] of Object.entries(written)) keep.set(key, value);
         for (const rec of existing) {
-          if (!(0, _tables.isAppliedSettingKey)(rec.key)) continue;
+          if (rec.key === NOTIFICATIONS_SEEN_KEY) continue;
+          if (!(0, _tables.isAppliedSettingKey)(rec.key) && !(rec.key in written)) {
+            if (erase && !keepKeys.has(rec.key)) prepared.push(rec.prepareDestroyPermanently());
+            continue;
+          }
           const model = rec;
           if (!keep.has(rec.key)) prepared.push(model.prepareDestroyPermanently());else {
             const value = String(keep.get(rec.key));
@@ -88,15 +105,22 @@ async function applySnapshot(snapshot, options) {
               ...row,
               id: have.id
             }, col.schema);
-            const changed = Object.keys(next).filter(k => !['id', '_status', '_changed'].includes(k) && !(table.mode === 'merge' && k === 'status') && next[k] !== have._raw[k]);
+            const changed = Object.keys(next).filter(k => !['id', '_status', '_changed'].includes(k) && !(mode === 'merge' && k === 'status') && next[k] !== have._raw[k]);
             if (changed.length) prepared.push(have.prepareUpdate(rec => {
               for (const k of changed) rec._raw[k] = next[k];
             }));
           }
         }
-        if (table.mode === 'replace') for (const m of existing) if (!served.has(m.id)) prepared.push(m.prepareDestroyPermanently());
+        if (mode === 'replace') for (const m of existing) if (!served.has(m.id)) prepared.push(m.prepareDestroyPermanently());
       }
       applied[name] = table.hash;
+    }
+    // The phone's own tables (chats, jobs, the translation cache): emptied, not replaced.
+    if (erase) {
+      for (const name of Object.keys(_database.default.schema.tables)) {
+        if (SYNCED.has(name) || keepTables.has(name)) continue;
+        for (const m of await collection(name).query().fetch()) prepared.push(m.prepareDestroyPermanently());
+      }
     }
     await _database.default.batch(...prepared);
   }, 'sync-apply');

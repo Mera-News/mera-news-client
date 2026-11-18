@@ -3,11 +3,12 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.SyncVersionError = exports.SYNC_TABLES = exports.SHARED_SETTING_KEYS = exports.POD_OWNED_SETTING_KEYS = exports.PHONE_WINS_SETTING_KEYS = exports.PHONE_ONLY_TABLES = exports.MARK_TABLES = void 0;
+exports.SyncVersionError = exports.SYNC_TABLES = exports.SHARED_SETTING_KEYS = exports.POD_OWNED_SETTING_KEYS = exports.PHONE_WINS_SETTING_KEYS = exports.PHONE_ONLY_TABLES = exports.PAIRING_KEEP_TABLES = exports.PAIRING_KEEP_SETTING_KEYS = exports.PAIRING_ERASED_KEY = exports.MARK_TABLES = void 0;
 exports.assertSameVersions = assertSameVersions;
 exports.isAppliedSettingKey = isAppliedSettingKey;
 exports.isSharedSettingKey = isSharedSettingKey;
 exports.isSyncSettingKey = isSyncSettingKey;
+var _allowlist = require("../backup/allowlist");
 const replace = name => ({
   name,
   mode: 'replace'
@@ -19,7 +20,7 @@ const SYNC_TABLES = exports.SYNC_TABLES = [...['article_suggestions', 'article_s
   mode: 'merge'
 }, replace('settings')];
 
-/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
+/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply (an erase on pairing empties them). */
 const PHONE_ONLY_TABLES = exports.PHONE_ONLY_TABLES = ['conversations', 'messages', 'user_personas', 'scheduler_jobs', 'inference_jobs', 'translation_cache'];
 
 /** Tables the local-first batch writes to, by the kind of mark. */
@@ -70,3 +71,19 @@ function assertSameVersions(local, remote, localIs) {
     throw new SyncVersionError(local[field] < remote[field] ? localIs : other);
   }
 }
+
+/** Written by the erase on pairing, so the app can tell an erase that happened from a pairing cut short before it. */
+const PAIRING_ERASED_KEY = exports.PAIRING_ERASED_KEY = 'pod_pairing_erased_at';
+
+/** Tables an erase on pairing keeps: the account mirror. */
+const PAIRING_KEEP_TABLES = exports.PAIRING_KEEP_TABLES = ['user_personas'];
+
+// Device state an erase must not take: the session and identity keys a backup never carries,
+// minus onboarding (the erase writes it) and key material of jobs the erase removes.
+const NOT_KEPT_DEVICE_KEYS = ['onboarding_done', 'onboarding_state', 'email_capture_skipped', 'async_inference_pending_job_privkey', 'async_pipeline_privkey'];
+
+/**
+ * Settings an erase on pairing keeps: identity, session and device state, and the display choices.
+ * The app adds its own (tutorial progress) through the erase options.
+ */
+const PAIRING_KEEP_SETTING_KEYS = exports.PAIRING_KEEP_SETTING_KEYS = [...Object.keys(_allowlist.FORBIDDEN_SETTING_KEYS).filter(k => !NOT_KEPT_DEVICE_KEYS.includes(k)), 'has_launched', 'js_restart_marker', 'session_resume_at', 'keychain_afu_migration_v1', 'device_bound_user', 'bg_inference_submit_enabled', 'theme', 'text_scale', 'blur_images', 'static_gradient', 'startup_tab', 'feed_view', 'feed_minimap', 'feed_show', 'saved_group_by', 'nav_order_world'];
