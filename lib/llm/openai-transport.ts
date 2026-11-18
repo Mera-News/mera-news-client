@@ -109,8 +109,9 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-      // A redirect would carry the key to an address the config never named.
-      const response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'error' });
+      // A redirect would carry the key to an address the config never named. Not followed: it comes
+      // back as a 3xx (or an opaque redirect), a status that is never retried.
+      const response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'manual' });
       return { response, text: await response.text() };
     } catch (err) {
       if (signal?.aborted) throw new CallerAbortError('openai transport: caller aborted', err);
@@ -247,7 +248,7 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
         try {
           const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
           if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-          const res = await fetch(url, { method: 'POST', headers, body: payload, signal: controller.signal, redirect: 'error' });
+          const res = await fetch(url, { method: 'POST', headers, body: payload, signal: controller.signal, redirect: 'manual' });
           if (res.ok) {
             response = res;
             break;

@@ -315,6 +315,19 @@ describe('OpenAI chat errors', () => {
     expect(target.seen).toHaveLength(0);
   });
 
+  it('asks once and never retries when the endpoint redirects, on the chat leg and on a buffered call', async () => {
+    const target = await listen((_req, res) => send(res, ['moved']));
+    const redirecting = await listen((_req, res) => {
+      res.writeHead(302, { location: `${target.baseUrl}/chat/completions` }).end();
+    });
+    use(redirecting.baseUrl);
+    expect(await errorOf(collect(chat()))).toBeTruthy();
+    expect(redirecting.seen).toHaveLength(1);
+    expect(await errorOf(cloudComplete({ systemPrompt: 's', prompt: 'p' }))).toBeTruthy();
+    expect(redirecting.seen).toHaveLength(2);
+    expect(target.seen).toHaveLength(0);
+  });
+
   it('asks a harness that cannot think for no thinking and no headroom', async () => {
     HARNESS_FILES['no-thinking-chat-test'] = { extends: 'cloud-base', params: { thinking: false, quirks: ['thinking-off-kwarg'] } };
     try {
