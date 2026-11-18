@@ -19,14 +19,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { firstDifference, generateModuleText as generateSkillsModule, outFileFor, SKILLS_ROOT } from '../mera-harness/skills/generate';
+import { INCLUDE, slotText } from './slot-text';
 import { parseTemplate } from './template';
 
 export const HARNESSES_ROOT = __dirname;
 export const slotsFileFor = (root: string): string => path.join(root, 'slots.generated.ts');
 /** The persona skills: compiled by the skills generator, not as slots. */
 const SKILLS_DIR = 'skills';
-const NOTE = /^<!--[\s\S]*?-->\n/;
-const INCLUDE = /\{\{> ([a-z0-9][a-z0-9/-]*)\}\}/g;
 
 export class HarnessGenerationError extends Error {
   constructor(public readonly problems: string[]) {
@@ -54,12 +53,6 @@ function walk(dir: string, rel = ''): string[] {
     } else if (e.name.endsWith('.md')) out.push(r);
   }
   return out;
-}
-
-/** The slot text a file holds. Exported for the guard test, which compares raw override files. */
-export function slotText(raw: string): string | null {
-  if (!raw.endsWith('\n')) return null;
-  return raw.replace(NOTE, '').slice(0, -1);
 }
 
 function readFolders(root: string, problems: string[]): Folder[] {
@@ -156,6 +149,8 @@ export function generateSlotsModuleText(root: string = HARNESSES_ROOT): string {
     '',
   ];
   const registry: string[] = [];
+  /** Cloud base slot -> the cloud base slots that include it directly. */
+  const includedBy = new Map<string, Set<string>>();
   /** Folder -> slot id -> the const holding its text as that folder sees it. */
   const resolved = new Map<string, Map<string, string>>();
   const depth = (f: Folder): number => {
@@ -171,6 +166,9 @@ export function generateSlotsModuleText(root: string = HARNESSES_ROOT): string {
     }
     const isBase = f.extends === null;
     const view = overlay(f, byName);
+    if (f.name === 'cloud-base')
+      for (const [id, raw] of view)
+        for (const m of raw.matchAll(INCLUDE)) includedBy.set(m[1], (includedBy.get(m[1]) ?? new Set<string>()).add(id));
     const expanded = expandAll(f.name, view, problems);
     const parentNames = isBase ? new Map<string, string>() : resolved.get(f.extends ?? '') ?? new Map<string, string>();
     let own: string[];
@@ -223,6 +221,10 @@ export function generateSlotsModuleText(root: string = HARNESSES_ROOT): string {
     L.push('};', '');
     registry.push(`  ${JSON.stringify(f.name)}: ${constName(f.name)},`);
   }
+  L.push('/** Cloud base slot -> the cloud base slots that include it directly: an override of an included slot would not reach them. */');
+  L.push('export const CLOUD_BASE_INCLUDED_BY: Record<string, string[]> = {');
+  for (const id of [...includedBy.keys()].sort()) L.push(`  ${JSON.stringify(id)}: ${JSON.stringify([...(includedBy.get(id) ?? [])].sort())},`);
+  L.push('};', '');
   L.push('/** Folder -> its slots (a base: all of them; an implementation: its overrides only). */');
   L.push('export const HARNESS_SLOTS: Record<string, Record<string, string>> = {', ...registry.sort(), '};', '');
   if (problems.length) throw new HarnessGenerationError(problems);

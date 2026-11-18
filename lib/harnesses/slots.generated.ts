@@ -269,6 +269,45 @@ export const QWEN3_6_35B_A3B_SLOTS: Record<string, string> = {
 export const QWEN3_8_27B_SLOTS: Record<string, string> = {
 };
 
+/** Cloud base slot -> the cloud base slots that include it directly: an override of an included slot would not reach them. */
+export const CLOUD_BASE_INCLUDED_BY: Record<string, string[]> = {
+  "scoring/cloud-feed-verifier-system-prompt": ["scoring/cloud-v3-note-system-prompt"],
+  "scoring/cloud-headline-impact-block": ["scoring/cloud-headline-reason-system-prompt","scoring/cloud-headline-reason-system-prompt-rescore","scoring/cloud-headline-reason-system-prompt-v1","scoring/cloud-headline-relevance-system-prompt","scoring/cloud-headline-relevance-system-prompt-pre-geo"],
+  "scoring/cloud-headline-reason-system-prompt-v1": ["scoring/cloud-headline-reason-system-prompt-pre-geo"],
+  "scoring/cloud-headline-reason-task-middle": ["scoring/cloud-headline-reason-task-rescore","scoring/cloud-headline-reason-task-v1"],
+  "scoring/cloud-headline-reason-task-opener-rescore": ["scoring/cloud-headline-reason-task-rescore"],
+  "scoring/cloud-headline-reason-task-opener-v1": ["scoring/cloud-headline-reason-task-v1"],
+  "scoring/cloud-headline-reason-task-rescore": ["scoring/cloud-headline-reason-system-prompt-rescore"],
+  "scoring/cloud-headline-reason-task-v1": ["scoring/cloud-headline-reason-system-prompt","scoring/cloud-headline-reason-system-prompt-v1"],
+  "scoring/cloud-headline-relevance-task": ["scoring/cloud-headline-relevance-system-prompt","scoring/cloud-headline-relevance-system-prompt-pre-geo"],
+  "scoring/cloud-reason-system-prompt-v1": ["scoring/cloud-reason-system-prompt-pre-geo"],
+  "scoring/cloud-reason-task": ["scoring/cloud-reason-system-prompt"],
+  "scoring/cloud-reason-task-middle": ["scoring/cloud-reason-task","scoring/cloud-reason-task-rescore"],
+  "scoring/cloud-reason-task-middle-v1": ["scoring/cloud-reason-task-v1"],
+  "scoring/cloud-reason-task-opener-rescore": ["scoring/cloud-reason-task-rescore"],
+  "scoring/cloud-reason-task-opener-v1": ["scoring/cloud-reason-task","scoring/cloud-reason-task-v1"],
+  "scoring/cloud-reason-task-rescore": ["scoring/cloud-reason-system-prompt-rescore"],
+  "scoring/cloud-reason-task-v1": ["scoring/cloud-reason-system-prompt-v1"],
+  "scoring/cloud-reason-voice-rule": ["scoring/cloud-headline-reason-task-middle","scoring/cloud-reason-task-middle","scoring/cloud-reason-task-middle-v1","scoring/cloud-v3-note-system-prompt"],
+  "scoring/cloud-relevance-task": ["scoring/cloud-relevance-system-prompt","scoring/cloud-relevance-system-prompt-pre-geo"],
+  "scoring/cloud-scoring-base-anchors": ["scoring/cloud-scoring-base-prompt-pre-geo"],
+  "scoring/cloud-scoring-base-post-anchors": ["scoring/cloud-scoring-base-prompt-no-anchors","scoring/cloud-scoring-base-prompt-pre-geo"],
+  "scoring/cloud-scoring-base-pre-anchors": ["scoring/cloud-scoring-base-prompt-no-anchors","scoring/cloud-scoring-base-prompt-pre-geo"],
+  "scoring/cloud-scoring-base-prompt": ["scoring/cloud-headline-relevance-system-prompt","scoring/cloud-reason-system-prompt","scoring/cloud-reason-system-prompt-rescore","scoring/cloud-relevance-system-prompt"],
+  "scoring/cloud-scoring-base-prompt-no-anchors": ["scoring/cloud-headline-reason-system-prompt","scoring/cloud-headline-reason-system-prompt-rescore"],
+  "scoring/cloud-scoring-base-prompt-pre-geo": ["scoring/cloud-headline-reason-system-prompt-v1","scoring/cloud-headline-relevance-system-prompt-pre-geo","scoring/cloud-reason-system-prompt-v1","scoring/cloud-relevance-system-prompt-pre-geo","scoring/cloud-scoring-base-prompt"],
+  "scoring/cloud-scoring-geo-scope-rule": ["scoring/cloud-scoring-base-prompt","scoring/cloud-scoring-base-prompt-no-anchors"],
+  "scoring/local-scoring-base-prompt": ["scoring/local-reason-system-prompt","scoring/local-relevance-system-prompt"],
+  "scoring/reason-output-object": ["scoring/cloud-headline-reason-task-rescore","scoring/cloud-reason-task-rescore","scoring/reason-v2-rules-rescore"],
+  "scoring/reason-output-string": ["scoring/cloud-headline-reason-task-v1","scoring/cloud-reason-task","scoring/cloud-reason-task-v1","scoring/reason-v2-rules"],
+  "scoring/reason-v2-rules": ["scoring/cloud-headline-reason-system-prompt","scoring/cloud-headline-reason-system-prompt-pre-geo","scoring/cloud-reason-system-prompt","scoring/cloud-reason-system-prompt-pre-geo"],
+  "scoring/reason-v2-rules-body": ["scoring/reason-v2-rules","scoring/reason-v2-rules-rescore"],
+  "scoring/reason-v2-rules-rescore": ["scoring/cloud-headline-reason-system-prompt-rescore","scoring/cloud-reason-system-prompt-rescore"],
+  "scoring/rule-name-ban": ["scoring/cloud-headline-reason-system-prompt","scoring/cloud-reason-task-middle","scoring/local-reason-system-prompt"],
+  "topic-gen/cloud-topic-gen-rules-snippet": ["topic-gen/cloud-topic-generation-system-prompt"],
+  "topic-gen/local-topic-gen-rules-snippet": ["topic-gen/local-topic-generation-system-prompt"],
+};
+
 /** Folder -> its slots (a base: all of them; an implementation: its overrides only). */
 export const HARNESS_SLOTS: Record<string, Record<string, string>> = {
   "afm": AFM_SLOTS,
