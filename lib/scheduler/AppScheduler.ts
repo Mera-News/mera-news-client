@@ -3,6 +3,7 @@ import { resetSlowRequests, useNetworkStore } from '@/lib/stores/network-store';
 import { useUserStore } from '@/lib/stores/user-store';
 import { useDatabaseStore } from '@/lib/stores/database-store';
 import { getJwtToken } from '@/lib/platform/auth';
+import { platform } from '@/lib/platform';
 import { wasJsRestartSync } from '@/lib/app-restart';
 import type { Job, TaskCondition, TaskDefinition, TriggerOutcome } from './scheduler-types';
 import { useSchedulerStore } from './scheduler-store';
@@ -566,7 +567,7 @@ class _AppScheduler {
 
   private async _conditionsMet(task: TaskDefinition): Promise<boolean> {
     for (const cond of task.conditions ?? []) {
-      if (!(await this._checkCondition(cond))) {
+      if (!(await this._checkCondition(cond, task.name))) {
         logger.debug(`[AppScheduler] task=${task.name} blocked by condition type=${cond.type}`);
         return false;
       }
@@ -574,9 +575,13 @@ class _AppScheduler {
     return true;
   }
 
-  private async _checkCondition(cond: TaskCondition): Promise<boolean> {
+  private async _checkCondition(cond: TaskCondition, taskName: string): Promise<boolean> {
     if (cond.type === 'network') return useNetworkStore.getState().isConnected;
-    if (cond.type === 'authenticated') return this._checkAuthenticated();
+    if (cond.type === 'authenticated') {
+      // A task the host says reaches only the person's own servers has nothing to sign in to.
+      if (platform('lib/scheduler/AppScheduler').taskNeedsMeraSignIn?.(taskName) === false) return true;
+      return this._checkAuthenticated();
+    }
     if (cond.type === 'db-ready') return useDatabaseStore.getState().ready;
     if (cond.type === 'custom') return cond.check();
     return true;

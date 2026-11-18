@@ -253,6 +253,12 @@ export interface PlatformHost {
    * the call throws a `{ code, message }` error. Read at every call.
    */
   podCommand?: (command: { name: string; args: unknown[]; registry: number }) => Promise<unknown>;
+  /**
+   * Whether a scheduled task needs a Mera sign-in, by task name. False lets that task's
+   * `authenticated` condition pass without the token check, for a task that reaches only servers
+   * the person runs. Left out, or true, every task checks as before. Read at every check.
+   */
+  taskNeedsMeraSignIn?(taskName: string): boolean;
 
   recordForeground?(at: number): Promise<void>;
   runKeychainAccessibilityMigration?(): Promise<KeychainMigrationOutcome>;
