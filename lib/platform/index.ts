@@ -247,6 +247,13 @@ export interface PlatformHost {
    */
   harness?: HostHarness;
 
+  /**
+   * Present only while a phone is paired to a pod. Every registered writer (lib/sync/commands) then
+   * sends its name and arguments here instead of running. The result is the pod's JSON result, or
+   * the call throws a `{ code, message }` error. Read at every call.
+   */
+  podCommand?: (command: { name: string; args: unknown[]; registry: number }) => Promise<unknown>;
+
   recordForeground?(at: number): Promise<void>;
   runKeychainAccessibilityMigration?(): Promise<KeychainMigrationOutcome>;
   /** Restores the host's own state; awaited inside hydrateAllStores. May reject. */
