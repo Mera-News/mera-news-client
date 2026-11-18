@@ -387,7 +387,7 @@ function makeAgentToolPort(userMessage, onPhase, cards, onTool, stop) {
     // GATE 1: offered only while "Web search in chat" is on, so the loop never
     // declares the tool otherwise. `handleWebSearch` re-checks the setting
     // before any await (gate 2), for a switch flipped mid-turn.
-    ...(_meraProtocolStore.useMeraProtocolStore.getState().webSearchInChat ? {
+    ...((0, _cloudComplete.usesGateway)() && _meraProtocolStore.useMeraProtocolStore.getState().webSearchInChat ? {
       webSearch: args => live('webSearch', args, () => {
         // The wait line's phase for the same search. The next model call
         // opens with 'reset', which moves the line on; the row ends here.

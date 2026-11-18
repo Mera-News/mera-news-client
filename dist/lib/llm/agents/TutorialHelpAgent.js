@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.TutorialHelpAgent = void 0;
 var _webSearchHandler = require("../../chat-tools/web-search-handler");
 var _chatCloud = require("../chat-cloud");
+var _cloudComplete = require("../cloudComplete");
 var _tutorialHelp = require("../../news-harness/tutorial-help");
 var _logger = _interopRequireDefault(require("../../logger"));
 var _meraProtocolStore = require("../../stores/mera-protocol-store");
@@ -50,7 +51,7 @@ class TutorialHelpAgent {
    *  is strictly worse than no tool. */
   webSearchEnabled() {
     const protocol = _meraProtocolStore.useMeraProtocolStore.getState();
-    return (0, _chatCloud.chatRunsInCloud)() && protocol.webSearchInChat === true;
+    return (0, _chatCloud.chatRunsInCloud)() && (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true;
   }
   async buildSystemPrompt() {
     const appLanguage = _appLanguageStore.useAppLanguageStore.getState().appLanguage;

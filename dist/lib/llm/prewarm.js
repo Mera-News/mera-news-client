@@ -65,9 +65,9 @@ const PING_DEADLINE_MS = exports.PING_DEADLINE_MS = 60_000;
  * readiness ping. Returns immediately (void); all warming runs in the background.
  */
 function prewarmCloudChat(opts = {}) {
-  // Chat on the phone never touches the gateway: nothing to warm, no badge.
-  if (!(0, _chatCloud.chatRunsInCloud)()) {
-    _logger.default.debug('[chat-timing] prewarm skipped (on-device)');
+  // Chat on the phone, or on a host's own transport, never touches the gateway: nothing to warm, no badge.
+  if (!(0, _chatCloud.chatRunsInCloud)() || !(0, _cloudComplete.usesGateway)()) {
+    _logger.default.debug('[chat-timing] prewarm skipped (no gateway)');
     setReadiness('idle');
     return;
   }

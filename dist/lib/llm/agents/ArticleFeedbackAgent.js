@@ -16,6 +16,7 @@ var _appLanguageStore = require("../../stores/app-language-store");
 var _floatingChatStore = require("../../stores/floating-chat-store");
 var _meraProtocolStore = require("../../stores/mera-protocol-store");
 var _chatCloud = require("../chat-cloud");
+var _cloudComplete = require("../cloudComplete");
 var _supportedLanguages = require("../../supported-languages");
 var _trackedStoryService = require("../../database/services/tracked-story-service");
 var _trackActions = require("../../tracking/track-actions");
@@ -226,7 +227,7 @@ class ArticleFeedbackAgent {
     // toggle on, so getToolDefinitions() would declare `webSearch` while the
     // cached prompt still tells the model it has no way to look beyond the
     // metadata — reproducing the exact "toggle on, still refuses" bug reported.
-    const webSearch = mode === 'CLOUD' && protocol.webSearchInChat === true;
+    const webSearch = mode === 'CLOUD' && (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true;
 
     // Static content depends only on needsToolFormat + languageName + mode +
     // webSearch — all fixed per session unless the user changes app language,
@@ -241,7 +242,7 @@ class ArticleFeedbackAgent {
       // Same gate as getToolDefinitions' `proposeFactCheck` declaration, and
       // part of the cache key below for the same reason webSearch is: a prompt
       // built in one mode must not keep serving after the user switches.
-      factCheck: mode === 'CLOUD',
+      factCheck: mode === 'CLOUD' && (0, _cloudComplete.usesGateway)(),
       factPlaces: mode === 'CLOUD'
     });
     this.lastNeedsToolFormat = needsToolFormat;
@@ -258,7 +259,7 @@ class ArticleFeedbackAgent {
     // Same CLOUD gate as the prompt section and the tool declaration — a fourth
     // place it must agree, because it decides how much of the article the claim
     // picker actually gets to read.
-    const factCheck = (0, _chatCloud.chatRunsInCloud)();
+    const factCheck = (0, _chatCloud.chatRunsInCloud)() && (0, _cloudComplete.usesGateway)();
     const facts = await (0, _factService.getFacts)(); // newest-first (sorted created_at desc)
 
     const storeContext = _floatingChatStore.useFloatingChatStore.getState().context;
@@ -316,7 +317,9 @@ class ArticleFeedbackAgent {
     // for a persisted conversation replaying a call made while it was on.
     const protocol = _meraProtocolStore.useMeraProtocolStore.getState();
     const mode = (0, _chatCloud.chatRunsInCloud)() ? 'CLOUD' : 'LOCAL';
-    return (0, _agentCore.getArticleFeedbackToolDefinitions)(mode, protocol.webSearchInChat === true);
+    const defs = (0, _agentCore.getArticleFeedbackToolDefinitions)(mode, (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true);
+    // The claim check searches through the gateway, so a host's own transport leaves it out.
+    return (0, _cloudComplete.usesGateway)() ? defs : defs.filter(t => t.function.name !== 'proposeFactCheck');
   }
 
   // --- IAgent: tool execution ---

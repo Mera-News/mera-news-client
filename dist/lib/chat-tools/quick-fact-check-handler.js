@@ -125,7 +125,8 @@ async function handleQuickFactCheck(input, overrides = {}) {
     citations: [],
     evidenceCount: 0
   });
-  if (!claim) return empty('search-unavailable');
+  // The check searches through the gateway, which a host with its own transport does not use.
+  if (!claim || !(0, _cloudComplete.usesGateway)()) return empty('search-unavailable');
 
   // ── Search rounds ────────────────────────────────────────────────────────
   //

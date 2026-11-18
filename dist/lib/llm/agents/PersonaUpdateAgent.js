@@ -16,6 +16,7 @@ var _prompts = require("../../news-harness/prompts/prompts");
 var _appLanguageStore = require("../../stores/app-language-store");
 var _meraProtocolStore = require("../../stores/mera-protocol-store");
 var _chatCloud = require("../chat-cloud");
+var _cloudComplete = require("../cloudComplete");
 var _graphqlTypes = require("../../generated/graphql-types");
 var _supportedLanguages = require("../../supported-languages");
 var _personaAgentCore = require("../../news-harness/persona-management/persona-agent-core");
@@ -66,7 +67,7 @@ class PersonaUpdateAgent {
     const mode = (0, _chatCloud.chatRunsInCloud)() ? 'CLOUD' : 'LOCAL';
     // Prose about `webSearch` only makes sense where the tool is declared:
     // CLOUD, and only with the toggle on.
-    const webSearch = mode === 'CLOUD' && protocol.webSearchInChat === true;
+    const webSearch = mode === 'CLOUD' && (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true;
     // Recalibration is a cloud scoring call: On this phone (cloud chat or not) it is not offered.
     const canCalibrate = protocol.processingMode !== _graphqlTypes.ProcessingMode.OnDevice;
 
@@ -265,7 +266,7 @@ class PersonaUpdateAgent {
     // The handler re-checks the toggle regardless; see chat-tools/web-search-handler.
     const protocol = _meraProtocolStore.useMeraProtocolStore.getState();
     const mode = (0, _chatCloud.chatRunsInCloud)() ? 'CLOUD' : 'LOCAL';
-    return (0, _personaAgentCore.getPersonaToolDefinitions)(this.surface, _prompts.buildToolDefinitions, this.turnPlan.filterTools, mode, protocol.webSearchInChat === true, protocol.processingMode !== _graphqlTypes.ProcessingMode.OnDevice);
+    return (0, _personaAgentCore.getPersonaToolDefinitions)(this.surface, _prompts.buildToolDefinitions, this.turnPlan.filterTools, mode, (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true, protocol.processingMode !== _graphqlTypes.ProcessingMode.OnDevice);
   }
 
   // --- IAgent: tool execution ---

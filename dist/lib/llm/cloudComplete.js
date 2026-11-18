@@ -79,6 +79,7 @@ Object.defineProperty(exports, "takeStreamHandle", {
   }
 });
 exports.transportServesJobs = transportServesJobs;
+exports.usesGateway = usesGateway;
 var _gatewayTransport = require("./gateway-transport");
 var _platform = require("../platform");
 var _gatewayFetch = require("./gateway-fetch");
@@ -104,6 +105,11 @@ var _chatResponse = require("./chat-response");
 /** The host's transport when it brings one, else Mera's gateway. Read at every call. */
 function transport() {
   return (0, _platform.platform)('llm-transport').llmTransport ?? _gatewayTransport.gatewayTransport;
+}
+
+/** False when the host brings its own transport: nothing then goes to Mera's gateway. Read at call time. */
+function usesGateway() {
+  return (0, _platform.platform)('llm-transport').llmTransport === undefined;
 }
 
 /** Whether scoring may submit async inference jobs to the active transport. */

@@ -5,6 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.FollowStoryAgent = void 0;
 var _chatCloud = require("../chat-cloud");
+var _cloudComplete = require("../cloudComplete");
 var _newsSearchHandler = require("../../chat-tools/news-search-handler");
 var _webSearchHandler = require("../../chat-tools/web-search-handler");
 var _proposalHandlers = require("../../chat-tools/proposal-handlers");
@@ -58,7 +59,7 @@ class FollowStoryAgent {
     return {
       mode,
       canSearch: mode === 'CLOUD',
-      webSearch: mode === 'CLOUD' && protocol.webSearchInChat === true
+      webSearch: mode === 'CLOUD' && (0, _cloudComplete.usesGateway)() && protocol.webSearchInChat === true
     };
   }
   async buildSystemPrompt(needsToolFormat) {

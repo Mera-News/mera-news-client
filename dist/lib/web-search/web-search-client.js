@@ -10,6 +10,7 @@ exports.searchWebBatch = searchWebBatch;
 exports.unavailableCodeForStatus = unavailableCodeForStatus;
 var _auth = require("../platform/auth");
 var _endpoints = require("../config/endpoints");
+var _cloudComplete = require("../llm/cloudComplete");
 var gatewayRateLimiter = _interopRequireWildcard(require("../llm/gateway-rate-limiter"));
 var _logger = _interopRequireDefault(require("../logger"));
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
@@ -107,6 +108,16 @@ function messageForStatus(status) {
   }
 }
 
+/** The outcome for a search that was never sent. */
+function unavailable() {
+  return {
+    ok: false,
+    error: messageForStatus(503),
+    status: 503,
+    code: SEARCH_UNAVAILABLE
+  };
+}
+
 /**
  * STATUS ONLY, and that is the whole decision — do not "improve" this by
  * reading the gateway's `{ code }` out of the body.
@@ -182,6 +193,8 @@ function abortedBy(stop) {
  * the index had nothing.
  */
 async function searchWeb(query, stop) {
+  // A host with its own model transport has no gateway to search through.
+  if (!(0, _cloudComplete.usesGateway)()) return unavailable();
   const trimmed = (query ?? '').trim();
   if (trimmed.length < MIN_QUERY_CHARS || trimmed.length > MAX_QUERY_CHARS) {
     return {
@@ -321,6 +334,7 @@ async function searchWeb(query, stop) {
  * understood".
  */
 async function searchWebBatch(queries, stop) {
+  if (!(0, _cloudComplete.usesGateway)()) return unavailable();
   const seen = new Set();
   const cleaned = [];
   const rejected = [];
