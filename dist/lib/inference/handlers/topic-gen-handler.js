@@ -245,9 +245,11 @@ async function runTopicGen(payload) {
     // later without spending an attempt, and the fact stays pending.
     if ((0, _jobDefer.isOnDeviceDeferrable)(err) || (0, _jobDefer.isDeferrableError)(err)) throw err;
     const message = err instanceof Error ? err.message : String(err);
+    // The kind and status only: a gateway error carries the provider's body, which can echo the request.
     _logger.default.warn('[topic-gen] run failed', {
       factId: payload.factId,
-      message
+      error: err instanceof Error ? err.name : typeof err,
+      status: err?.statusCode
     });
     // Generate more and a scheduled retry change nothing: the fact's topics and
     // its status are not this run's to touch, and an error is never an empty.
@@ -286,11 +288,11 @@ async function runTopicGen(payload) {
     };
   }
   const topics = freshTopics(generated, ownTopics, declined);
-  // Persona content, so DEBUG only: console under EXPO_PUBLIC_VERBOSE_LOGS, a breadcrumb in dev builds, nothing in prod.
+  // Counts only: a debug line is a breadcrumb in development builds and on anyone's console.
   _logger.default.debug('[topic-gen] generated', {
-    fact: fact.statement,
-    returned: generated,
-    kept: topics
+    factId: payload.factId,
+    returned: generated.length,
+    kept: topics.length
   });
   if (topics.length > 0) {
     await (0, _topicGenerationStatusService.completeTopicGeneration)(payload.factId, topics);
