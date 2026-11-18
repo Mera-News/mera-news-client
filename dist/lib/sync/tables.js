@@ -19,9 +19,10 @@ const SYNC_TABLES = exports.SYNC_TABLES = [...['article_suggestions', 'article_s
   mode: 'merge'
 }, replace('settings')];
 
-/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
 /** The tables a person's profile is made of: what a pod's profile is replaced with at pairing. */
 const PROFILE_TABLES = exports.PROFILE_TABLES = ['facts', 'topics', 'declined_topics', 'persona_suppressions', 'locations', 'persona_summary_strings', 'persona_change_log', 'publication_preferences', 'user_publication_subscriptions', 'tracked_stories', 'saved_article_suggestions'];
+
+/** Tables that belong to the phone alone: never in a snapshot, never touched by an apply. */
 const PHONE_ONLY_TABLES = exports.PHONE_ONLY_TABLES = ['conversations', 'messages', 'user_personas', 'scheduler_jobs', 'inference_jobs', 'translation_cache'];
 
 /** Tables the local-first batch writes to, by the kind of mark. */
