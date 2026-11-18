@@ -58,3 +58,10 @@ it('with no pod paired a mark writer still writes, and holds no mark, since noth
   const impressions = await database.get('story_impressions').query().fetch();
   expect(impressions.some((r: any) => r.articleId === 'a2')).toBe(true);
 });
+
+it('a reset drops the marks a paired phone has not sent yet, since they belong to the person who logged out', async () => {
+  await recordOpen({ articleId: 'a3', surface: 'feed' });
+  expect(defaultMarkBatch.hasPending()).toBe(true);
+  await require('@/lib/stores').clearAllStores();
+  expect(defaultMarkBatch.hasPending()).toBe(false);
+});

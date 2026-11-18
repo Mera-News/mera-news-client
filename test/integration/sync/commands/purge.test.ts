@@ -1,6 +1,8 @@
 // A "Not preferred" mute purges only when its toast closes, or when the safety timer runs it. Over a
 // sink the result says a purge is pending, and its commitPurge sends the close as a command.
-import { commitSourcePrefPurge, revertSourcePrefChange, setSourcePrefFromUi } from '@/lib/database/services/publication-pref-ui-actions';
+import { cancelPendingPurges, commitSourcePrefPurge, revertSourcePrefChange, setSourcePrefFromUi } from '@/lib/database/services/publication-pref-ui-actions';
+import { setPreferenceKind } from '@/lib/database/services/publication-preference-service';
+import { clearAllStores } from '@/lib/stores';
 import { advanceUntilDone, testHost, useFakeClock } from '@/test/helpers';
 import { quietLogger, resetPersonaMemory, seedArticles, settleWrites, statuses } from '../../data/services/persona/support';
 
@@ -76,5 +78,31 @@ describe('over a sink', () => {
   it('a result with no purge pending gets no commitPurge', async () => {
     testHost.podCommand = async () => ({ applied: true, changeLogId: 'c1' });
     expect((await mute()).commitPurge).toBeUndefined();
+  });
+});
+
+describe('a reset', () => {
+  it('drops a waiting purge, so nothing of the person who logged out runs in the next account', async () => {
+    useFakeClock(Date.UTC(2026, 9, 9, 12));
+    await advanceUntilDone(mute());
+    await advanceUntilDone(clearAllStores());
+
+    // The next account has a row from the same publication and has muted it without a purge of its
+    // own: a purge left from before would now exclude that row.
+    await advanceUntilDone(seedArticles([{ id: 'c', title: 'z', publication: 'Times of India' }]));
+    await advanceUntilDone(setPreferenceKind('Times of India', 'mute', 'user'));
+    await jest.advanceTimersByTimeAsync(61_000);
+    await advanceUntilDone(settleWrites());
+    expect(await advanceUntilDone(statuses())).toEqual({ c: 'unscored' });
+  });
+
+  it('cancelPendingPurges drops every waiting purge and is safe with none', async () => {
+    useFakeClock(Date.UTC(2026, 9, 9, 12));
+    await advanceUntilDone(mute());
+    cancelPendingPurges();
+    cancelPendingPurges();
+    await jest.advanceTimersByTimeAsync(61_000);
+    await advanceUntilDone(settleWrites());
+    expect(await advanceUntilDone(statuses())).toEqual({ a: 'unscored', b: 'unscored' });
   });
 });

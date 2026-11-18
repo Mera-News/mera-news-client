@@ -70,6 +70,11 @@ export const clearAllStores = async () => {
     const { clearAttestationCache } = require('../e2ee/e2ee-cache');
     const { resetPublisherSourceNames } = require('../database/services/publisher-source-names');
 
+    // Work the previous person left waiting goes first: a mute's purge would otherwise run in the
+    // next account's database, and a paired phone's unsent display marks are theirs too.
+    require('../database/services/publication-pref-ui-actions').cancelPendingPurges();
+    require('../sync/marks').defaultMarkBatch.takeBatch();
+
     // Wipe all WatermelonDB data (drops and recreates all tables)
     await database.write(async () => {
         await database.unsafeResetDatabase();

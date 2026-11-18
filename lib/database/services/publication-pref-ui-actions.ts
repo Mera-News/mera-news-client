@@ -149,6 +149,13 @@ async function commitSourcePrefPurgeLocal(changeLogId: string): Promise<void> {
   await pending.run();
 }
 
+/** Drops every waiting purge and its timer. A reset calls it, so a purge belonging to the person who
+ *  logged out never runs in the next account's database, and no timer outlives its owner. */
+export function cancelPendingPurges(): void {
+  for (const { timer } of pendingPurges.values()) clearTimeout(timer);
+  pendingPurges.clear();
+}
+
 /** Runs the purge a mute left waiting, once. An id with nothing waiting does nothing. */
 export const commitSourcePrefPurge = command('commitSourcePrefPurge', commitSourcePrefPurgeLocal);
 
