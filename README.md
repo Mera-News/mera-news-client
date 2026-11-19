@@ -48,6 +48,23 @@ Everything is under `lib/`.
 
 Files at the top of `lib/` hold the logger, the restart rules, the GraphQL services (account, articles, places, publication display) and a few small shared modules.
 
+## Install
+
+The package is not on npm. The `dist` branch holds the built package, one commit per build of `dev`. Pin a `dist` commit by its full hash:
+
+```
+npm install "git+https://github.com/Mera-News/mera-news-client.git#<dist commit>"
+```
+
+A host that compiles TypeScript itself can pin a `dev` commit instead and build `lib/` with its own toolchain.
+
+## Not supported yet
+
+- No stable API. Any commit may change what the package exports; pin a commit and read the history before you move.
+- No npm releases or version tags.
+- The Mera News phone app is not in this repository, and the account, subscription and notification services stay with Mera.
+- News comes from a news server's GraphQL API, such as `mera-news-data-server`. `news-schema.gql` is the public news schema the package's news requests are checked against.
+
 ## Provide a platform
 
 The package never imports a native module. The host passes the platform in once, before it imports anything else from the package. Reading a facade before that throws `PlatformNotRegisteredError`.
@@ -77,7 +94,7 @@ The full shape is `PlatformHost` in `lib/platform/index.ts`. Each file in `lib/p
 
 ## Scripts
 
-Node 22.12 or later is required.
+Node 22.13 or later is required.
 
 ```
 npm ci
@@ -92,6 +109,10 @@ npm run codegen            # regenerate lib/generated/graphql-types.ts from sche
 
 `schema.gql` is a copy of the server's GraphQL schema. To target your own server, replace it with
 your server's schema and run `npm run codegen`.
+
+## Contributions
+
+Outside code contributions are not accepted yet, because there is no contributor agreement. Pull requests from outside Mera Labs will be closed. To report a bug or a security problem, write to contact@mera.news.
 
 ## License
 
