@@ -57,54 +57,17 @@ describe('which retrieval path runs', () => {
     expect(out.freeTopicTexts).toEqual(new Set());
   });
 
-  it('with no topic rows at all, reads the topics off fact.metadata.topics and asks the legacy query at 100 per topic', async () => {
+  it('with no topic rows, a fact that still lists topics in its metadata gets the country and world headlines, never a per-topic query', async () => {
     await markPersonaMigrated();
-    // A fact written with its list but no topic rows: what a device that never migrated holds.
-    await addFact('I follow racing', { topics: ['formula 1', 'motogp', 'formula 1', ''] });
-    const sent = recordOps();
-
-    const out = await stepFetchTopicIds('', makeCtx().ctx);
-
-    expect(await sent.count('GetArticleIdsForPersona')).toBe(0);
-    const [legacy] = await sent.named('GetArticleIdsForTopics');
-    expect(legacy.variables.topics).toEqual([{ topicText: 'formula 1' }, { topicText: 'motogp' }]);
-    expect(legacy.variables.limitPerTopic).toBe(100);
-    expect(out.personaMeta).toBeUndefined();
-    expect(out.freeTopicTexts).toBeUndefined();
-    expect(out.serverArticleIds.length).toBeGreaterThan(0);
-  });
-
-  it('on the legacy path skips a fact that has no metadata.topics at all', async () => {
-    await markPersonaMigrated();
-    await addFact('I like walking');
-    await addFact('I follow racing', { topics: ['formula 1'] });
+    // A fact with its old metadata list but no topic rows, as on a device the topic migration has not reached.
+    await addFact('I follow racing', { topics: ['formula 1', 'motogp'] });
     const sent = recordOps();
 
     await stepFetchTopicIds('', makeCtx().ctx);
 
-    const [legacy] = await sent.named('GetArticleIdsForTopics');
-    expect(legacy.variables.topics).toEqual([{ topicText: 'formula 1' }]);
-  });
-
-  it('on the legacy path an article matched by two topics lists both texts and appears once', async () => {
-    await markPersonaMigrated();
-    await addFact('I follow racing', { topics: ['alpha', 'beta'] });
-    server.use(
-      mockGql('GetArticleIdsForTopics', {
-        articleIdsForTopics: {
-          __typename: 'ArticleIdsForTopicsResponse',
-          results: [
-            { __typename: 'TopicArticleIdsResult', topicText: 'alpha', articleIds: ['x1', 'x2'], hasNextPage: false, nextCursor: null },
-            { __typename: 'TopicArticleIdsResult', topicText: 'beta', articleIds: ['x2', 'x3'], hasNextPage: false, nextCursor: null },
-          ],
-        },
-      }),
-    );
-
-    const out = await stepFetchTopicIds('', makeCtx().ctx);
-
-    expect(out.serverArticleIds).toEqual(['x1', 'x2', 'x3']);
-    expect(out.articleToTopicTexts.get('x2')).toEqual(['alpha', 'beta']);
+    const [persona] = await sent.named('GetArticleIdsForPersona');
+    expect(persona.variables.query.topics).toEqual([]);
+    expect(await sent.count('GetArticleIdsForTopics')).toBe(0);
   });
 
   it('with no topics anywhere, fails terminal with no-topics-configured and asks the server nothing', async () => {
@@ -225,8 +188,10 @@ describe('which retrieval path runs', () => {
       expect.any(Error),
       expect.objectContaining({ tags: expect.objectContaining({ method: 'runPersonaMigrationIfNeeded' }) }),
     );
-    // no topic rows were written, so it fell back to the legacy list
-    expect(await sent.count('GetArticleIdsForTopics')).toBe(1);
+    // No topic rows were written, so the persona query goes out with none: the country and the world.
+    const [persona] = await sent.named('GetArticleIdsForPersona');
+    expect(persona.variables.query.topics).toEqual([]);
+    expect(await sent.count('GetArticleIdsForTopics')).toBe(0);
     expect(out.serverArticleIds.length).toBeGreaterThan(0);
   });
 
@@ -252,17 +217,6 @@ describe('what the step logs', () => {
 
     expect(t.log).toHaveBeenCalledWith('fetching persona ids for 2 topics + 1 scopes');
     expect(t.log).toHaveBeenCalledWith('server returned 2 article ids (persona path)');
-  });
-
-  it('names the legacy request size and the id count it got back', async () => {
-    await markPersonaMigrated();
-    await addFact('I follow racing', { topics: ['alpha', 'beta'] });
-    const t = makeCtx();
-
-    const out = await stepFetchTopicIds('', t.ctx);
-
-    expect(t.log).toHaveBeenCalledWith('fetching ids for 2 topics (legacy path)');
-    expect(t.log).toHaveBeenCalledWith(`server returned ${out.serverArticleIds.length} article ids`);
   });
 });
 

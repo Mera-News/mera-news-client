@@ -9,7 +9,6 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
   'ClusterMembershipsForArticles',
   'GetArticleById',
   'GetArticleIdsForPersona',
-  'GetArticleIdsForTopics',
   'GetArticlesForCountry',
   'GetArticlesForPublisher',
   'GetArticlesForPublisherNoOrder',
@@ -41,7 +40,6 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
 export const NEWS_OPERATIONS_NOT_PUBLIC: Readonly<Record<string, string>> = {
   GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
   PublicationDisplayNames: 'private to Mera',
-  GetArticleIdsForTopics: 'old topics fallback; whether to retire it is an open owner question',
 };
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a

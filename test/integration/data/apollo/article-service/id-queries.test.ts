@@ -3,7 +3,7 @@
 // (quota-charged and quota-exempt), chunked at 50 ids.
 import ArticleService from '@/lib/article-service';
 import { useForYouStore } from '@/lib/stores/for-you-store';
-import type { PersonaQueryInput, TopicPaginationInput } from '@/lib/generated/graphql-types';
+import type { PersonaQueryInput } from '@/lib/generated/graphql-types';
 import { advanceUntilDone, mockGql, mockGqlError, server, useFakeClock } from '@/test/helpers';
 import {
     ARTICLE_IDS,
@@ -71,106 +71,6 @@ describe('getRecentArticleCount', () => {
         await expect(advanceUntilDone(ArticleService.getRecentArticleCount())).resolves.toBeNull();
         expect(crumbOf(logs.crumb, 'getRecentArticleCount failed')).toBeDefined();
         expectNoServiceCapture(logs.capture);
-    });
-});
-
-const topic = (topicText: string): TopicPaginationInput => ({ topicText });
-const topics = (n: number, offset = 0) => Array.from({ length: n }, (_, i) => topic(`t${i + offset}`));
-const idsResult = (topicText: string, articleIds: string[] = [`a-${topicText}`]) => ({
-    __typename: 'TopicArticleIdsResult',
-    topicText,
-    articleIds,
-    hasNextPage: false,
-    nextCursor: null,
-});
-
-describe('getArticleIdsForTopics', () => {
-    it('sends the topics with the default limitPerTopic of 20 and maps the served results', async () => {
-        const sent = recordOps();
-        const result = await ArticleService.getArticleIdsForTopics([topic('AI'), topic('Tech')]);
-        expect(result.results.map((r) => r.topicText)).toEqual(['AI', 'Tech']);
-        expect(result.results.flatMap((r) => r.articleIds).sort()).toEqual([...ARTICLE_IDS].sort());
-        const [call] = await sentOf(sent, 'GetArticleIdsForTopics');
-        expect(call.variables).toEqual({ topics: [{ topicText: 'AI' }, { topicText: 'Tech' }], limitPerTopic: 20 });
-    });
-
-    it('sends a custom limitPerTopic', async () => {
-        const sent = recordOps();
-        await ArticleService.getArticleIdsForTopics([topic('Tech')], { limitPerTopic: 5 });
-        expect((await sentOf(sent, 'GetArticleIdsForTopics'))[0].variables.limitPerTopic).toBe(5);
-    });
-
-    it('returns an empty result when the whole response is { data: null }', async () => {
-        server.use(mockGql('GetArticleIdsForTopics', null));
-        expect(await ArticleService.getArticleIdsForTopics([])).toEqual({ results: [] });
-    });
-
-    it('returns an empty result when the server sends none or a null field', async () => {
-        expect((await ArticleService.getArticleIdsForTopics([])).results).toEqual([]);
-        server.use(mockGql('GetArticleIdsForTopics', { articleIdsForTopics: null }));
-        expect(await ArticleService.getArticleIdsForTopics([topic('x')])).toEqual({ results: [] });
-    });
-
-    it('rethrows with a breadcrumb and no capture of its own', async () => {
-        const logs = spyLogger();
-        server.use(mockGqlError('GetArticleIdsForTopics', 'INTERNAL_SERVER_ERROR', { message: 'ids failed' }));
-        await expect(ArticleService.getArticleIdsForTopics([topic('AI')])).rejects.toThrow('ids failed');
-        expectNoServiceCapture(logs.capture);
-        expect(logs.crumb).toHaveBeenCalledWith(
-            expect.stringContaining('getArticleIdsForTopics FAILED'),
-            'article-service',
-            expect.objectContaining({ topicCount: 1, method: 'getArticleIdsForTopics' }),
-            'warning',
-        );
-    });
-
-    describe('chunking at 150 topics', () => {
-        const echo = mockGql('GetArticleIdsForTopics', (v) => ({
-            articleIdsForTopics: {
-                __typename: 'ArticleIdsForTopicsResponse',
-                results: (v.topics as TopicPaginationInput[]).map((t) => idsResult(t.topicText)),
-            },
-        }));
-
-        it('sends one request for 150 topics', async () => {
-            server.use(echo);
-            const sent = recordOps();
-            await ArticleService.getArticleIdsForTopics(topics(150));
-            const calls = await sentOf(sent, 'GetArticleIdsForTopics');
-            expect(calls).toHaveLength(1);
-            expect(calls[0].variables.topics).toHaveLength(150);
-        });
-
-        it('splits 247 topics into 150 then 97, in order, and merges the results in order', async () => {
-            server.use(echo);
-            const sent = recordOps();
-            const all = topics(247);
-            const result = await ArticleService.getArticleIdsForTopics(all);
-            const calls = await sentOf(sent, 'GetArticleIdsForTopics');
-            expect(calls.map((c) => c.variables.topics.length)).toEqual([150, 97]);
-            expect(calls[1].variables.topics[0]).toEqual({ topicText: 't150' });
-            expect(result.results.map((r) => r.topicText)).toEqual(all.map((t) => t.topicText));
-        });
-
-        it('keeps the first result when a later batch echoes a topic it already has', async () => {
-            let call = 0;
-            server.use(
-                mockGql('GetArticleIdsForTopics', () => ({
-                    articleIdsForTopics: { results: [idsResult('t0', [call++ === 0 ? 'x' : 'y'])] },
-                })),
-            );
-            const result = await ArticleService.getArticleIdsForTopics(topics(200));
-            expect(result.results).toHaveLength(1);
-            expect(result.results[0].articleIds).toEqual(['x']);
-        });
-
-        it('sends the same limitPerTopic with every chunk', async () => {
-            server.use(echo);
-            const sent = recordOps();
-            await ArticleService.getArticleIdsForTopics(topics(160), { limitPerTopic: 7 });
-            const calls = await sentOf(sent, 'GetArticleIdsForTopics');
-            expect(calls.map((c) => c.variables.limitPerTopic)).toEqual([7, 7]);
-        });
     });
 });
 

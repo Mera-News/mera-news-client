@@ -62,7 +62,6 @@ describe('the operation classes', () => {
       'ClusterMembershipsForArticles',
       'GetArticleById',
       'GetArticleIdsForPersona',
-      'GetArticleIdsForTopics',
       'GetArticlesForCountry',
       'GetArticlesForPublisher',
       'GetArticlesForPublisherNoOrder',

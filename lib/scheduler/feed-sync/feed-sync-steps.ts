@@ -22,7 +22,6 @@ import { getFacts, hasAnyFacts } from '@/lib/database/services/fact-service';
 import { deleteSetting, getSetting, setSetting } from '@/lib/database/services/setting-service';
 import {
   getActive as getActiveTopics,
-  countActiveTopicsIncludingStaged,
   normalizeTopicText,
 } from '@/lib/database/services/topic-service';
 import { runPersonaMigrationIfNeeded } from '@/lib/services/persona-migration-service';
@@ -208,13 +207,11 @@ export const HYDRATE_STOP_AFTER_MS = 150_000;
 export interface FetchTopicIdsResult {
   articleToTopicTexts: Map<string, string[]>;
   serverArticleIds: string[];
-  /** Persona-v3 metadata (present on the persona path; absent on the empty-
-   *  topics-table fallback, which routes persist + scoring to the legacy path). */
+  /** Persona-v3 metadata. The persona path always sets it. */
   personaMeta?: PersonaPersistMeta;
   /** NORMALIZED texts of topics whose articles may be hydrated quota-FREE — i.e.
    *  texts carried ONLY by `provenance: 'tracked'` topics. See
-   *  {@link computeFreeTopicTexts}. Absent on the legacy path (no topics table,
-   *  so no tracked topics can exist). */
+   *  {@link computeFreeTopicTexts}. */
   freeTopicTexts?: Set<string>;
 }
 
@@ -283,15 +280,9 @@ export async function stepFetchTopicIds(
 ): Promise<FetchTopicIdsResult> {
   if (ctx.signal.aborted) throw createCancellationError();
 
-  // Close the sync-vs-migration race. On a fresh upgrade/login both
-  // `feed-sync` and the one-time persona migration fire on app-foreground with
-  // no ordering; if the sync wins, the `topics` table is still empty, so we fall
-  // to the legacy path, which persists rows with matched_topics_json = null —
-  // orphaning every article to "Also for you" (sticky, since re-sync never
-  // rewrites the field). Run the (flag-guarded, instant no-op after first
-  // completion) migration BEFORE the topics-path choice so the persona path is
-  // taken from the first sync. A migration failure must never kill the sync — on
-  // error we proceed exactly as before (legacy fallback if topics still empty).
+  // Run the (flag-guarded, instant no-op after first completion) topic migration first, so a device
+  // that has not migrated yet has its topic rows before they are read. A migration failure must never
+  // kill the sync: it goes on with whatever topics exist.
   try {
     await runPersonaMigrationIfNeeded();
   } catch (err) {
@@ -300,23 +291,12 @@ export async function stepFetchTopicIds(
     });
   }
 
-  // Self-gating cutover: once the persona-v3 `topics` table is populated (the
-  // one-time silent migration ran), use the privacy-lean persona retrieval;
-  // until then fall back end-to-end to the legacy metadata.topics path so the
-  // feed degrades gracefully on devices that haven't migrated yet.
-  //
-  // Branch on the UNFILTERED count, filter after. `getActiveTopics()` excludes
-  // rows staged for deletion (v55), so staging a user's last active topic
-  // would empty it and drop into the legacy path — which reads
-  // `fact.metadata.topics`, still holding that topic's text, and would
-  // re-retrieve the very topic they just deleted. The commit's suggestion
-  // purge cannot clean that up, because the legacy path leaves no topicId on
-  // the row and `purgeSuggestionsForDeadTopics` skips rows with no topic
-  // evidence. A filter that empties this set inverts into a total bypass of
-  // itself.
+  // With no active topic (a fact whose topics are not made yet, a place with no fact, or every topic
+  // staged for deletion), the persona query still brings the country and the world. Only no fact and
+  // no place at all is terminal.
   const activeTopics = await getActiveTopics();
-  if (activeTopics.length === 0 && (await countActiveTopicsIncludingStaged()) === 0) {
-    return fetchTopicIdsLegacy(ctx);
+  if (activeTopics.length === 0 && !(await hasAnyFacts()) && (await getAllLocations()).length === 0) {
+    throw Object.assign(new Error('no-topics-configured'), { code: 'no-topics-configured' });
   }
   return fetchTopicIdsPersona(activeTopics, ctx, opts.background ?? false);
 }
@@ -523,9 +503,9 @@ async function fetchTopicIdsPersona(
     headlineDepthByScope: headlineDepths,
   });
 
-  // Topic rows exist (the caller routes a device with none to the legacy path), but none may have a
-  // positive effective weight (all muted, or the last one staged for delete). The request still goes
-  // out with no topics: the headline scopes are always present, so the reader gets headlines.
+  // There may be no topic with a positive effective weight (none made yet, all muted, or the last one
+  // staged for delete). The request still goes out with no topics: the headline scopes are always
+  // present, so the reader gets headlines.
 
   const textToTopicId = new Map<string, string>();
   for (const t of profile.topics) {
@@ -689,49 +669,6 @@ async function fetchTopicIdsPersona(
     // were sent as tracked.
     freeTopicTexts,
   };
-}
-
-/** Legacy fallback: the pre-persona metadata.topics retrieval path, used until
- *  the persona-v3 migration has populated the `topics` table on this device. */
-async function fetchTopicIdsLegacy(ctx: TaskContext): Promise<FetchTopicIdsResult> {
-  const topicTexts = await getLocalTopicTextsForPersona();
-  if (topicTexts.length === 0) {
-    // A fact with no topics yet (a city, or a run still queued), or a place with
-    // no fact at all, still gets its country and the world: the persona query
-    // takes an empty topic list. Only zero facts AND zero places is terminal.
-    if ((await hasAnyFacts()) || (await getAllLocations()).length > 0) {
-      return fetchTopicIdsPersona([], ctx);
-    }
-    throw Object.assign(new Error('no-topics-configured'), { code: 'no-topics-configured' });
-  }
-  ctx.log(`fetching ids for ${topicTexts.length} topics (legacy path)`);
-  logger.debug(`[feed-sync-steps] calling getArticleIdsForTopics with ${topicTexts.length} topics (legacy)`);
-
-  const idsResponse = await withRetry(
-    () =>
-      ArticleService.getArticleIdsForTopics(
-        topicTexts.map((text) => ({ topicText: text })),
-        // Fetch everything per topic (server ceiling 100), same as the persona
-        // path above. Was 20.
-        { limitPerTopic: 100 },
-      ),
-    ctx.signal,
-    RESOLVER_ERROR_RETRIES,
-  );
-
-  const articleToTopicTexts = new Map<string, string[]>();
-  for (const result of idsResponse.results) {
-    for (const id of result.articleIds) {
-      const existing = articleToTopicTexts.get(id) ?? [];
-      existing.push(result.topicText);
-      articleToTopicTexts.set(id, existing);
-    }
-  }
-  const serverArticleIds = [...articleToTopicTexts.keys()];
-
-  logger.debug(`[feed-sync-steps] getArticleIdsForTopics returned ${serverArticleIds.length} article ids`);
-  ctx.log(`server returned ${serverArticleIds.length} article ids`);
-  return { articleToTopicTexts, serverArticleIds };
 }
 
 export async function stepDiff(
@@ -1185,18 +1122,6 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
-}
-
-async function getLocalTopicTextsForPersona(): Promise<string[]> {
-  const facts = await getFacts();
-  const texts = new Set<string>();
-  for (const fact of facts) {
-    for (const topic of fact.metadata?.topics ?? []) {
-      if (topic.length > 0) texts.add(topic);
-    }
-  }
-  logger.debug(`[feed-sync-steps] found ${texts.size} topic texts from facts`);
-  return Array.from(texts);
 }
 
 /**
