@@ -484,23 +484,6 @@ const GET_RECENT_ARTICLE_COUNT = (0, _client.gql)`
   }
 `;
 
-// [Flow v2] GraphQL Query: per-topic article IDs with cursor-based pagination.
-// The server checks Redis (30 min TTL) first; on miss it runs a vector search
-// with a hardcoded 24h cutoff. The app diffs the returned IDs against its
-// local DB and only fetches missing full records via articlesForTopicsByIds.
-const GET_ARTICLE_IDS_FOR_TOPICS = (0, _client.gql)`
-  query GetArticleIdsForTopics($topics: [TopicPaginationInput!]!, $limitPerTopic: Int) {
-    articleIdsForTopics(topics: $topics, limitPerTopic: $limitPerTopic) {
-      results {
-        topicText
-        articleIds
-        hasNextPage
-        nextCursor
-      }
-    }
-  }
-`;
-
 // [Flow v2] GraphQL Query: hydrate full article records for IDs the app
 // doesn't already have locally. Returns ArticleWithClusters which includes
 // per-cluster membership confidence for the For-You feed's collapse logic.
@@ -627,7 +610,7 @@ const GET_ARTICLE_IDS_FOR_PERSONA = (0, _client.gql)`
 
 // Use generated GraphQL types
 
-// [Flow v2] The server rejects an articleIdsForTopics request carrying more than
+// The server rejects a persona request carrying more than
 // 200 topics with BAD_USER_INPUT. Users accumulate unbounded on-device topics,
 // so a single feed-sync could send hundreds at once. We chunk below the server
 // cap (with headroom) and run the batches SEQUENTIALLY — each cold topic costs
@@ -799,50 +782,6 @@ class ArticleService {
   }
 
   /**
-   * [Flow v2] Fetch the set of article IDs matching each topic text.
-   * Server checks a 30-min Redis cache first; on miss it runs vector search
-   * against the last 24 hours of articles. Each topic result carries its own
-   * cursor so the caller can request additional pages per topic independently.
-   */
-  static async getArticleIdsForTopics(topics, opts) {
-    const limitPerTopic = opts?.limitPerTopic ?? 20;
-    try {
-      // Stay under the server's per-request topic cap. `limitPerTopic` is a
-      // per-topic bound, so batching leaves its semantics unchanged. Batches
-      // run sequentially to avoid stacking cold-topic vector searches.
-      if (topics.length <= MAX_TOPICS_PER_BATCH) {
-        return await this.queryArticleIdsBatch(topics, limitPerTopic);
-      }
-      const merged = [];
-      const seenTopics = new Set();
-      for (let i = 0; i < topics.length; i += MAX_TOPICS_PER_BATCH) {
-        const batch = topics.slice(i, i + MAX_TOPICS_PER_BATCH);
-        const {
-          results
-        } = await this.queryArticleIdsBatch(batch, limitPerTopic);
-        // Preserve order; de-dup by topicText so a topic never appears twice.
-        for (const result of results) {
-          if (seenTopics.has(result.topicText)) continue;
-          seenTopics.add(result.topicText);
-          merged.push(result);
-        }
-      }
-      return {
-        results: merged
-      };
-    } catch (error) {
-      // The apollo-error-link already captures this to Sentry; a
-      // service-level captureException here would double-report (and, on a
-      // retried storm, multiply). Leave a breadcrumb for context instead.
-      _logger.default.addBreadcrumb('[ArticleService] getArticleIdsForTopics FAILED', 'article-service', {
-        method: 'getArticleIdsForTopics',
-        topicCount: topics.length
-      }, 'warning');
-      throw error;
-    }
-  }
-
-  /**
    * [Persona v3] Fetch candidate article ids for the privacy-lean persona
    * query: topic texts + per-topic limits + COUNTRY/GLOBAL headline scopes.
    * Returns per-topic results (with matchMeta) + per-scope headline results.
@@ -876,23 +815,6 @@ class ArticleService {
     return data?.articleIdsForPersona ?? {
       topicResults: [],
       headlineResults: []
-    };
-  }
-
-  /** Single-request articleIdsForTopics call (one batch of ≤ server cap topics). */
-  static async queryArticleIdsBatch(topics, limitPerTopic) {
-    const {
-      data
-    } = await _apolloClient.default.query({
-      query: GET_ARTICLE_IDS_FOR_TOPICS,
-      variables: {
-        topics,
-        limitPerTopic
-      },
-      fetchPolicy: 'no-cache'
-    });
-    return data?.articleIdsForTopics ?? {
-      results: []
     };
   }
 

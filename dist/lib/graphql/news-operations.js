@@ -10,7 +10,7 @@ exports.isNewsOperation = exports.NEWS_OPERATION_NAMES = exports.NEWS_OPERATIONS
 // carries the person's identity, and a Mera service (fact checks) is not something a news server offers.
 // Every operation in the client's documents is in exactly one list; a test scans the documents.
 
-const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticleIdsForTopics', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'NewsServerStatus', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
+const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'NewsServerStatus', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
 
 /**
  * News operations Mera's own server answers but the public news server does not, with why. A host
@@ -19,8 +19,7 @@ const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'Cl
  */
 const NEWS_OPERATIONS_NOT_PUBLIC = exports.NEWS_OPERATIONS_NOT_PUBLIC = {
   GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
-  PublicationDisplayNames: 'private to Mera',
-  GetArticleIdsForTopics: 'old topics fallback; whether to retire it is an open owner question'
+  PublicationDisplayNames: 'private to Mera'
 };
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a

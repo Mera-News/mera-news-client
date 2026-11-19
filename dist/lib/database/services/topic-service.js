@@ -166,8 +166,8 @@ async function createTopicsLocal(inputs) {
   });
   if (toCreate.length > 0) {
     // METADATA PAIRING (v55). `fact.metadata.topics` is a SECOND topic list:
-    // the fact page and the chat card render this table, but
-    // `fetchTopicIdsLegacy` still retrieves from the metadata copy.
+    // the fact page and the chat card render this table, and the fact's own
+    // metadata copy travels with the fact.
     // Keeping the two in step HERE, rather than asking each caller to
     // remember, is what makes every minting path consistent: "Add topic", the
     // re-mint after a decline is lifted, and generate-more all land in this
@@ -305,16 +305,8 @@ async function getActive() {
 }
 
 /**
- * Active topics INCLUDING rows staged for deletion.
- *
- * Exists for exactly one caller: `feed-sync-steps`' legacy-fallback branch,
- * which drops into `fetchTopicIdsLegacy` when the active set is EMPTY. That
- * fallback reads `fact.metadata.topics`, which still holds a staged topic's
- * text — so if staging someone's last active topic emptied `getActive()`, the
- * fallback would re-retrieve the very topic they just deleted, and the commit's
- * suggestion purge could not clean it up (the legacy path leaves no topicId on
- * the row, and purgeSuggestionsForDeadTopics skips rows with no topic
- * evidence). Branch on THIS count; filter with `getActive()`.
+ * Active topics INCLUDING rows staged for deletion: the app's launch rule asks whether any topic
+ * exists, and a topic the person is undoing still counts.
  */
 async function countActiveTopicsIncludingStaged() {
   return topicsCollection.query(_watermelondb.Q.where('status', 'active')).fetchCount();
