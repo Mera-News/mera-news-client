@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The logic behind Mera News without its interface: data models, services, stores, scheduler, scoring, chat and the model harnesses.",
-  "license": "AGPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "Mera Labs B.V.",
   "engines": {
     "node": ">=22.13"
