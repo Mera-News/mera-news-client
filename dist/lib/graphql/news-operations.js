@@ -18,7 +18,6 @@ const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'Cl
  * The client's test fails when one of them starts to validate publicly, so this list cannot rot.
  */
 const NEWS_OPERATIONS_NOT_PUBLIC = exports.NEWS_OPERATIONS_NOT_PUBLIC = {
-  GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
   PublicationDisplayNames: 'private to Mera'
 };
 

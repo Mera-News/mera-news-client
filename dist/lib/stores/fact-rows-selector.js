@@ -223,9 +223,6 @@ function effectiveRenderGate() {
 }
 const BREAKING_EVENT_TYPES = new Set(['disaster', 'weather', 'conflict']);
 
-/** One breaking-strip entry (representative + collapsed members). Consumed by
- *  `BreakingStrip`. */
-
 /** One story-group card in a fact row (a collapsed multi-source story). */
 
 /**
@@ -451,6 +448,7 @@ function countryLocationWeight(locations, countryCode) {
 /** Card (story-group) ordering within a Dashboard section: the group's freshest
  *  `createdAt` (suggestion-creation time) descending, then id. */
 function cardCompare(a, b) {
+  if (a.emergency !== b.emergency) return a.emergency ? -1 : 1;
   if (a.createdAtMs !== b.createdAtMs) return b.createdAtMs - a.createdAtMs;
   return a.data._id < b.data._id ? -1 : a.data._id > b.data._id ? 1 : 0;
 }
@@ -470,8 +468,8 @@ function cardCompare(a, b) {
  * @param userCtx     the user's geo/language context (home/other countries +
  *                    app language) — makes representative ELECTION tier-aware
  *                    (see `makeRepCompare`). `null` (default) preserves the
- *                    legacy geo/language-blind pick. Card order, breaking
- *                    sort, and section sort are unaffected.
+ *                    legacy geo/language-blind pick. Card order and
+ *                    section sort are unaffected.
  */
 function buildFactRows(suggestions, snapshots, openedIds = new Set(), nowMs = Date.now(), config = _config.DEFAULT_HARNESS_CONFIG, userCtx = null,
 /** When the last processing run finished (null = none yet). Decides an empty
@@ -533,7 +531,6 @@ readSnapshot) {
   const visible = suggestions.filter(s => isVisible(s, cutoffMs, readSnapshot) && !(0, _publicationTags.isMutedPublication)(s.publication_name, userCtx));
   if (visible.length === 0) {
     return {
-      breaking: [],
       rows: sortRows(emptyFactRows(new Set(), snapshots, nowMs, lastProcessingRunFinishedAt), snapshots)
     };
   }
@@ -542,7 +539,6 @@ readSnapshot) {
   const groups = (0, _storyGrouping.buildStoryGroups)(visible.map(_storyGrouping.groupableOf), _storyGrouping.DISPLAY_GROUPING_OPTIONS);
 
   // 3. Per group: pick a representative (newest member) + collapse members.
-  const breaking = [];
   const assignable = [];
   for (const g of groups) {
     const rep = (0, _storyGrouping.pickRepresentative)(g, repCompareForGroups).s;
@@ -552,17 +548,11 @@ readSnapshot) {
     const addedMs = all.reduce((mx, m) => Math.max(mx, addedMsOf(m)), 0);
 
     // EMERGENCY band only — see `isEmergency`. Deliberately NOT `isBreaking`,
-    // which is the (looser) "never bury this" predicate.
-    // Evaluated over the whole group, like `pubDateMs`/`addedMs` above: the
-    // representative is elected oldest-first for provenance, so asking only the
-    // rep would miss an emergency that broke in later coverage of the same story.
-    if (all.some(m => isEmergency(m, config))) {
-      breaking.push({
-        data: rep,
-        members
-      });
-      continue;
-    }
+    // which is the (looser) "never bury this" predicate. Evaluated over the whole
+    // group, like `pubDateMs`/`addedMs` above: the representative is elected
+    // oldest-first, so asking only the rep would miss an emergency that broke in
+    // later coverage. An emergency story stays in its section and leads it.
+    const emergency = all.some(m => isEmergency(m, config));
     const bucket = (0, _ownership.bucketOf)(rep.relevance, config);
     // High-priority: display bucket HIGH+ OR a matched persona topic flagged
     // highPriority. (bucketRank ≥ HIGH also captures the EMERGENCY tier, which
@@ -583,19 +573,11 @@ readSnapshot) {
         // once the rep flipped to oldest-first — a story gaining coverage all
         // day would drift down instead of up.
         createdAtMs: all.reduce((mx, m) => Math.max(mx, parseMs(m.createdAt)), 0),
-        highPriority
+        highPriority,
+        emergency
       }
     });
   }
-  breaking.sort((a, b) => {
-    const ra = a.data.rawScore ?? Number.NEGATIVE_INFINITY;
-    const rb = b.data.rawScore ?? Number.NEGATIVE_INFINITY;
-    if (ra !== rb) return rb - ra;
-    const pa = parseMs(a.data.firstPubDate);
-    const pb = parseMs(b.data.firstPubDate);
-    if (pa !== pb) return pb - pa;
-    return a.data._id < b.data._id ? -1 : 1;
-  });
 
   // 4. Assign each remaining group to a fact section. A story folds into the
   //    fact it matched even at ZERO signal (lenient ownership), so low-priority
@@ -726,7 +708,6 @@ readSnapshot) {
   // fully-read section sinks below any section with at least one unread story),
   // then by group count desc, ties broken by factId asc for determinism.
   return {
-    breaking,
     rows: sortRows(rows, snapshots)
   };
 }
