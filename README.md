@@ -112,12 +112,20 @@ your server's schema and run `npm run codegen`.
 
 ## Contributions
 
-Outside code contributions are not accepted yet, because there is no contributor agreement. Pull requests from outside Mera Labs will be closed. To report a bug or a security problem, write to contact@mera.news.
+Pull requests are welcome. See `CONTRIBUTING.md`. To report a security problem, write to contact@mera.news.
 
-## License
+## Licence
 
-AGPL-3.0-only. See [LICENSE](LICENSE).
+Copyright Mera Labs B.V.
 
-The names and logos are not covered by the license. See [TRADEMARK.md](TRADEMARK.md).
+Required Notice: Copyright Mera Labs B.V. (https://mera.news)
 
-A company that wants to keep its changes closed can buy a commercial license. See [COMMERCIAL.md](COMMERCIAL.md).
+This code is source-available under the PolyForm Shield License 1.0.0. See `LICENSE`.
+
+In short: you may run it, change it and build on it for any purpose, except to provide a product
+that competes with this software or with a product Mera Labs provides using it, such as Mera News.
+This summary is not the licence. The `LICENSE` file is.
+
+Mera News and Mera Protocol are trademarks. See `TRADEMARK.md`.
+For a use the licence does not allow, see `COMMERCIAL.md`.
+To contribute, see `CONTRIBUTING.md`.
