@@ -38,7 +38,6 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
  * The client's test fails when one of them starts to validate publicly, so this list cannot rot.
  */
 export const NEWS_OPERATIONS_NOT_PUBLIC: Readonly<Record<string, string>> = {
-  GetCanonicalTopics: 'held: the owner decides whether the canonical topic list is public',
   PublicationDisplayNames: 'private to Mera',
 };
 
