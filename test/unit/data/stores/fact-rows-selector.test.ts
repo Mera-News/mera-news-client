@@ -27,6 +27,7 @@ import type { UserGeoLanguageContext } from '@/lib/algorithms/geo-language-prior
 import type { ForYouSuggestion } from '@/lib/stores/for-you-store';
 import { SCORE_PROPAGATION_LOOKBACK_MS } from '@/lib/algorithms/story-grouping';
 import { buildReadSnapshot } from '@/lib/feed-ordering/read-snapshot';
+import { buildFeedList } from '@/lib/stores/feed-list-selector';
 
 const NOW = 1_000_000_000_000; // fixed clock
 const H = 3_600_000;
@@ -645,78 +646,67 @@ describe('buildFactRows section ordering', () => {
   });
 });
 
-// --- breaking extraction ---------------------------------------------------
+// --- emergency stories stay in their fact ------------------------------------
 
-describe('buildFactRows emergency extraction', () => {
-  // The strip is the loudest surface in the app and is reserved for the
-  // EMERGENCY band. It used to use `isBreaking`, whose second clause admits the
-  // HIGH band (raw 0.8–1.0) for disaster/weather/conflict — so a story about a
-  // region getting LESS rain than usual was fronted above every section under a
-  // red alert chip. `isBreaking` itself is unchanged; it still does its own
-  // job of giving a story the feed recency bonus that keeps it off the bottom.
-  it('pulls ONLY raw>1.0 into the emergency strip', () => {
+describe('buildFactRows emergency stories', () => {
+  const ids = (rows: { groups: { data: { _id: string } }[] }[]) => rows.flatMap((r) => r.groups.map((g) => g.data._id));
+
+  it('keeps an emergency story in its fact, ahead of the fact\'s other stories', () => {
+    const snap = snapshots([['t1', { factId: 'f1' }]], [['f1', {}]]);
+    // The plain story is the newer one, so the usual order alone would put it first.
+    const emg = sugg({ _id: 'emg', rawScore: 1.05, relevance: 1.1, createdAt: new Date(NOW - 3 * H).toISOString(), matchedTopics: [{ topicId: 't1', text: 'a' }] });
+    const plain = sugg({ _id: 'plain', rawScore: 0.9, relevance: 0.8, eventType: 'politics', createdAt: new Date(NOW - 1 * H).toISOString(), matchedTopics: [{ topicId: 't1', text: 'c' }] });
+    const { rows } = buildFactRows([plain, emg], snap, new Set(), NOW);
+    const f1 = rows.find((r) => r.groups.some((g) => g.data._id === 'plain'))!;
+    expect(f1.groups.map((g) => g.data._id)).toEqual(['emg', 'plain']);
+  });
+
+  it('a fact whose only story is an emergency still has its row', () => {
     const snap = snapshots([['t1', { factId: 'f1' }]], [['f1', {}]]);
     const emg = sugg({ _id: 'emg', rawScore: 1.05, relevance: 1.1, matchedTopics: [{ topicId: 't1', text: 'a' }] });
-    const wx = sugg({ _id: 'wx', rawScore: 0.85, relevance: 0.8, eventType: 'weather', matchedTopics: [{ topicId: 't1', text: 'b' }] });
-    const plain = sugg({ _id: 'plain', rawScore: 0.9, relevance: 0.8, eventType: 'politics', matchedTopics: [{ topicId: 't1', text: 'c' }] });
-    const { breaking, rows } = buildFactRows([emg, wx, plain], snap, new Set(), NOW);
-    expect(breaking.map((b) => b.data._id)).toEqual(['emg']);
-
-    // The demoted HIGH weather story is NOT lost — it falls through to its own
-    // fact section like any other card. Losing it would be a worse bug than the
-    // one being fixed.
-    const inRows = rows.flatMap((r) => r.groups.map((g) => g.data._id));
-    expect(inRows).toContain('wx');
-    expect(inRows).toContain('plain');
-    expect(inRows).not.toContain('emg');
+    expect(ids(buildFactRows([emg], snap, new Set(), NOW).rows)).toEqual(['emg']);
   });
 
-  it('treats the emergency cutoff as strictly-greater-than, matching bandOf', () => {
+  it('treats the emergency cutoff as strictly greater than, matching bandOf', () => {
     const snap = snapshots([['t1', { factId: 'f1' }]], [['f1', {}]]);
-    // Exactly 1.0 is the TOP of HIGH, not EMERGENCY — `bandOf` uses `> cutoff`.
-    const at = sugg({ _id: 'at', rawScore: 1.0, relevance: 1.0, matchedTopics: [{ topicId: 't1', text: 'a' }] });
-    const over = sugg({ _id: 'over', rawScore: 1.01, relevance: 1.1, matchedTopics: [{ topicId: 't1', text: 'b' }] });
-    const { breaking } = buildFactRows([at, over], snap, new Set(), NOW);
-    expect(breaking.map((b) => b.data._id)).toEqual(['over']);
+    // Exactly 1.0 is the top of HIGH, not EMERGENCY: `bandOf` uses `> cutoff`. The newer one would lead otherwise.
+    const at = sugg({ _id: 'at', rawScore: 1.0, relevance: 1.0, createdAt: new Date(NOW - 1 * H).toISOString(), matchedTopics: [{ topicId: 't1', text: 'a' }] });
+    const over = sugg({ _id: 'over', rawScore: 1.01, relevance: 1.1, createdAt: new Date(NOW - 3 * H).toISOString(), matchedTopics: [{ topicId: 't1', text: 'b' }] });
+    expect(ids(buildFactRows([at, over], snap, new Set(), NOW).rows)).toEqual(['over', 'at']);
   });
 
-  it('never puts an unscored story in the strip', () => {
+  it('a story is an emergency when any member is, not only the elected (oldest) representative', () => {
     const snap = snapshots([['t1', { factId: 'f1' }]], [['f1', {}]]);
-    const noScore = sugg({ _id: 'ns', rawScore: null, relevance: 1.1, matchedTopics: [{ topicId: 't1', text: 'a' }] });
-    expect(buildFactRows([noScore], snap, new Set(), NOW).breaking).toEqual([]);
-  });
-
-  // --- group-maxed EMERGENCY check (elected rep flipped to oldest-first) ----
-
-  it('a story lands in the EMERGENCY band when any member is, not just the elected (oldest) representative', () => {
-    const snap = snapshots([['t1', { factId: 'f1' }]], [['f1', {}]]);
-    // Oldest firstPubDate is elected representative (no images, no userCtx).
     const older = sugg({
       _id: 'older',
-      rawScore: 0.5, // sub-emergency on its own
+      rawScore: 0.5,
       relevance: 0.6,
       firstPubDate: new Date(NOW - 5 * H).toISOString(),
+      createdAt: new Date(NOW - 5 * H).toISOString(),
       clusters: [{ clusterId: 'c1', confidence: 0.9 }],
       matchedTopics: [{ topicId: 't1', text: 'a' }],
     });
     const newer = sugg({
       _id: 'newer',
-      rawScore: 1.05, // raw > emergencyPriorityCutoff (1.0) ⇒ emergency
+      rawScore: 1.05,
       relevance: 1.1,
       firstPubDate: new Date(NOW - 1 * H).toISOString(),
+      createdAt: new Date(NOW - 1 * H).toISOString(),
       clusters: [{ clusterId: 'c1', confidence: 0.9 }],
       matchedTopics: [{ topicId: 't1', text: 'b' }],
     });
-    const { breaking, rows } = buildFactRows([older, newer], snap, new Set(), NOW);
-    expect(breaking).toHaveLength(1);
-    // The elected representative is the non-emergency oldest member...
-    expect(breaking[0].data._id).toBe('older');
-    // ...but a newer member IS emergency, so the whole group must land in the
-    // strip rather than being scored/sectioned as ordinary coverage.
-    expect(breaking[0].members.map((m) => m._id)).toEqual(['newer']);
-    expect(
-      rows.some((r) => r.groups.some((g) => g.data._id === 'older' || g.data._id === 'newer')),
-    ).toBe(false);
+    const plain = sugg({ _id: 'plain', rawScore: 0.6, relevance: 0.6, createdAt: new Date(NOW - 0.5 * H).toISOString(), matchedTopics: [{ topicId: 't1', text: 'c' }] });
+    const { rows } = buildFactRows([older, newer, plain], snap, new Set(), NOW);
+    const f1 = rows.find((r) => r.groups.some((g) => g.data._id === 'plain'))!;
+    expect(f1.groups[0].data._id).toBe('older');
+    expect(f1.groups[0].members.map((m) => m._id)).toEqual(['newer']);
+  });
+
+  it('leaves the Feed list as it was: the emergency story is a breaking card there', () => {
+    const emg = sugg({ _id: 'emg', rawScore: 1.05, relevance: 1.1, matchedTopics: [{ topicId: 't1', text: 'a' }] });
+    const plain = sugg({ _id: 'plain', rawScore: 0.9, relevance: 0.8, eventType: 'politics', matchedTopics: [{ topicId: 't1', text: 'c' }] });
+    const list = buildFeedList([emg, plain], new Set(), NOW, null);
+    expect(list.map((i) => [i.suggestion._id, i.breaking])).toEqual([['emg', true], ['plain', false]]);
   });
 });
 

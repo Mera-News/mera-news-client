@@ -315,25 +315,21 @@ describe('headline sections — the denominator counts', () => {
     expect(rows[0].groups).toHaveLength(1);
   });
 
-  // Both of these previously asserted a surviving zero-card
-  // shell. Empty sections are now dropped, and these two are the cases where
-  // that is most clearly RIGHT: the only member that cleared the bar was
-  // promoted to the breaking strip, so the story is still on screen, directly
-  // above. Keeping the section would render an empty "Headlines from X" under a
-  // strip already showing its one story.
-  it('drops the section when its only qualifying member was promoted to breaking', () => {
+  // An emergency headline stays in its own section, like any story, and leads it.
+  it('keeps a section whose only qualifying member is an emergency', () => {
     const { rows } = build([
       headline('COUNTRY', 'IN', { relevance: REL_UNSCORED }),
       headline('COUNTRY', 'IN', { relevance: REL_UNSCORED }),
-      headline('COUNTRY', 'IN', { relevance: REL_MEDIUM, rawScore: 2 }), // → breaking
+      headline('COUNTRY', 'IN', { relevance: REL_MEDIUM, rawScore: 2 }),
     ]);
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].groups).toHaveLength(1);
   });
 
-  it('a breaking headline is shown in the strip and leaves no empty section behind', () => {
-    const { breaking, rows } = build([headline('GLOBAL', null, { rawScore: 2 })]);
-    expect(breaking).toHaveLength(1);
-    expect(rows).toHaveLength(0);
+  it('an emergency headline is a card in its scope section', () => {
+    const { rows } = build([headline('GLOBAL', null, { rawScore: 2 })]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].groups[0].emergency).toBe(true);
   });
 
   it('fact sections carry no denominator', () => {
