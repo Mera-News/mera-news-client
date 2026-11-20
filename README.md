@@ -63,6 +63,7 @@ A host that compiles TypeScript itself can pin a `dev` commit instead and build 
 - No stable API. Any commit may change what the package exports; pin a commit and read the history before you move.
 - No npm releases or version tags.
 - The Mera News phone app is not in this repository, and the account, subscription and notification services stay with Mera.
+- Requests to Mera's servers carry the account's session, so the server sees the account with each request while it answers. No stored record links an account to a topic. The [Mera News app README](https://github.com/Mera-News/mera-app#what-is-public-and-what-is-private) lists what is public and what is private.
 - News comes from a news server's GraphQL API, such as `mera-news-data-server`. `news-schema.gql` is the public news schema the package's news requests are checked against.
 
 ## Provide a platform
