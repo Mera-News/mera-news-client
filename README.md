@@ -50,19 +50,20 @@ Files at the top of `lib/` hold the logger, the restart rules, the GraphQL servi
 
 ## Install
 
-The package is not on npm. The `dist` branch holds the built package, one commit per build of `dev`. Pin a `dist` commit by its full hash:
+The package is not on npm. The `dist` branch holds the built package, one commit per build of `main`. Pin a `dist` commit by its full hash:
 
 ```
 npm install "git+https://github.com/Mera-News/mera-news-client.git#<dist commit>"
 ```
 
-A host that compiles TypeScript itself can pin a `dev` commit instead and build `lib/` with its own toolchain.
+A host that compiles TypeScript itself can pin a `main` commit instead and build `lib/` with its own toolchain.
 
 ## Not supported yet
 
 - No stable API. Any commit may change what the package exports; pin a commit and read the history before you move.
 - No npm releases or version tags.
 - The Mera News phone app is not in this repository, and the account, subscription and notification services stay with Mera.
+- Requests to Mera's servers carry the account's session, so the server sees the account with each request while it answers. No stored record links an account to a topic. The [Mera News app README](https://github.com/Mera-News/mera-app#what-is-public-and-what-is-private) lists what is public and what is private.
 - News comes from a news server's GraphQL API, such as `mera-news-data-server`. `news-schema.gql` is the public news schema the package's news requests are checked against.
 
 ## Provide a platform
