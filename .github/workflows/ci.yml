@@ -41,7 +41,7 @@ jobs:
           --onlyAllow "MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;Zlib;(MIT AND Zlib);CC0-1.0;BlueOak-1.0.0"
 
   artefact:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, licenses]
     runs-on: ubuntu-latest
     permissions:
@@ -58,7 +58,7 @@ jobs:
       - run: npm run build
       - run: node scripts/artefact.mjs "$RUNNER_TEMP/artefact"
       - run: node scripts/artefact-smoke.mjs "$RUNNER_TEMP/artefact"
-      # The dist branch holds only built files and never merges into dev. Each commit keeps the
+      # The dist branch holds only built files and never merges into main. Each commit keeps the
       # author, committer and dates of the source commit it was built from.
       - name: Publish to the dist branch
         run: |

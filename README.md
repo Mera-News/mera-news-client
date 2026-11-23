@@ -50,13 +50,13 @@ Files at the top of `lib/` hold the logger, the restart rules, the GraphQL servi
 
 ## Install
 
-The package is not on npm. The `dist` branch holds the built package, one commit per build of `dev`. Pin a `dist` commit by its full hash:
+The package is not on npm. The `dist` branch holds the built package, one commit per build of `main`. Pin a `dist` commit by its full hash:
 
 ```
 npm install "git+https://github.com/Mera-News/mera-news-client.git#<dist commit>"
 ```
 
-A host that compiles TypeScript itself can pin a `dev` commit instead and build `lib/` with its own toolchain.
+A host that compiles TypeScript itself can pin a `main` commit instead and build `lib/` with its own toolchain.
 
 ## Not supported yet
 
