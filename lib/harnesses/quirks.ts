@@ -5,4 +5,6 @@ export type Quirk = (body: Record<string, unknown>) => Record<string, unknown>;
 
 export const QUIRKS: Record<string, Quirk> = {
   'thinking-off-kwarg': (body) => ({ ...body, chat_template_kwargs: { enable_thinking: body.__enableThinking === true } }),
+  // For endpoints that refuse sampling settings outright (a 400), rather than ignoring them.
+  'no-sampling': ({ temperature: _t, top_p: _p, ...body }) => body,
 };

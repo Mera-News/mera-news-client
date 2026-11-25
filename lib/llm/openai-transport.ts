@@ -27,6 +27,8 @@ export interface OpenAiTransportConfig {
   callTimeoutMs?: number;
   /** Harness folder whose quirks apply. Default: the one mapped to the model, else cloud-base. */
   harnessFolder?: string;
+  /** Quirks the endpoint itself needs whatever the model, applied after the harness's own. */
+  quirks?: string[];
 }
 
 export type OpenAiTransport = LlmTransport & { inFlight(): number };
@@ -91,7 +93,7 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
   const timeoutMs = config.callTimeoutMs ?? 120_000;
   const concurrency = config.concurrency ?? 4;
   const params = loadHarness(config.harnessFolder ?? harnessFolderFor('openai', config.model) ?? 'cloud-base').params;
-  const quirks = params.quirks;
+  const quirks = [...params.quirks, ...(config.quirks ?? [])];
   for (const name of quirks) if (!QUIRKS[name]) throw new Error(`unknown quirk "${name}" in the harness`);
   let open = 0;
 

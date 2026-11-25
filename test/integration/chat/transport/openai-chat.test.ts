@@ -233,6 +233,17 @@ describe('the OpenAI chat request', () => {
   });
 });
 
+describe('the no-sampling quirk on the chat leg', () => {
+  it('drops temperature and top_p and keeps the rest', async () => {
+    const { seen, baseUrl } = await listen((_req, res) => send(res, ['ok']));
+    use(baseUrl, { quirks: ['no-sampling'] });
+    await collect(chat({ temperature: 0.2, topP: 0.9, maxTokens: 50 }));
+    expect(seen[0].body).not.toHaveProperty('temperature');
+    expect(seen[0].body).not.toHaveProperty('top_p');
+    expect(seen[0].body).toMatchObject({ model: 'm1', stream: true, max_tokens: 50 });
+  });
+});
+
 describe('OpenAI chat errors', () => {
   it('throws on 401 with its status and one request only', async () => {
     const { seen, baseUrl } = await listen((_req, res) => {

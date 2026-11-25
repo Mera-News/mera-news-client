@@ -105,6 +105,22 @@ describe('the OpenAI transport request', () => {
   });
 });
 
+describe('the no-sampling quirk', () => {
+  it('a host quirk drops temperature and top_p from every leg, for endpoints that refuse them', async () => {
+    const seen = serve();
+    use({ quirks: ['no-sampling'] });
+    await ask({ temperature: 0.2, topP: 0.9 });
+    await cloudBatchComplete([{ id: 'a', system: 's', prompt: 'p', temperature: 0.1, maxTokens: 50 }], 'scoring');
+    expect(seen[0].body).not.toHaveProperty('temperature');
+    expect(seen[1].body).not.toHaveProperty('temperature');
+    expect(seen[1].body).toMatchObject({ max_tokens: 50 });
+  });
+
+  it('an unknown host quirk throws when the transport is made', () => {
+    expect(() => use({ quirks: ['no-such-quirk'] })).toThrow('unknown quirk "no-such-quirk"');
+  });
+});
+
 describe('the OpenAI transport batch', () => {
   it('keeps input order under uneven delays and puts a failure on its own row', async () => {
     fakeClock();
