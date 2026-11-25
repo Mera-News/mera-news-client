@@ -14,5 +14,11 @@ const QUIRKS = exports.QUIRKS = {
     chat_template_kwargs: {
       enable_thinking: body.__enableThinking === true
     }
-  })
+  }),
+  // For endpoints that refuse sampling settings outright (a 400), rather than ignoring them.
+  'no-sampling': ({
+    temperature: _t,
+    top_p: _p,
+    ...body
+  }) => body
 };
