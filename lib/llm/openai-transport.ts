@@ -29,6 +29,12 @@ export interface OpenAiTransportConfig {
   harnessFolder?: string;
   /** Quirks the endpoint itself needs whatever the model, applied after the harness's own. */
   quirks?: string[];
+  /**
+   * How this model's reasoning is controlled. `off` is merged into the body of a call that does not
+   * ask for thinking; `headroomTokens` is added to every token limit, for a model whose reasoning
+   * shares the answer's budget and cannot be turned off.
+   */
+  reasoning?: { off?: Record<string, unknown>; headroomTokens?: number };
 }
 
 export type OpenAiTransport = LlmTransport & { inFlight(): number };
@@ -97,6 +103,14 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
   for (const name of quirks) if (!QUIRKS[name]) throw new Error(`unknown quirk "${name}" in the harness`);
   let open = 0;
 
+  function withReasoning(body: Record<string, unknown>, thinking: boolean): Record<string, unknown> {
+    const r = config.reasoning;
+    if (!r) return body;
+    const out = thinking ? { ...body } : { ...body, ...r.off };
+    if (r.headroomTokens && typeof out.max_tokens === 'number') out.max_tokens += r.headroomTokens;
+    return out;
+  }
+
   /** One HTTP attempt: the status and the whole body, under one deadline. */
   async function attempt(body: string, signal?: AbortSignal): Promise<{ response: Response; text: string }> {
     const controller = new AbortController();
@@ -140,6 +154,7 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
       max_tokens: call.maxTokens,
       __enableThinking: call.enableThinking,
     };
+    body = withReasoning(body, call.enableThinking === true);
     for (const name of quirks) body = QUIRKS[name](body);
     delete body.__enableThinking;
     const payload = JSON.stringify(body); // JSON drops the undefined fields
@@ -224,6 +239,7 @@ export function createOpenAiTransport(config: OpenAiTransportConfig): OpenAiTran
       frequency_penalty: request.frequencyPenalty,
       __enableThinking: thinking,
     };
+    body = withReasoning(body, thinking);
     for (const name of quirks) body = QUIRKS[name](body);
     delete body.__enableThinking;
     const payload = JSON.stringify(body);

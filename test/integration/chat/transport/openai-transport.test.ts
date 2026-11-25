@@ -121,6 +121,28 @@ describe('the no-sampling quirk', () => {
   });
 });
 
+describe('reasoning settings from the host', () => {
+  it('a call that does not ask for thinking carries the off body; headroom is added to every token limit', async () => {
+    const seen = serve();
+    use({ reasoning: { off: { thinking: { type: 'disabled' } }, headroomTokens: 500 } });
+    await ask({ maxTokens: 96 });
+    await cloudBatchComplete([{ id: 'a', system: 's', prompt: 'p', maxTokens: 96 }], 'scoring');
+    await cloudBatchComplete([{ id: 'b', system: 's', prompt: 'p', maxTokens: 96, enableThinking: true }], 'topics');
+    expect(seen[0].body).toMatchObject({ thinking: { type: 'disabled' }, max_tokens: 596 });
+    expect(seen[1].body).toMatchObject({ thinking: { type: 'disabled' }, max_tokens: 596 });
+    expect(seen[2].body).not.toHaveProperty('thinking');
+    expect(seen[2].body).toMatchObject({ max_tokens: 596 });
+  });
+
+  it('without reasoning settings the body is unchanged', async () => {
+    const seen = serve();
+    use();
+    await ask({ maxTokens: 96 });
+    expect(seen[0].body).not.toHaveProperty('thinking');
+    expect(seen[0].body).toMatchObject({ max_tokens: 96 });
+  });
+});
+
 describe('the OpenAI transport batch', () => {
   it('keeps input order under uneven delays and puts a failure on its own row', async () => {
     fakeClock();

@@ -244,6 +244,17 @@ describe('the no-sampling quirk on the chat leg', () => {
   });
 });
 
+describe('reasoning settings on the chat leg', () => {
+  it('a chat turn without thinking carries the off body, one with thinking does not', async () => {
+    const { seen, baseUrl } = await listen((_req, res) => send(res, ['ok']));
+    use(baseUrl, { reasoning: { off: { thinking: { type: 'between_tools' } } } });
+    await collect(chat({ maxTokens: 50 }));
+    await collect(chat({ maxTokens: 50, enableThinking: true }));
+    expect(seen[0].body).toMatchObject({ thinking: { type: 'between_tools' }, max_tokens: 50 });
+    expect(seen[1].body).not.toHaveProperty('thinking');
+  });
+});
+
 describe('OpenAI chat errors', () => {
   it('throws on 401 with its status and one request only', async () => {
     const { seen, baseUrl } = await listen((_req, res) => {
