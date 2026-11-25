@@ -61,6 +61,18 @@ function createOpenAiTransport(config) {
   const quirks = [...params.quirks, ...(config.quirks ?? [])];
   for (const name of quirks) if (!_quirks.QUIRKS[name]) throw new Error(`unknown quirk "${name}" in the harness`);
   let open = 0;
+  function withReasoning(body, thinking) {
+    const r = config.reasoning;
+    if (!r) return body;
+    const out = thinking ? {
+      ...body
+    } : {
+      ...body,
+      ...r.off
+    };
+    if (r.headroomTokens && typeof out.max_tokens === 'number') out.max_tokens += r.headroomTokens;
+    return out;
+  }
 
   /** One HTTP attempt: the status and the whole body, under one deadline. */
   async function attempt(body, signal) {
@@ -122,6 +134,7 @@ function createOpenAiTransport(config) {
       max_tokens: call.maxTokens,
       __enableThinking: call.enableThinking
     };
+    body = withReasoning(body, call.enableThinking === true);
     for (const name of quirks) body = _quirks.QUIRKS[name](body);
     delete body.__enableThinking;
     const payload = JSON.stringify(body); // JSON drops the undefined fields
@@ -217,6 +230,7 @@ function createOpenAiTransport(config) {
       frequency_penalty: request.frequencyPenalty,
       __enableThinking: thinking
     };
+    body = withReasoning(body, thinking);
     for (const name of quirks) body = _quirks.QUIRKS[name](body);
     delete body.__enableThinking;
     const payload = JSON.stringify(body);
