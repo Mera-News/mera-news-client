@@ -31,22 +31,21 @@ const PROFILES = exports.PROFILES = {
 };
 const isProfileId = id => id in PROFILES;
 
-// Qwen first (the prompts are Qwen-tuned), then the models that reached the Qwen bar in the
-// qualification matrix, each only in the lanes it reached it (Kimi missed scoring; untested on
-// background). Mirrors mera-inference-gateway src/routing/profiles.ts.
+// Chat lanes rank fastest first, measured end to end with E2EE through staging on the follow
+// corpus (2026-11-27, p50 per turn): qwen3.6 2.6s, redpill qwen3.8 2.4-3.6s, gemma 5.0s, near
+// qwen3.8 16-19s. Bulk lanes keep Qwen first (the prompts are Qwen-tuned). Kimi K2.6 is in no
+// lane: RedPill stopped offering E2EE v2 for it. Mirrors mera-inference-gateway src/routing/profiles.ts.
 exports.isProfileId = isProfileId;
-const CHAT_QWEN = ['near/qwen3.8-27b', 'near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b'];
-const BULK_QWEN = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b'];
-const GEMMA_KIMI = ['redpill/gemma-4-31b', 'redpill/kimi-k2.6'];
-const GEMMA = ['redpill/gemma-4-31b'];
+const CHAT = ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b', 'near/qwen3.8-27b'];
+const BULK = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
 
 /** The gateway's seed ranking, used whenever /v1/routing has not answered. */
 const DEFAULT_TABLE = exports.DEFAULT_TABLE = {
-  'chat-tools': [...CHAT_QWEN, ...GEMMA_KIMI],
-  'chat-single': [...CHAT_QWEN, ...GEMMA_KIMI],
-  scoring: [...BULK_QWEN, ...GEMMA],
-  topics: [...BULK_QWEN, ...GEMMA_KIMI],
-  background: [...BULK_QWEN, ...GEMMA]
+  'chat-tools': CHAT,
+  'chat-single': CHAT,
+  scoring: BULK,
+  topics: BULK,
+  background: BULK
 };
 
 /**

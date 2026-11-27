@@ -11,7 +11,7 @@ exports.SMALL_MODEL = exports.NOISE_MULTIPLIER = exports.CHAT_REASONING_HEADROOM
 // BIG  — head of the chat lanes (tool-calling chat, article chat and the quick fact check).
 // SMALL — head of scoring, topics and background.
 
-const BIG_MODEL = exports.BIG_MODEL = 'Qwen/Qwen3.8-27B';
+const BIG_MODEL = exports.BIG_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
 const SMALL_MODEL = exports.SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
 
 /**
@@ -93,10 +93,10 @@ const SMALL_MODEL = exports.SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   An older 12 of 19 `finish_reason: length` figure was thinking ON, which chat
  *   no longer sends and the qwen3.6-35b-a3b harness forces off (`thinking: false`).
  *
- * The chat lanes and the bulk lanes deliberately rank the two NEAR models in
- * OPPOSITE order, so one dead model cannot take out both heads at once. NEAR's
- * Qwen models have also failed as one group, which is why RedPill's Qwen3.8-27B
- * (same harness, same prompts) is third on every lane.
+ * The chat lanes rank fastest first, so both lanes now head on Qwen3.6 and
+ * BIG_MODEL equals SMALL_MODEL. NEAR's Qwen models have failed as one group,
+ * which is why RedPill's Qwen3.8-27B (same harness, same prompts) is second in
+ * chat and third in the bulk lanes.
  */
 
 /**
