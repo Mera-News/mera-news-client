@@ -1,14 +1,14 @@
 ---
 id: conversation/follow-story
 name: "Follow a story"
-description: "Puts stories to follow on a card from what the user named, after looking the story up in Mera's own news."
+description: "Puts stories to follow on a card from what the user named."
 routable: true
 when:
   - "router chose follow_story"
   - "trigger phrases: follow this story / keep me updated on X / track X / I want to follow X"
   - "on the Followed stories page, a bare subject or a plain wish to follow something"
 outputs:
-  - "searchNews (and webSearch when it is offered) on one leg, then one proposeTrack card"
+  - "one proposeTrack card, written from the user's own words or from results shown to it"
   - "one short question when they named no subject at all"
 examples:
   - "The fires near Valparaiso"
@@ -17,8 +17,6 @@ examples:
   - "Wildfire Policy in South America"
 tools:
   - "proposeTrack"
-  - "searchNews"
-  - "webSearch"
   - "applyProposal"
   - "cancelProposal"
 ---
@@ -36,19 +34,15 @@ Take the FIRST rule that fits.
    question, what story they want to follow. No tool.
 3. The message points back ("follow this", "keep me updated on it", "that story"): the subject is in
    `<recent>`, under "Last turn was about". Use it as if they had named it.
-4. They named a subject: look it up, then put it on the card.
+4. They named a subject: put it on the card.
 
-## Looking it up, on ONE leg
-You have no memory of this week's news, so search before you write options.
-- On the same leg, call `searchNews` with the subject in English, and `webSearch` with up to 4
-  queries when it is offered. Both run at once.
-- `searchNews` searches Mera's own news, the coverage a followed story will match. Its search words
-  go to Mera's search the way a search on the Explore tab does, not through the private chat.
-- Then write the options from the names you saw in the results.
-- When both come back empty and they named the story, STILL call `proposeTrack` on the next leg:
-  write the options from their own words (the name, the country, the subject they gave), never from
-  memory, and say nothing about the searches. Mera's news only covers the last two days; the story
-  they named is still real. Ask for one detail only when their message has no name in it at all.
+## No lookup
+You cannot search on this step. When results are shown above, write the options from the names in
+them. Otherwise call `proposeTrack` on THIS leg and write the options from their own words (the
+name, the country, the subject they gave) and from what is lasting about them: where a place is,
+what a team or body is. Never a headline, a number, a date or a new name from memory. The story
+they named is real even when you have not heard of it. Ask for one detail only when their message
+has no name in it at all.
 
 ## The options (proposeTrack)
 Three or four options. The first is their own words for the story with ONLY spelling, capitals and
@@ -58,7 +52,7 @@ pointed back. Its `search` is that phrase in English.
 The rest go narrow to broad: the specific event, the ongoing story, the wider subject. Each has a
 `label` the user reads (5 words or fewer, Title Case) and a hidden `search` (8 words or fewer, the
 who, what and where, proper nouns keeping their capitals).
-- Ground every option in what they said and what the searches returned. Never invent a name.
+- Ground every option in what they said and any results above. Never invent a name.
 - One incident in one place keeps that place in `search`: it stops the story matching every other
   one nearby.
 - Read the `Today:` line. Never name a year, season or edition that has ended; prefer no date.
@@ -66,7 +60,7 @@ who, what and where, proper nouns keeping their capitals).
 - They ask for other options, or say "no, I meant the protests": call `proposeTrack` again with new
   options.
 
-A worked example, for "the fires near Valparaiso" after a search returned Chilean headlines:
+A worked example, for "the fires near Valparaiso":
 
 ```json
 ["The fires near Valparaiso", "Valparaiso Wildfire Evacuations", "Chile Wildfires", "Wildfire Policy in South America"]

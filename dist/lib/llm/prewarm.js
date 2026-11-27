@@ -28,7 +28,7 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
 // + JWT warming alone can't touch). (1) and (2) are cached client-side
 // (attestation ~30 min, JWT ~30 s); (3) has no client cache, so on EVERY chat
 // open (owner, 2026-10-22) we ping the chat model for the word "ready", and the chat
-// header shows how that went. Only an open passes `ping`; app launch warms (1) and (2) only.
+// header shows how that went. A host may also ping once at launch (`ping` with `routing`).
 //
 // Fire-and-forget and idempotent: repeated calls hit the underlying caches / the
 // in-flight ping, so mounting several chat surfaces in one session costs at most
@@ -61,8 +61,8 @@ let pinging = false;
 const PING_DEADLINE_MS = exports.PING_DEADLINE_MS = 60_000;
 
 /**
- * Kick off the attestation + JWT fetches and, on a chat open (`ping`), the
- * readiness ping. Returns immediately (void); all warming runs in the background.
+ * Kick off the attestation + JWT fetches and, with `ping` (a chat open, or a
+ * launch that also passes `routing`), the readiness ping. Returns immediately (void); all warming runs in the background.
  */
 function prewarmCloudChat(opts = {}) {
   // Chat on the phone, or on a host's own transport, never touches the gateway: nothing to warm, no badge.
@@ -79,8 +79,9 @@ function prewarmCloudChat(opts = {}) {
   // each extra fetch here pushes pingModel(), the dominant cold-start cost this
   // file exists for, a further interval out.
   void Promise.allSettled([...(0, _router.profilesToPreattest)().map(p => (0, _providerE2ee.attestProfile)(p, 'interactive')), (0, _auth.getJwtToken)(),
-  // Launch only: a chat open does not refetch it; a reply naming a new version does.
-  ...(opts.ping ? [] : [(0, _router.refreshRouting)()])]).then(results => {
+  // Launch only (no `ping`, or `routing` beside it): a chat open does not
+  // refetch it; a reply naming a new version does.
+  ...(opts.ping && !opts.routing ? [] : [(0, _router.refreshRouting)()])]).then(results => {
     const failed = results.filter(r => r.status === 'rejected');
     _logger.default.debug('[chat-timing] prewarm settled', {
       ms: Date.now() - startMs,
@@ -93,7 +94,7 @@ function prewarmCloudChat(opts = {}) {
     }
   });
 
-  // Warm the MODEL itself (fire-and-forget, silent): only when a chat opens.
+  // Warm the MODEL itself (fire-and-forget, silent): only when asked to.
   if (opts.ping) void pingModel();
 }
 

@@ -17,7 +17,8 @@ const initialState = {
   interrupted: false,
   wireMessages: [],
   agentTurnState: null,
-  agentTerminal: null
+  agentTerminal: null,
+  turnFrom: null
 };
 const useCloudChatStore = exports.useCloudChatStore = (0, _zustand.create)((set, get) => ({
   ...initialState,
@@ -44,6 +45,9 @@ const useCloudChatStore = exports.useCloudChatStore = (0, _zustand.create)((set,
   }),
   setAgentTerminal: agentTerminal => set({
     agentTerminal
+  }),
+  setTurnFrom: turnFrom => set({
+    turnFrom
   }),
   pushWireMessage: msg => set(state => ({
     wireMessages: [...state.wireMessages, msg]

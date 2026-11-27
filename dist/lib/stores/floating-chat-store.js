@@ -31,6 +31,7 @@ var _topicPlanNotes = require("../news-harness/persona-management/topic-plan-not
  */
 
 /** A follow card's More options request: running, or how the last one ended. */
+/** `webLoading`: Regenerate with web search is running. */
 
 const DEFAULT_CONTEXT = {
   kind: 'persona'

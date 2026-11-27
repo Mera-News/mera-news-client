@@ -11,6 +11,7 @@ exports.growTrackCard = growTrackCard;
 exports.loadMoreTrackOptions = loadMoreTrackOptions;
 exports.patchTrackCard = patchTrackCard;
 exports.recordTrackOutcome = recordTrackOutcome;
+exports.regenerateTrackOptions = regenerateTrackOptions;
 var _proposalHandlers = require("../../chat-tools/proposal-handlers");
 var _conversationService = require("../../database/services/conversation-service");
 var _trackActions = require("../../tracking/track-actions");
@@ -58,21 +59,45 @@ function patchTrackCard(source, patch) {
  * `cardOptions` and, while this card is the store's waiting proposal, grows
  * that too, so every typed-yes guard reads the effective option count.
  * Returns how many options were added (0 writes nothing).
+ *
+ * `replace` (Regenerate with web search): the new options take the place of
+ * every row the card does not keep (see `keptTrackKeys`). Ticks on kept rows
+ * stay; with none left the first new row is ticked.
  */
-function growTrackCard(source, proposal, incoming) {
+function growTrackCard(source, proposal, incoming, replace = false) {
   const shown = trackActions(proposal.actions);
   const toOption = a => ({
     label: a.label,
     search: a.searchText
   });
+  const before = _floatingChatStore.useFloatingChatStore.getState();
+  const current = before.toolCallResults[source.resultKey] ?? source.baseResult;
+  const kept = replace ? (0, _trackOptions.keptTrackKeys)(current) : null;
+  const base = kept ? shown.filter(a => kept.has((0, _trackOptions.normaliseTrackText)(a.label))) : shown;
   const {
     options,
     added
-  } = (0, _trackOptions.mergeTrackOptions)(shown.map(toOption), trackActions(incoming).map(toOption));
+  } = (0, _trackOptions.mergeTrackOptions)(base.map(toOption), trackActions(incoming).map(toOption));
   if (added === 0 || shown.length === 0) return 0;
-  patchTrackCard(source, () => ({
-    cardOptions: options
-  }));
+  if (kept) {
+    const firstNew = (0, _trackOptions.normaliseTrackText)(options[base.length].label);
+    const ticks = before.trackTicks[proposal.id];
+    if (ticks) {
+      const left = ticks.filter(k => kept.has(k));
+      before.setTrackTicks(proposal.id, left.length > 0 ? left : [firstNew]);
+    }
+    const defaultKept = typeof current.defaultTick === 'string' && kept.has(current.defaultTick);
+    patchTrackCard(source, () => ({
+      cardOptions: options,
+      ...(defaultKept ? {} : {
+        defaultTick: firstNew
+      })
+    }));
+  } else {
+    patchTrackCard(source, () => ({
+      cardOptions: options
+    }));
+  }
   const store = _floatingChatStore.useFloatingChatStore.getState();
   if (store.proposal?.id === proposal.id) {
     // Every option follows the card's own subject, as the resume path rebuilds it.
@@ -149,17 +174,74 @@ async function followTickedOptions(source, proposal, tickedLabels) {
  * Stopped clears the state (no message); busy or failed reads as failed.
  */
 async function loadMoreTrackOptions(source, proposal) {
-  if (_floatingChatStore.useFloatingChatStore.getState().trackMore[proposal.id] === 'loading') return {
+  const running = loadingState(proposal.id);
+  if (running) return {
     added: 0,
-    state: 'loading'
+    state: running
   };
   _floatingChatStore.useFloatingChatStore.getState().setTrackMore(proposal.id, 'loading');
   const res = await (0, _chatSession.requestMoreOptions)(proposal.id, proposal.actions);
   const added = res.actions.length > 0 ? growTrackCard(source, proposal, res.actions) : 0;
-  const state = added > 0 || res.reason === 'stopped' ? null : res.reason === 'failed' || res.reason === 'busy' ? 'failed' : 'none';
+  const state = settledState(added, res.reason);
   _floatingChatStore.useFloatingChatStore.getState().setTrackMore(proposal.id, state);
   return {
     added,
+    state
+  };
+}
+
+/** The request already running on this card, if any: one at a time, of either kind. */
+function loadingState(proposalId) {
+  const state = _floatingChatStore.useFloatingChatStore.getState().trackMore[proposalId];
+  return state === 'loading' || state === 'webLoading' ? state : null;
+}
+function settledState(added, reason) {
+  if (added > 0 || reason === 'stopped') return null;
+  return reason === 'failed' || reason === 'busy' ? 'failed' : 'none';
+}
+
+/**
+ * Regenerate with web search: the device searches the story (`webQueryForCard`),
+ * the model writes options from the results, and they replace every row the
+ * card does not keep. `firstNew` is the index of the first new row. Same
+ * states and one-at-a-time rule as More options.
+ */
+async function regenerateTrackOptions(source, proposal) {
+  const running = loadingState(proposal.id);
+  if (running) return {
+    added: 0,
+    firstNew: 0,
+    state: running
+  };
+  const store = _floatingChatStore.useFloatingChatStore.getState();
+  const shown = trackActions(proposal.actions);
+  const current = store.toolCallResults[source.resultKey] ?? source.baseResult;
+  const kept = (0, _trackOptions.keptTrackKeys)(current);
+  const keep = label => kept.has((0, _trackOptions.normaliseTrackText)(label));
+  const subject = shown[0]?.subject;
+  const query = (0, _trackOptions.webQueryForCard)(current, shown.map(a => ({
+    label: a.label,
+    search: a.searchText
+  })), subject?.title);
+  if (!query) {
+    store.setTrackMore(proposal.id, 'none');
+    return {
+      added: 0,
+      firstNew: 0,
+      state: 'none'
+    };
+  }
+  store.setTrackMore(proposal.id, 'webLoading');
+  const res = await (0, _chatSession.requestMoreOptions)(proposal.id, proposal.actions, {
+    query,
+    keep
+  });
+  const added = res.actions.length > 0 ? growTrackCard(source, proposal, res.actions, true) : 0;
+  const state = settledState(added, res.reason);
+  _floatingChatStore.useFloatingChatStore.getState().setTrackMore(proposal.id, state);
+  return {
+    added,
+    firstNew: shown.filter(a => keep(a.label)).length,
     state
   };
 }

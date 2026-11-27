@@ -529,14 +529,14 @@ async function runAgentTurn(params) {
       resumedSkill = true;
       skillsLoaded.push(FOLLOW_STORY_SKILL);
     }
-    // Two at most: a lookup leg (the skill says to search first, and the model
-    // does, whatever the leg declares) and the card. Measured u6b2: 4 of 6
-    // misses were a leg that only called searchNews.
+    // Two at most: a leg that only tried to search is refused, and the card
+    // comes on the one more forced leg.
     maxLegsThisTurn = 2;
   }
   /** The note a More options leg ends on: the options on the card, escaped
    *  (labels are model text), and the room left. */
-  const moreOptionsNote = moreOptionsMode && params.moreOptions ? 'The user tapped More options on the follow card above. It already shows: ' + params.moreOptions.shown.map(o => `"${(0, _stateLine.escapeUntrusted)(o.label, 80)}" (${(0, _stateLine.escapeUntrusted)(o.searchText, 120)})`).join('; ') + `. Call proposeTrack with up to ${Math.max(1, params.moreOptions.room)} NEW options about the same story, each ` + 'different from every one shown: a narrower angle, a related thread or a wider frame. Never reword a shown one. ' + 'Write nothing else.' : null;
+  const webNote = moreOptionsMode && params.moreOptions?.web ? 'The user tapped Regenerate with web search on the follow card. The device already searched the web: the ' + 'webSearch result above is everything, and you cannot search. Call proposeTrack with up to ' + `${Math.max(1, Math.min(4, params.moreOptions.room))} options for the story those results are about, each grounded in the results, ` + 'narrow event to broad story. ' + (params.moreOptions.shown.length > 0 ? 'Never repeat an option the card keeps: ' + params.moreOptions.shown.map(o => `"${(0, _stateLine.escapeUntrusted)(o.label, 80)}" (${(0, _stateLine.escapeUntrusted)(o.searchText, 120)})`).join('; ') + '. ' : '') + 'Write nothing else.' : null;
+  const moreOptionsNote = webNote ?? (moreOptionsMode && params.moreOptions ? 'The user tapped More options on the follow card above. It already shows: ' + params.moreOptions.shown.map(o => `"${(0, _stateLine.escapeUntrusted)(o.label, 80)}" (${(0, _stateLine.escapeUntrusted)(o.searchText, 120)})`).join('; ') + `. Call proposeTrack with up to ${Math.max(1, params.moreOptions.room)} NEW options about the same story, each ` + 'different from every one shown: a narrower angle, a related thread or a wider frame. Never reword a shown one. ' + 'Write nothing else.' : null);
   // A place the chip resolved, carried for as long as the asking skill keeps
   // resuming. Any other turn starts clean.
   const tappedPlace = (0, _choiceBinding.placeFromPayload)(turn.resolvedChoice?.payload);
@@ -611,6 +611,8 @@ async function runAgentTurn(params) {
   /** Follow legs left: the card, then one required retry (the More options budget). */
   let followLegsLeft = 0;
   let followCardStaged = false;
+  /** The forced leg after a follow leg that called nothing was spent. */
+  let followRetried = false;
 
   /**
    * "SAVE AS I WROTE IT" (owner ruling): the user's own sentence, as a
@@ -656,6 +658,10 @@ async function runAgentTurn(params) {
   let placeCandidates = resumedSkill && turn.confirmedPlace ? [turn.confirmedPlace] : [];
   let similarFactCount = null;
   const toolResultsThisTurn = [];
+  if (moreOptionsMode && params.moreOptions?.web) toolResultsThisTurn.push({
+    name: 'webSearch',
+    result: params.moreOptions.web
+  });
   /**
    * Continuation calls already made this turn, keyed name+arguments.
    *
@@ -926,6 +932,26 @@ async function runAgentTurn(params) {
         content: handover.note
       });
       const inputTokens = estimateTokens(systemPrompt) + messages.reduce((n, m) => n + estimateTokens(m.content), 0);
+      const legTools = moreOptionsMode ? deps.tools.proposeTrack ? [_toolContracts.PROPOSE_TRACK_TOOL] : [] : followLegsLeft > 0 ? [_toolContracts.PROPOSE_TRACK_TOOL] : closingLegNow || answerLegNow ? [] : (0, _toolContracts.toolsForLeg)({
+        skillLoaded,
+        forcingProposal: forcingProposalNow,
+        wideRouteLeg: !enforceRoute,
+        // One question per turn: a later segment never gets ask_choice once an
+        // earlier one is waiting on the user.
+        allowChoice: askingSkill === null,
+        webSearch: typeof deps.tools.webSearch === 'function',
+        explainMera: typeof deps.tools.explainMera === 'function',
+        skillTools: skillLoaded === null ? null : (0, _skillLoader.skillTools)(skillLoaded),
+        cards: cardsOffered,
+        tracks: typeof deps.tools.proposeTrack === 'function',
+        searchNews: typeof deps.tools.searchNews === 'function',
+        pendingCard: cardThisTurn === null && pendingCard ? {
+          appliable: pendingCard.appliable
+        } : null,
+        cardOnRouteLeg: cardIsNewest && index === 0 && !resumedSkill
+      });
+      // A search runs only on a leg that declared it.
+      const declared = new Set(legTools.map(t => t.function?.name));
 
       // THROWS PROPAGATE. The runner throws from its own callModel for run-ending
       // conditions (a 402 spend limit is the live one), and recording those as leg
@@ -947,24 +973,7 @@ async function runAgentTurn(params) {
         // re-load at leg 3 after the other tools had already run. Withholding the
         // tool is stronger than answering it, because a tool the model cannot
         // see is one it cannot spend a leg on.
-        tools: moreOptionsMode ? deps.tools.proposeTrack ? [_toolContracts.PROPOSE_TRACK_TOOL] : [] : followLegsLeft > 0 ? [_toolContracts.PROPOSE_TRACK_TOOL] : closingLegNow || answerLegNow ? [] : (0, _toolContracts.toolsForLeg)({
-          skillLoaded,
-          forcingProposal: forcingProposalNow,
-          wideRouteLeg: !enforceRoute,
-          // One question per turn: a later segment never gets ask_choice once an
-          // earlier one is waiting on the user.
-          allowChoice: askingSkill === null,
-          webSearch: typeof deps.tools.webSearch === 'function',
-          explainMera: typeof deps.tools.explainMera === 'function',
-          skillTools: skillLoaded === null ? null : (0, _skillLoader.skillTools)(skillLoaded),
-          cards: cardsOffered,
-          tracks: typeof deps.tools.proposeTrack === 'function',
-          searchNews: typeof deps.tools.searchNews === 'function',
-          pendingCard: cardThisTurn === null && pendingCard ? {
-            appliable: pendingCard.appliable
-          } : null,
-          cardOnRouteLeg: cardIsNewest && index === 0 && !resumedSkill
-        }),
+        tools: legTools,
         // More options was asked for by a tap: a card is the answer, and staging
         // it changes nothing until the user ticks and taps Follow.
         // The first follow leg stays on auto: the sentence beside the card is
@@ -1064,6 +1073,39 @@ async function runAgentTurn(params) {
         }
         const callKey = `${call.name}:${call.argumentsRaw}`;
         const isRepeat = continuationsSeen.has(callKey);
+
+        // A SEARCH THE LEG DID NOT DECLARE IS ANSWERED, NEVER RUN. The handover
+        // keeps its own searchNews answer below.
+        if ((call.name === 'webSearch' || call.name === 'searchNews') && typeof deps.tools[call.name] === 'function' && !declared.has(call.name) && !(handover && call.name === 'searchNews')) {
+          const onFollow = skillLoaded === FOLLOW_STORY_SKILL;
+          const out = {
+            error: onFollow ? 'No search on this step. Call proposeTrack now.' : 'No search on this step. Carry on from what the user said.',
+            refused: true,
+            ...(call.name === 'webSearch' ? {
+              searched: false
+            } : {})
+          };
+          leg.toolResults.push({
+            name: call.name,
+            result: out
+          });
+          toolResultsThisTurn.push({
+            name: call.name,
+            result: out
+          });
+          if (!isRepeat) {
+            sawContinuationTool = true;
+            continuationsSeen.add(callKey);
+          }
+          // On the follow skill the next leg is the card, forced: a leg that only
+          // tried to search has no card, and a second try with a new query would
+          // walk to the leg cap.
+          if (onFollow && !moreOptionsMode && followLegsLeft === 0 && cardThisTurn === null && pendingCard === null && typeof deps.tools.proposeTrack === 'function') {
+            followLegsLeft = 2;
+            maxLegsThisTurn = Math.max(maxLegsThisTurn, nextLegIndex + 1 - formatRetries);
+          }
+          continue;
+        }
         if (call.name === 'load_skill') {
           const id = typeof args.id === 'string' ? args.id : '';
           // ALREADY ACTIVE: answer, but do not buy a leg. Re-loading the skill
@@ -1203,8 +1245,7 @@ async function runAgentTurn(params) {
           continue;
         }
         if (call.name === 'webSearch') {
-          // The device searches. No port method means the setting is
-          // off; the tool was not declared, so a call is answered, never run.
+          // The device searches. No port method means the setting is off.
           const queries = Array.isArray(args.queries) ? args.queries.filter(q => typeof q === 'string' && q.trim().length > 0).slice(0, 4) : [];
           subjectsThisTurn.push(...queries);
           const out = deps.tools.webSearch ? queries.length > 0 ? await deps.tools.webSearch({
@@ -1231,8 +1272,7 @@ async function runAgentTurn(params) {
           continue;
         }
         if (call.name === 'searchNews') {
-          // Mera's own index, from the device. No port method: not declared, so
-          // a call is answered, never run.
+          // Mera's own index, from the device.
           const query = typeof args.query === 'string' ? args.query.trim().slice(0, 200) : '';
           if (query) subjectsThisTurn.push(query);
           const out = handover ? {
@@ -1972,7 +2012,7 @@ async function runAgentTurn(params) {
           if (typeof out.error !== 'string') {
             proposedSomething = true;
             cardThisTurn = 'staged';
-            followCardStaged = handover !== null;
+            followCardStaged = !moreOptionsMode;
             for (const o of Array.isArray(card.options) ? card.options : []) {
               if (typeof o?.label === 'string') subjectsThisTurn.push(o.label);
             }
@@ -2106,6 +2146,17 @@ async function runAgentTurn(params) {
           maxLegsThisTurn = Math.max(maxLegsThisTurn, nextLegIndex + followLegsLeft - formatRetries);
           continue;
         }
+      }
+      // A FOLLOW LEG THAT CALLED NOTHING AND ASKED NOTHING wrote words where the
+      // card belongs ("Now you can pick."). It gets the one forced leg. A question
+      // stays the answer: with no story named the skill asks which one.
+      if (skillLoaded === FOLLOW_STORY_SKILL && handover === null && !moreOptionsMode && followLegsLeft === 0 && !followRetried && result.toolCalls.length === 0 && cardThisTurn === null && pendingCard === null && typeof deps.tools.proposeTrack === 'function' && !/[?\uFF1F\u061F]/.test(reply)) {
+        followRetried = true;
+        followLegsLeft = 1;
+        reply = '';
+        answeredTheUser = false;
+        maxLegsThisTurn = Math.max(maxLegsThisTurn, nextLegIndex + 1 - formatRetries);
+        continue;
       }
       if (followLegsLeft > 0) {
         followLegsLeft--;
@@ -2627,8 +2678,11 @@ async function runAgentTurn(params) {
   }
 
   // A required slot beats prose emphasis: a card leg writes its sentence on about
-  // one turn in fifty, so the line beside the handover's card is the app's.
-  if (followCardStaged && !(0, _prose.cleanProse)(reply).trim()) reply = params.fallbacks?.followCard ?? REPLY_FOLLOW_CARD_FALLBACK;
+  // one turn in fifty, and now and then a wrong one ("The card didn't appear."). The
+  // line beside a follow card is the app's; only the handover keeps a sentence the leg wrote.
+  if (followCardStaged && (handover === null || !(0, _prose.cleanProse)(reply).trim())) {
+    reply = params.fallbacks?.followCard ?? REPLY_FOLLOW_CARD_FALLBACK;
+  }
 
   // ---- NO FOLLOW CARD CAME: the reader's words go back as a fact card -------
   if (noStakeEntries.length > 0 && !followCardStaged && terminalReason !== 'transport-error') {

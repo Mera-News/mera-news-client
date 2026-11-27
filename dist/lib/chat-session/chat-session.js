@@ -5,6 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.askImpactQuestion = askImpactQuestion;
 exports.attachChatSession = attachChatSession;
+exports.canRegenerateWithWebSearch = canRegenerateWithWebSearch;
 exports.canRequestMoreOptions = canRequestMoreOptions;
 exports.canRetryChatTurn = canRetryChatTurn;
 exports.flushRemovedFacts = flushRemovedFacts;
@@ -247,29 +248,45 @@ function canRequestMoreOptions() {
   return typeof live?.engine.moreOptions === 'function';
 }
 
+/** The live engine can search the web for a follow card: the cloud engine only. */
+function canRegenerateWithWebSearch() {
+  return live?.kind === 'cloud' && typeof live.engine.moreOptions === 'function';
+}
+
 /**
  * "More options" on a follow card, built from the card alone: its effective
  * options (grown ones included) and their subject. Never throws.
+ *
+ * With `web`, "Regenerate with web search": the device searches `web.query`
+ * first, and only the rows `web.keep` names count as shown, so the rest can be replaced.
  */
-async function requestMoreOptions(proposalId, cardActions) {
+async function requestMoreOptions(proposalId, cardActions, web) {
   const tracks = cardActions.filter(a => a.type === 'track_story');
-  const room = _engine.MAX_FOLLOW_OPTIONS - tracks.length;
+  const shown = web ? tracks.filter(a => web.keep(a.label)) : tracks;
+  const room = _engine.MAX_FOLLOW_OPTIONS - shown.length;
   const engine = live?.engine;
   if (tracks.length === 0 || room < 1 || !engine?.moreOptions) return {
     actions: [],
     reason: 'none'
+  };
+  if (web && !canRegenerateWithWebSearch()) return {
+    actions: [],
+    reason: 'failed'
   };
   moreOptionsInFlight = true;
   sync();
   try {
     return await engine.moreOptions({
       proposalId,
-      shown: tracks.map(a => ({
+      shown: shown.map(a => ({
         label: a.label,
         searchText: a.searchText
       })),
       room,
-      subject: tracks[0].subject
+      subject: tracks[0].subject,
+      ...(web ? {
+        webQuery: web.query
+      } : {})
     });
   } catch (err) {
     _logger.default.warn('[chat-session] moreOptions threw', {

@@ -17,7 +17,6 @@ tools:
   - "ask_choice"
   - "saveExtractedFacts"
   - "deleteUserFacts"
-  - "webSearch"
 ---
 
 The household, the relatives, and what has changed. The user is the subject of none of it.
