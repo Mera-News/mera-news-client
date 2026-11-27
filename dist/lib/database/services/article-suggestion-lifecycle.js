@@ -21,6 +21,7 @@ var _storyImpressionService = require("./story-impression-service");
 var _factRowsSelector = require("../../stores/fact-rows-selector");
 var _feedOrderStore = require("../../stores/feed-order-store");
 var _readSnapshot = require("../../feed-ordering/read-snapshot");
+var _feedAlgo = require("../../feed-ordering/feed-algo");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Article Suggestion Service: delete, prune and feed metadata.
 
@@ -45,21 +46,24 @@ async function deleteSuggestionByServerId(serverId) {
 
 /**
  * The 48h sweep (`cutoffMs` = now - 48h on `created_at`). Unread High and
- * Emergency stories are spared until 7 days after publish. "Unread" is
- * decided per STORY from the opened set plus the Feed's persisted card state:
- * if any member is read, no member is spared; if any old member qualifies,
- * every old member of that story inside the 7 days stays with it.
+ * Emergency stories are spared until the reader's keep (`feed_algo` keepDays,
+ * 7 by default) after publish; a keep no longer than 48h spares nothing.
+ * "Unread" is decided per STORY from the opened set plus the Feed's persisted
+ * card state (a skipped card counts as read when `skippedIsRead`): if any
+ * member is read, no member is spared; if any old member qualifies, every old
+ * member of that story inside the keep stays with it.
  */
 async function deleteOldSuggestions(cutoffMs) {
   const old = await articleSuggestionsCol.query(_watermelondb.Q.where('created_at', _watermelondb.Q.lt(cutoffMs))).fetch();
   if (old.length === 0) return 0;
-  const keepFrom = cutoffMs + _factRowsSelector.FEED_WINDOW_MS - _factRowsSelector.IMPORTANT_KEEP_MS; // now - 7d
-  const recent = old.filter(r => r.firstPubDate.getTime() >= keepFrom);
+  const readOpts = (0, _feedAlgo.readOptionsOf)((0, _feedAlgo.parseFeedAlgo)(await (0, _settingService.getSetting)(_feedAlgo.FEED_ALGO_SETTING_KEY)));
+  const keepFrom = cutoffMs + _factRowsSelector.FEED_WINDOW_MS - readOpts.keepMs; // now - keep
+  const recent = readOpts.keepMs > _factRowsSelector.FEED_WINDOW_MS ? old.filter(r => r.firstPubDate.getTime() >= keepFrom) : [];
   let suggestions = old;
   if (recent.length > 0) {
     // Whole pool, so a viewed fresh sibling marks the old members read too.
     const pool = (await articleSuggestionsCol.query().fetch()).map(r => (0, _articleSuggestionMappers.toForYouSuggestion)(r));
-    const snap = (0, _readSnapshot.buildReadSnapshot)((0, _readSnapshot.parseCardState)(await (0, _settingService.getSetting)(_feedOrderStore.FEED_CARD_STATE_SETTING_KEY)), await (0, _storyImpressionService.getOpenedSeenSet)(), pool);
+    const snap = (0, _readSnapshot.buildReadSnapshot)((0, _readSnapshot.parseCardState)(await (0, _settingService.getSetting)(_feedOrderStore.FEED_CARD_STATE_SETTING_KEY)), await (0, _storyImpressionService.getOpenedSeenSet)(), pool, readOpts);
     const keysOf = s => [s.articleId, s.clusters.find(c => c.stableClusterId)?.stableClusterId, s.storyKey ? `sk:${s.storyKey}` : null];
     const spareKeys = new Set();
     for (const r of recent) {

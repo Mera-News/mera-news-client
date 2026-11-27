@@ -298,12 +298,15 @@ function keepsPastFeedWindow(s, snap) {
 }
 
 /** The publication window (`cutoffMs = nowMs - FEED_WINDOW_MS`, 48h). With a
- *  `snap`, an unread High or Emergency also passes until 7 days after publish.
- *  No snapshot means no extension. */
+ *  `snap`, an unread High or Emergency also passes until `snap.keepMs` (7 days
+ *  when absent) after publish. No snapshot, or a keep no longer than the
+ *  window, means no extension. */
 function isWithinWindow(s, cutoffMs, snap) {
   const pub = parseMs(s.firstPubDate);
   if (pub >= cutoffMs) return true;
-  return !!snap && pub >= cutoffMs - (IMPORTANT_KEEP_MS - FEED_WINDOW_MS) && keepsPastFeedWindow(s, snap);
+  if (!snap) return false;
+  const keepMs = snap.keepMs ?? IMPORTANT_KEEP_MS;
+  return keepMs > FEED_WINDOW_MS && pub >= cutoffMs - (keepMs - FEED_WINDOW_MS) && keepsPastFeedWindow(s, snap);
 }
 
 /** A row is VISIBLE once its note exists (status `complete`) — see the module

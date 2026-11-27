@@ -96,7 +96,7 @@ const EXCLUDED_TABLES = exports.EXCLUDED_TABLES = {
  */
 const BACKUP_SETTING_KEYS = exports.BACKUP_SETTING_KEYS = ['app_language', 'theme', 'text_scale', 'blur_images', 'static_gradient', 'startup_tab', 'for_you_recent_24h_only', 'explore_browse_countries', 'explore_suppressed_scopes', 'mera_selected_model_id', 'mera_skip_notes', 'mera_chat_in_cloud',
 // Only World is arranged; Feed, Library and You have fixed pages.
-'nav_order_world', 'feed_view', 'feed_minimap', 'feed_show', 'saved_group_by'];
+'nav_order_world', 'feed_view', 'feed_minimap', 'feed_show', 'feed_algo', 'saved_group_by'];
 
 /**
  * Dynamic key families carried by prefix. `headline_depth:<scopeKey>` is one

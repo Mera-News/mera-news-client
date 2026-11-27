@@ -266,17 +266,24 @@ function ageHoursOf(item, nowMs) {
   return Math.max(0, nowMs - t) / 3_600_000;
 }
 
+/** A row's relevance band with the publication tags, before any staleness. */
+function baseBand(item, ctx) {
+  // The publication tags weigh the SORT band only (publication-tags.ts).
+  return (0, _priorityOrder.relevanceBandRank)((0, _publicationTags.rankedRelevance)(item.suggestion.relevance ?? 0, item.suggestion, ctx));
+}
+
 /**
  * The band a Feed row actually sorts in: its relevance band, plus the staleness
  * demotion when the row is unseen.
  *
- * An unread High or Emergency keeps its band whatever its age. Medium and
- * Low clamp at 4, the existing bottom band, so no new band value is introduced.
+ * An unread High or Emergency keeps its band whatever its age, unless
+ * `highSinks`, which demotes an unseen High like Medium and Low; Emergency
+ * never moves. Every band clamps at 4, the existing bottom band, so no new
+ * band value is introduced.
  */
-function effectiveBand(item, tier, nowMs, ctx = null) {
-  // The publication tags weigh the SORT band only (publication-tags.ts).
-  const base = (0, _priorityOrder.relevanceBandRank)((0, _publicationTags.rankedRelevance)(item.suggestion.relevance ?? 0, item.suggestion, ctx));
-  if (tier !== 0 || base <= 1) return base;
+function effectiveBand(item, tier, nowMs, ctx = null, highSinks = false) {
+  const base = baseBand(item, ctx);
+  if (tier !== 0 || base <= (highSinks ? 0 : 1)) return base;
   return Math.min(4, base + stalenessBandPenalty(ageHoursOf(item, nowMs)));
 }
 
@@ -305,9 +312,9 @@ function isAwaitingNote(s) {
 }
 
 /** Project a Feed row onto the shared ordering facts. */
-function feedPriorityFacts(item, cardStates, openedArticleIds, nowMs, awaitingNote, ctx = null) {
+function feedPriorityFacts(item, cardStates, openedArticleIds, nowMs, awaitingNote, ctx = null, highSinks = false) {
   const tier = seenTierOfEntry(item, cardStates, openedArticleIds);
-  const band = effectiveBand(item, tier, nowMs, ctx);
+  const band = effectiveBand(item, tier, nowMs, ctx, highSinks);
   return {
     relevance: item.suggestion.relevance ?? 0,
     // Both are supplied and cannot disagree — `isViewedEntry` IS `tier > 0`.
@@ -349,7 +356,8 @@ function sortFeedEntries(data, cardStates, openedArticleIds, pinnedIds = [], now
 /** The session's ranking context: publication tags weigh the band, and a
  *  muted publication's rows leave the list (pinned ones included). */
 ctx = null, /** `FeedPin.closed`: render the pinned rows only; arrivals wait for the next session. */
-closed = false) {
+closed = false, /** An unseen High sinks with age too (`effectiveBand`). */
+highSinks = false) {
   if (ctx?.publicationMultipliers) {
     data = data.filter(it => !(0, _publicationTags.isMutedPublication)(it.suggestion.publication_name, ctx));
   }
@@ -357,7 +365,7 @@ closed = false) {
     rows: [],
     pinnedCount: 0
   };
-  const facts = it => feedPriorityFacts(it, cardStates, openedArticleIds, nowMs, awaitingNote, ctx);
+  const facts = it => feedPriorityFacts(it, cardStates, openedArticleIds, nowMs, awaitingNote, ctx, highSinks);
   if (pinnedIds.length === 0) {
     return closed ? {
       rows: [],
@@ -393,7 +401,11 @@ closed = false) {
 // away. The fold is a STABLE PARTITION of the sorted list by the band a row
 // sorts in (`effectiveBand`, so a stale unseen Medium folds), across all tiers:
 // seen High and Medium stay above it. A pinned row stays above whatever its band
-// does later, because the reader has seen it there.
+// does later, because the reader has seen it there. A High or Emergency never
+// folds for its band. `FeedAlgo` changes two of these: `mediumStaysAbove` folds
+// on the band before staleness (an old Medium stays above while it still sorts
+// below fresher ones), and `seenBelowFold` sends every unpinned seen row behind
+// the fold, where it trails the unseen Low by the sort's tier order.
 //
 // No row is ever a non-story: while collapsed the fold card is the list's
 // TERMINAL card (footer); once expanded its label rides the divider slot of the
@@ -418,11 +430,14 @@ function layoutFeed(input) {
   } = input;
   const ctx = input.ctx ?? null;
   const awaiting = input.awaitingNote ?? representativeAwaitingNote;
+  const algo = input.algo ?? {};
+  const highSinks = algo.highSinks ?? false;
+  const tierOf = it => seenTierOfEntry(it, cardStates, openedArticleIds);
   // Unclosed so every row comes back: the closed pin is applied here, with the
   // frozen folded set beside it.
   const {
     rows: sorted
-  } = sortFeedEntries(input.data, cardStates, openedArticleIds, pin.ids, nowMs, awaiting, ctx);
+  } = sortFeedEntries(input.data, cardStates, openedArticleIds, pin.ids, nowMs, awaiting, ctx, false, highSinks);
   const pinned = new Set(pin.ids);
   const frozenBelow = new Set(pin.belowIds);
   const above = [];
@@ -431,17 +446,23 @@ function layoutFeed(input) {
   for (const it of sorted) {
     if (pin.closed) {
       if (frozenBelow.has(it.id)) below.push(it);else if (pinned.has(it.id)) above.push(it);else heldCount += 1;
-    } else if (pinned.has(it.id) || (0, _priorityOrder.isAboveFold)(effectiveBand(it, seenTierOfEntry(it, cardStates, openedArticleIds), nowMs, ctx))) {
-      above.push(it);
-    } else {
-      below.push(it);
+      continue;
     }
+    const tier = tierOf(it);
+    const b = baseBand(it, ctx);
+    const foldBand = algo.mediumStaysAbove || b <= 1 ? b : effectiveBand(it, tier, nowMs, ctx, highSinks);
+    if (pinned.has(it.id) || !(algo.seenBelowFold && tier > 0) && (0, _priorityOrder.isAboveFold)(foldBand)) above.push(it);else below.push(it);
   }
+  // Seen rows trail the unseen ones in `below`: the sort orders tier first.
+  const firstSeen = below.findIndex(it => tierOf(it) > 0);
+  const belowSeen = below.filter(it => tierOf(it) > 0).length;
   const base = {
     above,
     below,
     heldCount,
-    foldIndex: null
+    foldIndex: null,
+    belowSeen,
+    seenIndex: null
   };
   if (show !== 'all' && show !== 'picks') {
     const {
@@ -463,6 +484,7 @@ function layoutFeed(input) {
       rows: [...picks, ...tailShown],
       picks: picks.length,
       foldIndex: below.length > 0 ? above.length : null,
+      seenIndex: firstSeen < 0 ? null : above.length + firstSeen,
       terminal: 'end',
       renderedAfterPicks: below.length + tailShown.length
     };

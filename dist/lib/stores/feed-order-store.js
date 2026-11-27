@@ -508,9 +508,17 @@ const useFeedOrderStore = exports.useFeedOrderStore = (0, _zustand.create)()((se
       if (!next) next = {
         ...current
       };
+      const item = s.itemsById[id];
+      const keys = [];
+      const scid = item ? (0, _feedListSelector.stableClusterIdOf)(item) : null;
+      if (scid) keys.push(scid);
+      if (item?.suggestion.storyKey) keys.push(`sk:${item.suggestion.storyKey}`);
       next[id] = {
         state: 'skipped',
-        at: nowMs
+        at: nowMs,
+        ...(keys.length ? {
+          keys
+        } : {})
       };
     }
     // No `set()` when nothing changed — a no-op set still notifies every
