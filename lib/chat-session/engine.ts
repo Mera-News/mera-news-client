@@ -65,6 +65,9 @@ export interface MoreOptionsRequest {
     room: number;
     /** The card's subject, stamped on every returned action. */
     subject: TrackFeedbackSubject;
+    /** "Regenerate with web search": the device searches this first and the
+     *  options are written from the results. `shown` then holds only the rows the card keeps. */
+    webQuery?: string;
 }
 
 /** Never thrown: an empty `actions` always carries a reason. */

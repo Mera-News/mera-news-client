@@ -31,6 +31,34 @@ export function readPhraseHints(result: Record<string, unknown>): {
   return { roles, defaultTick: typeof result.defaultTick === 'string' ? result.defaultTick : null };
 }
 
+/** The rows Regenerate with web search keeps: the reader's own words, the handover's subjects and every row with a follow outcome. */
+export function keptTrackKeys(result: Record<string, unknown>): Set<string> {
+  return new Set([...Object.keys(readPhraseHints(result).roles), ...Object.keys(readTrackOutcomes(result.followed))]);
+}
+
+/**
+ * The one web query for a card, built with no model call: the reader's own
+ * words when the card holds them, else the article's title, else the first
+ * story row's search text. Null when nothing is long enough to search.
+ */
+export function webQueryForCard(
+  result: Record<string, unknown>,
+  options: readonly TrackOption[],
+  articleTitle?: string,
+): string | null {
+  const { roles } = readPhraseHints(result);
+  const roleOf = (o: TrackOption) => {
+    const key = normaliseTrackText(o.label);
+    return Object.prototype.hasOwnProperty.call(roles, key) ? roles[key] : null;
+  };
+  const byRole = (role: TrackRowRole) => options.find((o) => roleOf(o) === role)?.label;
+  const story = options.find((o) => roleOf(o) === null) ?? options[0];
+  const query = (byRole('corrected') ?? byRole('exact') ?? byRole('subject') ?? (articleTitle?.trim() || story?.search) ?? '')
+    .trim()
+    .slice(0, 200);
+  return query.length >= 2 ? query : null;
+}
+
 /** A card never grows past this: the engine contract's own cap. */
 export const MAX_TRACK_CARD_OPTIONS = MAX_FOLLOW_OPTIONS;
 

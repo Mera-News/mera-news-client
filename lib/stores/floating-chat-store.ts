@@ -249,7 +249,8 @@ interface FloatingChatState {
 }
 
 /** A follow card's More options request: running, or how the last one ended. */
-export type TrackMoreState = 'loading' | 'none' | 'failed';
+/** `webLoading`: Regenerate with web search is running. */
+export type TrackMoreState = 'loading' | 'webLoading' | 'none' | 'failed';
 
 export interface InterruptedTurn {
     text: string;

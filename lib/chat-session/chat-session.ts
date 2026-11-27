@@ -244,28 +244,40 @@ export function canRequestMoreOptions(): boolean {
     return typeof live?.engine.moreOptions === 'function';
 }
 
+/** The live engine can search the web for a follow card: the cloud engine only. */
+export function canRegenerateWithWebSearch(): boolean {
+    return live?.kind === 'cloud' && typeof live.engine.moreOptions === 'function';
+}
+
 /**
  * "More options" on a follow card, built from the card alone: its effective
  * options (grown ones included) and their subject. Never throws.
+ *
+ * With `web`, "Regenerate with web search": the device searches `web.query`
+ * first, and only the rows `web.keep` names count as shown, so the rest can be replaced.
  */
 export async function requestMoreOptions(
     proposalId: string,
     cardActions: readonly ProposalAction[],
+    web?: { query: string; keep: (label: string) => boolean },
 ): Promise<MoreOptionsResult> {
     const tracks = cardActions.filter(
         (a): a is Extract<ProposalAction, { type: 'track_story' }> => a.type === 'track_story',
     );
-    const room = MAX_FOLLOW_OPTIONS - tracks.length;
+    const shown = web ? tracks.filter((a) => web.keep(a.label)) : tracks;
+    const room = MAX_FOLLOW_OPTIONS - shown.length;
     const engine = live?.engine;
     if (tracks.length === 0 || room < 1 || !engine?.moreOptions) return { actions: [], reason: 'none' };
+    if (web && !canRegenerateWithWebSearch()) return { actions: [], reason: 'failed' };
     moreOptionsInFlight = true;
     sync();
     try {
         return await engine.moreOptions({
             proposalId,
-            shown: tracks.map((a) => ({ label: a.label, searchText: a.searchText })),
+            shown: shown.map((a) => ({ label: a.label, searchText: a.searchText })),
             room,
             subject: tracks[0].subject,
+            ...(web ? { webQuery: web.query } : {}),
         });
     } catch (err) {
         logger.warn('[chat-session] moreOptions threw', { error: String(err) });

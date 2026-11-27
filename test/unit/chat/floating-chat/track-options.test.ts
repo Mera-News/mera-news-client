@@ -1,9 +1,11 @@
 import {
+  keptTrackKeys,
   MAX_TRACK_CARD_OPTIONS,
   mergeTrackOptions,
   readCardOptions,
   readTrackOutcomes,
   trackCardStatus,
+  webQueryForCard,
 } from '@/lib/chat-session/cards/track-options';
 
 const opt = (label: string, search = label.toLowerCase()) => ({ label, search });
@@ -81,6 +83,40 @@ describe('readTrackOutcomes', () => {
       c: 'failed',
     });
     expect(readTrackOutcomes(null)).toEqual({});
+  });
+});
+
+describe('Regenerate with web search: the query and the kept rows', () => {
+  const rows = [opt('us grocery stores thanksgiving'), opt('US Grocery Stores Thanksgiving'), opt('Thanksgiving Store Hours', 'US grocery store hours Thanksgiving')];
+
+  it('searches the corrected phrase, then the exact one, then the subject row', () => {
+    const roles = { 'us grocery stores thanksgiving': 'exact', 'us grocery stores thanksgiving ': 'ignored' };
+    expect(webQueryForCard({ phraseRoles: { ...roles, 'thanksgiving store hours': 'corrected' } }, rows)).toBe('Thanksgiving Store Hours');
+    expect(webQueryForCard({ phraseRoles: roles }, rows)).toBe('us grocery stores thanksgiving');
+    expect(webQueryForCard({ storySubjects: ['Thanksgiving Store Hours'] }, rows)).toBe('Thanksgiving Store Hours');
+  });
+
+  it('with no reader words on the card: the article title, else the first story row\'s search text', () => {
+    expect(webQueryForCard({}, rows, ' Grocers plan Thanksgiving hours ')).toBe('Grocers plan Thanksgiving hours');
+    expect(webQueryForCard({}, rows, '')).toBe('us grocery stores thanksgiving');
+    expect(webQueryForCard({ phraseRoles: { constructor: 'exact' } }, [opt('constructor', 'F1 constructor standings')])).toBe('constructor');
+    expect(webQueryForCard({}, [opt('constructor', 'F1 constructor standings')])).toBe('F1 constructor standings');
+  });
+
+  it('is cut at 200 characters and null when nothing is long enough', () => {
+    expect(webQueryForCard({}, [opt('Long', 'x'.repeat(300))])).toHaveLength(200);
+    expect(webQueryForCard({}, [opt('A', 'a')])).toBeNull();
+    expect(webQueryForCard({}, [])).toBeNull();
+  });
+
+  it('keeps the reader\'s rows, the subject rows and every row with an outcome', () => {
+    const kept = keptTrackKeys({
+      phraseRoles: { 'my words': 'exact' },
+      storySubjects: ['Rally Finland'],
+      followed: { 'wrc results': 'following', 'rally news': 'failed' },
+    });
+    expect([...kept].sort()).toEqual(['my words', 'rally finland', 'rally news', 'wrc results']);
+    expect(keptTrackKeys({}).has('constructor')).toBe(false);
   });
 });
 

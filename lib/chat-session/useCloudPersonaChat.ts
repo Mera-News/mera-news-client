@@ -10,6 +10,7 @@ import logger from '../logger';
 import { CallerAbortError, CleartextToolCallError, cloudChatStream, type WireMessage } from '../llm/cloudComplete';
 import { CHAT_MAX_OUTPUT_TOKENS } from '../llm/constants';
 import { markChatFailed, markChatReady } from '../llm/prewarm';
+import { handleWebSearch } from '../chat-tools/web-search-handler';
 import { departureMark } from '@/lib/app-restart';
 import { clearTurnInflight, markTurnInflight } from '@/lib/chat-session/turn-inflight';
 
@@ -1120,10 +1121,20 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
   startTurnRef.current = startTurn;
 
   const moreOptions = async (req: MoreOptionsRequest): Promise<MoreOptionsResult> => {
-    if (turnBusyRef.current || isStreamingRef.current) return { actions: [], reason: 'busy' };
+    if (turnBusyRef.current || isStreamingRef.current || moreAbort !== null) return { actions: [], reason: 'busy' };
+    if (cloud().isBlocked) return { actions: [], reason: 'failed' };
     const ctl = new AbortController();
     moreAbort = ctl;
     try {
+      // The device searches first; with no usable result no model is called.
+      let web: Record<string, unknown> | undefined;
+      if (req.webQuery) {
+        web = await handleWebSearch({ queries: [req.webQuery] }, ctl.signal);
+        if (ctl.signal.aborted) return { actions: [], reason: 'stopped' };
+        if (web.searched !== true) return { actions: [], reason: 'failed' };
+        const entries = Array.isArray(web.searches) ? (web.searches as Record<string, unknown>[]) : [web];
+        if (!entries.some((e) => Array.isArray(e.results) && e.results.length > 0)) return { actions: [], reason: 'none' };
+      }
       const id = agentRef.current.id;
       // A COPY: this is not a conversation turn, so the loop's writes to turn
       // state must not reach the next real turn. A JSON round trip, not
@@ -1147,7 +1158,7 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
         userMessage: '',
         deps,
         mode: 'moreOptions',
-        moreOptions: { shown: req.shown, room: req.room },
+        moreOptions: { shown: req.shown, room: req.room, ...(web ? { web } : {}) },
         fallbacks: {
           leak: i18nInstance().t('chat.replyLeakFallback'),
           process: i18nInstance().t('chat.replyProcessFallback'),

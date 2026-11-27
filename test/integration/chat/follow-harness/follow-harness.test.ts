@@ -11,7 +11,7 @@ import { FOLLOW_STORY_SURFACE } from '@/lib/news-harness/follow-story';
 import type { ProposalAction, StagedProposal, TrackFeedbackSubject } from '@/lib/news-harness/core/types';
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';
 import { FIXTURE_ACCOUNT, gatewayCalls, mockGateway, mockGql, server } from '@/test/helpers';
-import { isRouteLeg, reply, resetChatModules, systemOf, toolCall, until } from '@/test/integration/chat/_helpers';
+import { isRouteLeg, reply, resetChatModules, setWebSearchInChat, systemOf, toolCall, until } from '@/test/integration/chat/_helpers';
 import { trackedStoryCount } from '@/test/integration/chat/tools/agents/agents-kit';
 import { attachCloud, cloud, idle, personaAgent, settle, turnDone } from '../cloud-engine/kit';
 
@@ -332,6 +332,62 @@ describe('More options', () => {
     stopChatTurn();
     await expect(pending).resolves.toEqual({ actions: [], reason: 'stopped' });
     expect(store().isGenerating).toBe(false);
+  });
+});
+
+describe('Regenerate with web search, through the real engine', () => {
+  const HITS = JSON.stringify([{ title: 'Dutch coalition talks collapse', url: 'https://example.org/1', snippet: 'Formation talks in The Hague.' }]);
+  const NEW = [{ label: 'Dutch Coalition Collapse', search: 'Dutch coalition talks collapse The Hague' }];
+  const SUBJECT: TrackFeedbackSubject = {
+    origin: 'article', surface: FOLLOW_STORY_SURFACE, articleId: '', title: '', pubDate: null, stableClusterId: null, publicationName: null,
+  };
+  const shown = OPTIONS.map((o): ProposalAction => ({ type: 'track_story', label: o.label, searchText: o.search, subject: SUBJECT }));
+  const web = { query: 'dutch cabinet formation talks', keep: (label: string) => label === OPTIONS[0].label };
+  const gateway = (search: unknown = HITS) =>
+    mockGateway((call) => (call.route === 'web-search' ? (search as string) : reply('', toolCall('proposeTrack', { options: NEW }))));
+
+  beforeEach(async () => { await setWebSearchInChat(true); });
+
+  it('searches once from the device, then writes the options in one model call', async () => {
+    server.use(...gateway());
+    await attachCloud(followAgent());
+    const res = await requestMoreOptions('track-1', shown, web);
+
+    expect(res.actions.map((a) => a.label)).toEqual(['Dutch Coalition Collapse']);
+    const routes = gatewayCalls().map((c) => c.route).filter((r) => r === 'web-search' || r === 'chat');
+    expect(routes).toEqual(['web-search', 'chat']);
+    const chat = gatewayCalls('chat')[0];
+    expect(chat.messages.some((m) => m.content.startsWith('webSearch: ') && m.content.includes('Dutch coalition talks collapse'))).toBe(true);
+    expect(cloud().messages).toEqual([]);
+    expect(cloud().wireMessages).toEqual([]);
+    expect(store().proposal).toBeNull();
+  });
+
+  it('with web search switched off nothing is sent', async () => {
+    await setWebSearchInChat(false);
+    server.use(...gateway());
+    await attachCloud(followAgent());
+    await expect(requestMoreOptions('track-1', shown, web)).resolves.toEqual({ actions: [], reason: 'failed' });
+    expect(gatewayCalls('web-search')).toHaveLength(0);
+    expect(gatewayCalls('chat')).toHaveLength(0);
+  });
+
+  it('a failed search or an empty one calls no model', async () => {
+    server.use(...gateway({ status: 503, body: { code: 'search-unavailable' } }));
+    await attachCloud(followAgent());
+    await expect(requestMoreOptions('track-1', shown, web)).resolves.toEqual({ actions: [], reason: 'failed' });
+
+    server.use(...gateway('[]'));
+    await expect(requestMoreOptions('track-1', shown, web)).resolves.toEqual({ actions: [], reason: 'none' });
+    expect(gatewayCalls('chat')).toHaveLength(0);
+  });
+
+  it('a blocked account is refused before anything is sent', async () => {
+    server.use(...gateway());
+    await attachCloud(followAgent());
+    cloud().setIsBlocked(true);
+    await expect(requestMoreOptions('track-1', shown, web)).resolves.toEqual({ actions: [], reason: 'failed' });
+    expect(gatewayCalls('web-search')).toHaveLength(0);
   });
 });
 

@@ -437,7 +437,12 @@ export interface RunAgentTurnParams {
    *  throws it away: this is not a conversation turn. */
   mode?: 'turn' | 'moreOptions';
   /** Required with mode 'moreOptions': what the card shows and how many it can take. */
-  moreOptions?: { shown: { label: string; searchText: string }[]; room: number };
+  moreOptions?: {
+    shown: { label: string; searchText: string }[];
+    room: number;
+    /** A web search the device already ran: the options are written from it. */
+    web?: Record<string, unknown>;
+  };
   /** This one turn runs this skill with no route leg: the app asked the question
    *  the message answers, and the answer alone would not route there. Passed per
    *  send and never written to the state. An older chip waiting is dropped, because
@@ -694,13 +699,24 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   }
   /** The note a More options leg ends on: the options on the card, escaped
    *  (labels are model text), and the room left. */
-  const moreOptionsNote = moreOptionsMode && params.moreOptions
+  const webNote = moreOptionsMode && params.moreOptions?.web
+    ? 'The user tapped Regenerate with web search on the follow card. The device already searched the web: the '
+      + 'webSearch result above is everything, and you cannot search. Call proposeTrack with up to '
+      + `${Math.max(1, Math.min(4, params.moreOptions.room))} options for the story those results are about, each grounded in the results, `
+      + 'narrow event to broad story. '
+      + (params.moreOptions.shown.length > 0
+        ? 'Never repeat an option the card keeps: '
+          + params.moreOptions.shown.map((o) => `"${escapeUntrusted(o.label, 80)}" (${escapeUntrusted(o.searchText, 120)})`).join('; ') + '. '
+        : '')
+      + 'Write nothing else.'
+    : null;
+  const moreOptionsNote = webNote ?? (moreOptionsMode && params.moreOptions
     ? 'The user tapped More options on the follow card above. It already shows: '
       + params.moreOptions.shown.map((o) => `"${escapeUntrusted(o.label, 80)}" (${escapeUntrusted(o.searchText, 120)})`).join('; ')
       + `. Call proposeTrack with up to ${Math.max(1, params.moreOptions.room)} NEW options about the same story, each `
       + 'different from every one shown: a narrower angle, a related thread or a wider frame. Never reword a shown one. '
       + 'Write nothing else.'
-    : null;
+    : null);
   // A place the chip resolved, carried for as long as the asking skill keeps
   // resuming. Any other turn starts clean.
   const tappedPlace = placeFromPayload(turn.resolvedChoice?.payload);
@@ -829,6 +845,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   let placeCandidates: Place[] = resumedSkill && turn.confirmedPlace ? [turn.confirmedPlace] : [];
   let similarFactCount: number | null = null;
   const toolResultsThisTurn: { name: string; result: unknown }[] = [];
+  if (moreOptionsMode && params.moreOptions?.web) toolResultsThisTurn.push({ name: 'webSearch', result: params.moreOptions.web });
   /**
    * Continuation calls already made this turn, keyed name+arguments.
    *
