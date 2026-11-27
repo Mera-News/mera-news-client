@@ -48,6 +48,7 @@ function snapshotFromSuggestion(row: ArticleSuggestionModel): TrackedStoryMember
     languageCode: row.languageCode ?? undefined,
     countryCode: row.countryCode ?? undefined,
     storyKey: row.storyKey ?? undefined,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : undefined,
   };
 }
 

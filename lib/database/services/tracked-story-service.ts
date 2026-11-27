@@ -526,10 +526,11 @@ export interface SnapshotSourcePatch {
   publicationName?: string;
   storyKey?: string;
   titleOriginal?: string;
+  readingScore?: number;
 }
 
 /**
- * Fill in `languageCode` / `countryCode` / `publicationName` / `storyKey` / `titleOriginal` on member snapshots
+ * Fill in `languageCode` / `countryCode` / `publicationName` / `storyKey` / `titleOriginal` / `readingScore` on member snapshots
  * that predate those fields (or were seeded from a source that never carried
  * them, e.g. the originating article of a freshly-followed story). The timeline
  * screen resolves them from the local `article_suggestions` rows and persists
@@ -559,12 +560,15 @@ export async function backfillSnapshotSource(
         merged.publicationName = p.publicationName;
       if (!merged.storyKey && p.storyKey) merged.storyKey = p.storyKey;
       if (!merged.titleOriginal && p.titleOriginal) merged.titleOriginal = p.titleOriginal;
+      if (merged.readingScore === undefined && typeof p.readingScore === 'number')
+        merged.readingScore = p.readingScore;
       if (
         merged.languageCode === s.languageCode &&
         merged.countryCode === s.countryCode &&
         merged.publicationName === s.publicationName &&
         merged.storyKey === s.storyKey &&
-        merged.titleOriginal === s.titleOriginal
+        merged.titleOriginal === s.titleOriginal &&
+        merged.readingScore === s.readingScore
       ) {
         return s;
       }

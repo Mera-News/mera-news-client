@@ -398,5 +398,22 @@ describe('followed stories fold copies by story key', () => {
     expect((await getTrackedStoryById(storyId))!.unseenCount).toBe(1);
     expect(await members(storyId)).toEqual(expect.arrayContaining(['seed', 'copy', 'other']));
   });
+
+  it('a reconcile snapshot carries the row\'s reading score, and none when the row has none', async () => {
+    await stored([{ id: 'seed', topicIds: [], over: { story_key: 'K1', pubDate: at(0) } }]);
+    const { storyId, topicId } = await follow('seed', 'dutch cabinet');
+    await stored([
+      { id: 'scored', topicIds: [topicId], over: { story_key: 'K2', readingScore: 77, pubDate: at(1) } },
+      { id: 'zero', topicIds: [topicId], over: { story_key: 'K3', readingScore: 0, pubDate: at(2) } },
+      { id: 'unscored', topicIds: [topicId], over: { story_key: 'K4', pubDate: at(3) } },
+    ]);
+
+    await reconcileTrackedStories();
+
+    const shots = await snapshots(storyId);
+    expect(shots.find((s) => s.articleId === 'scored')?.readingScore).toBe(77);
+    expect(shots.find((s) => s.articleId === 'zero')?.readingScore).toBe(0);
+    expect(shots.find((s) => s.articleId === 'unscored')?.readingScore).toBeUndefined();
+  });
 });
 

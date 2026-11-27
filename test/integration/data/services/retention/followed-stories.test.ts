@@ -684,6 +684,19 @@ describe('the small writers', () => {
     await backfillSnapshotSource(id, new Map());
     expect(write).not.toHaveBeenCalled();
   });
+
+  it('backfillSnapshotSource fills a missing reading score (0 included) and never overwrites one', async () => {
+    const { id } = await trackStory({ articleId: 'a1', title: 'T', originSurface: 'x', initialSnapshot: snap('a1', 9) });
+    await applyUpdates(id, { newMemberIds: ['a2'], newSnapshots: [snap('a2', 5, { readingScore: 60 })] });
+
+    await backfillSnapshotSource(id, new Map([['a1', { readingScore: 0 }]]));
+    expect((await story(id)).memberSnapshots.find((s) => s.articleId === 'a1')?.readingScore).toBe(0);
+
+    const write = spyOn(database, 'write');
+    await backfillSnapshotSource(id, new Map([['a2', { readingScore: 90 }]]));
+    expect(write).not.toHaveBeenCalled();
+    expect((await story(id)).memberSnapshots.find((s) => s.articleId === 'a2')?.readingScore).toBe(60);
+  });
 });
 
 describe('removeMemberSnapshot', () => {
