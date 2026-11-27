@@ -68,7 +68,7 @@ describe('proposeTrack', () => {
     expect(noPort).toEqual([]);
   });
 
-  it('stages a card, ends the turn and keeps the sentence beside it', async () => {
+  it('stages a card, ends the turn and puts the app\'s own line beside it', async () => {
     const h = harness([route(), res({ content: 'Pick the stories to follow below.', toolCalls: [tc('proposeTrack', OPTIONS)] })]);
     const state = createAgentState(PERSONA);
     const out = await runAgentTurn({ state, userMessage: 'I want to follow the floods in assam', deps: h.deps });
@@ -80,7 +80,8 @@ describe('proposeTrack', () => {
     expect(h.port.searchNews).not.toHaveBeenCalled();
     expect(h.port.webSearch).not.toHaveBeenCalled();
     expect(out.terminalReason).toBe('awaiting-user');
-    expect(out.reply).toBe('Pick the stories to follow below.');
+    // Whatever the leg wrote: the line beside a follow card is the app's.
+    expect(out.reply).toBe('This one is good to follow. Tick what you want and new articles land in Followed stories.');
     expect(out.stagedSomething).toBe(true);
     expect(out.closingLegFired).toBe(false);
     expect(state.turn.lastCard).toEqual({ proposalId: 'track-1', skill: 'conversation/follow-story', turn: 1 });
@@ -144,6 +145,36 @@ describe('a search the leg did not declare', () => {
     expect(names(h.requests[1])).not.toContain('webSearch');
     expect(h.port.webSearch).not.toHaveBeenCalled();
     expect(out.legs[1].toolResults[0].result).toMatchObject({ refused: true, searched: false });
+  });
+});
+
+describe('a follow leg that calls nothing', () => {
+  it('and asks nothing gets one forced leg for the card', async () => {
+    const h = harness([route(), res({ content: 'Now you can pick.' }), res({ toolCalls: [tc('proposeTrack', OPTIONS)] })]);
+    const out = await runAgentTurn({ state: createAgentState(PERSONA), userMessage: 'the floods in assam', deps: h.deps });
+    expect(h.requests).toHaveLength(3);
+    expect(names(h.requests[2])).toEqual(['proposeTrack']);
+    expect(h.requests[2].toolChoice).toBe('required');
+    expect(out.stagedSomething).toBe(true);
+    expect(out.reply).not.toContain('Now you can pick');
+  });
+
+  it('a question is the answer: no forced leg, in any script', async () => {
+    for (const question of ['Which story would you like to follow?', 'どのニュースをフォローしますか？', 'أي خبر تريد متابعته؟']) {
+      const h = harness([route(), res({ content: question })]);
+      const out = await runAgentTurn({ state: createAgentState(PERSONA), userMessage: 'I want to follow a story', deps: h.deps });
+      expect(h.requests).toHaveLength(2);
+      expect(out.reply).toBe(question);
+      expect(h.port.proposeTrack).not.toHaveBeenCalled();
+    }
+  });
+
+  it('the forced leg is spent once: a second silent leg ends the turn with no card', async () => {
+    const h = harness([route(), res({ content: 'Now you can pick.' }), res({ content: 'Here they are.' }), res({ content: 'Sorry, I could not set that up.' })]);
+    const out = await runAgentTurn({ state: createAgentState(PERSONA), userMessage: 'the floods in assam', deps: h.deps });
+    expect(h.port.proposeTrack).not.toHaveBeenCalled();
+    expect(out.stagedSomething).toBe(false);
+    expect(h.requests.length).toBeLessThanOrEqual(4);
   });
 });
 

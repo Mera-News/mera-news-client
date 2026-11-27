@@ -793,6 +793,8 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   /** Follow legs left: the card, then one required retry (the More options budget). */
   let followLegsLeft = 0;
   let followCardStaged = false;
+  /** The forced leg after a follow leg that called nothing was spent. */
+  let followRetried = false;
 
   /**
    * "SAVE AS I WROTE IT" (owner ruling): the user's own sentence, as a
@@ -2254,6 +2256,24 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
         continue;
       }
     }
+    // A FOLLOW LEG THAT CALLED NOTHING AND ASKED NOTHING wrote words where the
+    // card belongs ("Now you can pick."). It gets the one forced leg. A question
+    // stays the answer: with no story named the skill asks which one.
+    if (
+      skillLoaded === FOLLOW_STORY_SKILL && handover === null && !moreOptionsMode
+      && followLegsLeft === 0 && !followRetried
+      && result.toolCalls.length === 0
+      && cardThisTurn === null && pendingCard === null
+      && typeof deps.tools.proposeTrack === 'function'
+      && !/[?\uFF1F\u061F]/.test(reply)
+    ) {
+      followRetried = true;
+      followLegsLeft = 1;
+      reply = '';
+      answeredTheUser = false;
+      maxLegsThisTurn = Math.max(maxLegsThisTurn, nextLegIndex + 1 - formatRetries);
+      continue;
+    }
     if (followLegsLeft > 0) {
       followLegsLeft--;
       if (!terminatedByCard) {
@@ -2779,8 +2799,11 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   }
 
   // A required slot beats prose emphasis: a card leg writes its sentence on about
-  // one turn in fifty, so the line beside a follow card is the app's when the leg wrote none.
-  if (followCardStaged && !cleanProse(reply).trim()) reply = params.fallbacks?.followCard ?? REPLY_FOLLOW_CARD_FALLBACK;
+  // one turn in fifty, and now and then a wrong one ("The card didn't appear."). The
+  // line beside a follow card is the app's; only the handover keeps a sentence the leg wrote.
+  if (followCardStaged && (handover === null || !cleanProse(reply).trim())) {
+    reply = params.fallbacks?.followCard ?? REPLY_FOLLOW_CARD_FALLBACK;
+  }
 
   // ---- NO FOLLOW CARD CAME: the reader's words go back as a fact card -------
   if (noStakeEntries.length > 0 && !followCardStaged && terminalReason !== 'transport-error') {
