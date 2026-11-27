@@ -95,3 +95,27 @@ describe('buildReadSnapshot / isReadStory', () => {
     expect(isReadStory(row('S', 'S1'), snap)).toBe(false);
   });
 });
+
+describe('buildReadSnapshot options', () => {
+  const NONE = new Set<string>();
+
+  it('with skippedIsRead a skipped card reads its story like a viewed one', () => {
+    const rows = [row('rep', 'S1'), row('sib', 'S1'), row('other', 'S2')];
+    const snap = buildReadSnapshot({ rep: { state: 'skipped', at: 1 } }, NONE, rows, { skippedIsRead: true });
+    expect(rows.map((r) => isReadStory(r, snap))).toEqual([true, true, false]);
+  });
+
+  it("a skipped record's keys keep a sibling read with no rows left", () => {
+    const states = parseCardState(JSON.stringify({ states: { R: ['s', 1, ['S1', 'sk:k1']] } }));
+    expect(states.R).toEqual({ state: 'skipped', at: 1, keys: ['S1', 'sk:k1'] });
+    const snap = buildReadSnapshot(states, NONE, [], { skippedIsRead: true });
+    expect(isReadStory(row('S', 'S1'), snap)).toBe(true);
+    expect(isReadStory(row('K', undefined, 'k1'), snap)).toBe(true);
+    expect(isReadStory(row('x', 'S9'), snap)).toBe(false);
+  });
+
+  it('copies keepMs onto the snapshot, and leaves it absent otherwise', () => {
+    expect(buildReadSnapshot({}, NONE, [], { keepMs: 5 }).keepMs).toBe(5);
+    expect('keepMs' in buildReadSnapshot({}, NONE, [])).toBe(false);
+  });
+});

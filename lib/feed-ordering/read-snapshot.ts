@@ -3,7 +3,8 @@
 //
 // Read = OPENED (the opened-stories set: article ids and stable cluster ids)
 // or VIEWED on the Feed (card state 'viewed'). A 'skipped' card, dwelt past
-// without a touch, is still unread. Nothing here records anything new.
+// without a touch, is still unread unless the caller passes `skippedIsRead`.
+// Nothing here records anything new.
 //
 // STORY level, not row level: card states are keyed by the feed-order row id,
 // which is the representative's article id at first ingest. Checking rows
@@ -47,7 +48,7 @@ export function parseCardState(raw: string | null): Record<string, CardStateReco
     const [code, at, keys] = v as WireState;
     if (code !== 's' && code !== 'v') continue;
     if (typeof at !== 'number' || !Number.isFinite(at)) continue;
-    const kept = code === 'v' && Array.isArray(keys) ? keys.filter((k) => typeof k === 'string') : [];
+    const kept = Array.isArray(keys) ? keys.filter((k) => typeof k === 'string') : [];
     states[id] = { state: code === 'v' ? 'viewed' : 'skipped', at, ...(kept.length ? { keys: kept } : {}) };
   }
   return states;
@@ -59,6 +60,8 @@ type StoryRow = Pick<ForYouSuggestion, 'articleId' | 'clusters' | 'storyKey'>;
  *  `sk:`-prefixed story keys. */
 export interface ReadSnapshot {
   readonly readKeys: ReadonlySet<string>;
+  /** How long an unread High or Emergency stays; absent means IMPORTANT_KEEP_MS. */
+  readonly keepMs?: number;
 }
 
 function topStableClusterId(s: StoryRow): string | null {
@@ -69,20 +72,22 @@ function topStableClusterId(s: StoryRow): string | null {
  * Build the snapshot. `opened` is the opened-stories set (article ids plus
  * stable cluster ids, `getOpenedSeenSet` / `useOpenedStoriesStore.ids`);
  * `rows` are the suggestions the caller is about to judge, used to lift a read
- * article to its story.
+ * article to its story. `skippedIsRead` reads a 'skipped' record (its id and
+ * keys) exactly like a 'viewed' one; `keepMs` rides on the snapshot.
  */
 export function buildReadSnapshot(
   cardStates: Record<string, CardStateRecord>,
   opened: Iterable<string>,
   rows: Iterable<StoryRow>,
+  opts: { skippedIsRead?: boolean; keepMs?: number } = {},
 ): ReadSnapshot {
   const readKeys = new Set<string>(opened);
   for (const id in cardStates) {
-    if (cardStates[id].state !== 'viewed') continue;
+    if (cardStates[id].state !== 'viewed' && !opts.skippedIsRead) continue;
     readKeys.add(id);
     for (const k of cardStates[id].keys ?? []) readKeys.add(k);
   }
-  const snap = { readKeys };
+  const snap: ReadSnapshot = opts.keepMs === undefined ? { readKeys } : { readKeys, keepMs: opts.keepMs };
   // One pass: a row read by any key lends the story its other keys.
   for (const r of rows) {
     if (!isReadStory(r, snap)) continue;

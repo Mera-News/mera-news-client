@@ -1095,6 +1095,18 @@ describe('feed window and the 7-day keep', () => {
     expect(isWithinWindow(sib, CUT, skipped)).toBe(true);
   });
 
+  it('a keepMs of 3 days keeps an unread High at 60h, not at 4 days', () => {
+    const snap = buildReadSnapshot({}, [], [], { keepMs: 3 * 24 * H });
+    expect(isWithinWindow(sugg({ relevance: 0.8, firstPubDate: age(2.5) }), CUT, snap)).toBe(true);
+    expect(isWithinWindow(sugg({ relevance: 0.8, firstPubDate: age(4) }), CUT, snap)).toBe(false);
+  });
+
+  it('a keepMs of 2 days (the window itself) extends nothing', () => {
+    const snap = buildReadSnapshot({}, [], [], { keepMs: 2 * 24 * H });
+    expect(isWithinWindow(sugg({ relevance: 0.8, firstPubDate: age(2.1) }), CUT, snap)).toBe(false);
+    expect(isWithinWindow(sugg({ relevance: 0.8, firstPubDate: age(1.9) }), CUT, snap)).toBe(true);
+  });
+
   it('an opened article hides its row from the keep', () => {
     const r = sugg({ _id: 'o', articleId: 'o', relevance: 0.8, firstPubDate: age(3) });
     expect(isWithinWindow(r, CUT, buildReadSnapshot({}, ['o'], [r]))).toBe(false);

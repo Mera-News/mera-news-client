@@ -287,3 +287,88 @@ describe('expandFold (Show them)', () => {
     expect(later.terminal).toBe('end');
   });
 });
+
+describe('layoutFeed: the reader algorithm options', () => {
+  const emergency = (id: string, o?: Parameters<typeof item>[2]) => item(id, 1.2, o);
+
+  it('no options: today\'s rule (a stale Medium folds, a seen High stays above)', () => {
+    const data = [med('mOld', { ageH: 13 }), med('mNew'), high('hSeen'), low('l1')];
+    const out = layout({ data, cardStates: { hSeen: seen() }, algo: {} });
+    expect(ids(out.above)).toEqual(['mNew', 'hSeen']);
+    expect(ids(out.below)).toEqual(['mOld', 'l1']);
+    expect(out.belowSeen).toBe(0);
+    expect(out.seenIndex).toBeNull();
+  });
+
+  it('mediumStaysAbove: an old unseen Medium stays above, still sorting below a fresh one', () => {
+    const data = [med('mOld', { ageH: 13 }), med('mNew'), low('l1')];
+    const out = layout({ data, algo: { mediumStaysAbove: true } });
+    expect(ids(out.above)).toEqual(['mNew', 'mOld']);
+    expect(ids(out.below)).toEqual(['l1']);
+  });
+
+  it('seenBelowFold: a seen row goes behind the fold, after the unseen Low', () => {
+    const data = [high('h1'), med('m1'), high('hSeen'), low('l1')];
+    const cardStates = { hSeen: seen() };
+    const out = layout({ data, cardStates, algo: { seenBelowFold: true } });
+    expect(ids(out.above)).toEqual(['h1', 'm1']);
+    expect(ids(out.below)).toEqual(['l1', 'hSeen']);
+    expect(out.belowSeen).toBe(1);
+    expect(out.seenIndex).toBeNull(); // collapsed
+
+    const pin = expandFold(EMPTY_PIN, out);
+    const open = layout({ data, cardStates, algo: { seenBelowFold: true }, pin });
+    expect(ids(open.rows)).toEqual(['h1', 'm1', 'l1', 'hSeen']);
+    expect(open.foldIndex).toBe(2);
+    expect(open.seenIndex).toBe(3);
+    expect(open.belowSeen).toBe(1);
+  });
+
+  it('seenBelowFold: an opened row folds too, and a pinned seen row stays above', () => {
+    const data = [high('hPinned'), med('mOpened'), med('m1')];
+    const pin: FeedPin = { ...EMPTY_PIN, ids: ['hPinned'] };
+    const out = layout({
+      data,
+      pin,
+      cardStates: { hPinned: seen() },
+      openedArticleIds: new Set(['mOpened']),
+      algo: { seenBelowFold: true },
+    });
+    expect(ids(out.above)).toEqual(['hPinned', 'm1']);
+    expect(ids(out.below)).toEqual(['mOpened']);
+    expect(out.belowSeen).toBe(1);
+  });
+
+  it('highSinks: a stale High sorts below a fresh Medium and stays above the fold', () => {
+    const data = [high('hOld', { ageH: 30 }), med('m1'), low('l1')];
+    expect(ids(layout({ data }).above)).toEqual(['hOld', 'm1']);
+    const out = layout({ data, algo: { highSinks: true } });
+    expect(ids(out.above)).toEqual(['m1', 'hOld']);
+    expect(ids(out.below)).toEqual(['l1']);
+  });
+
+  it('an unseen High or Emergency never folds, in any combination', () => {
+    const data = [high('hOld', { ageH: 40 }), emergency('eOld', { ageH: 40 }), low('l1')];
+    for (const mediumStaysAbove of [false, true]) {
+      for (const seenBelowFold of [false, true]) {
+        for (const highSinks of [false, true]) {
+          const out = layout({ data, algo: { mediumStaysAbove, seenBelowFold, highSinks } });
+          expect(ids(out.above).sort()).toEqual(['eOld', 'hOld']);
+          expect(ids(out.below)).toEqual(['l1']);
+        }
+      }
+    }
+  });
+
+  it('all three on together', () => {
+    const data = [high('hOld', { ageH: 30 }), med('mOld', { ageH: 30 }), med('mSeen'), low('l1')];
+    const out = layout({
+      data,
+      cardStates: { mSeen: seen() },
+      algo: { mediumStaysAbove: true, seenBelowFold: true, highSinks: true },
+    });
+    expect(ids(out.above)).toEqual(['hOld', 'mOld']);
+    expect(ids(out.below)).toEqual(['l1', 'mSeen']);
+    expect(out.belowSeen).toBe(1);
+  });
+});

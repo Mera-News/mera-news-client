@@ -673,6 +673,23 @@ describe('feed-order-store', () => {
       expect(store().cardStates.a).toEqual({ state: 'viewed', at: NOW });
     });
 
+    it('stores the stable cluster id and story key (never the member ids) and round-trips them', async () => {
+      const a = item('a', { cluster: 'S-a', memberIds: ['a', 'a2', 'a3'] });
+      (a.suggestion as unknown as { storyKey: string }).storyKey = 'k1';
+      await hydrated([a, item('b')]);
+      store().markSkipped(['a', 'b'], NOW);
+      expect(store().cardStates.a).toEqual({ state: 'skipped', at: NOW, keys: ['S-a', 'sk:k1'] });
+      expect(store().cardStates.b).toEqual({ state: 'skipped', at: NOW });
+
+      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS);
+      const raw = await rowAppears(FEED_CARD_STATE_SETTING_KEY);
+      expect(JSON.parse(raw)).toEqual({ states: { a: ['s', NOW, ['S-a', 'sk:k1']], b: ['s', NOW] } });
+
+      resetStore(useFeedOrderStore);
+      await store().hydrate([a, item('b')]);
+      expect(store().cardStates.a).toEqual({ state: 'skipped', at: NOW, keys: ['S-a', 'sk:k1'] });
+    });
+
     it('ignores ids that are not laid out', async () => {
       await hydrated([item('a')]);
       store().markSkipped(['ghost', 'a'], NOW);

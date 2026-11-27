@@ -195,13 +195,55 @@ describe('deleteOldSuggestions keeps unread High for 7 days', () => {
     expect(await idsInDb()).toEqual([]);
   });
 
-  it('deletes a High viewed in the Feed card state, but not one that was only skipped past', async () => {
+  it('deletes a High viewed in the Feed card state, and by default one only skipped past', async () => {
     await seedAt(3 * DAY, [clustered('seen', 'S-seen', 3 * DAY), clustered('skipped', 'S-skip', 3 * DAY)]);
     await setSetting('feed_card_state_v1', JSON.stringify({ states: { seen: ['v', T0], skipped: ['s', T0] } }));
 
     await deleteOldSuggestions(cutoff);
 
+    expect(await idsInDb()).toEqual([]);
+  });
+
+  it('with skippedIsRead off, a High only skipped past is still spared', async () => {
+    await seedAt(3 * DAY, [clustered('seen', 'S-seen', 3 * DAY), clustered('skipped', 'S-skip', 3 * DAY)]);
+    await setSetting('feed_card_state_v1', JSON.stringify({ states: { seen: ['v', T0], skipped: ['s', T0] } }));
+    await setSetting('feed_algo', JSON.stringify({ skippedIsRead: false }));
+
+    await deleteOldSuggestions(cutoff);
+
     expect(await idsInDb()).toEqual(['skipped']);
+  });
+
+  it('keepDays 3 spares an unread High at 60h and deletes one at 4 days', async () => {
+    await seedAt(60 * HOUR, [clustered('high60h', 'S-a', 60 * HOUR)]);
+    await seedAt(4 * DAY, [clustered('high4d', 'S-b', 4 * DAY)]);
+    await setSetting('feed_algo', JSON.stringify({ keepDays: 3 }));
+
+    await deleteOldSuggestions(cutoff);
+
+    expect(await idsInDb()).toEqual(['high60h']);
+  });
+
+  it('keepDays 2 spares nothing past the 48h window', async () => {
+    await seedAt(50 * HOUR, [clustered('high50h', 'S-a', 50 * HOUR)]);
+    await setSetting('feed_algo', JSON.stringify({ keepDays: 2 }));
+
+    await deleteOldSuggestions(cutoff);
+
+    expect(await idsInDb()).toEqual([]);
+  });
+
+  it('a skipped representative is swept, then its sibling goes on the next sweep by the skipped keys', async () => {
+    // R and Y are both unread except R was dwelt past; R's record carries the story key.
+    await seedAt(50 * HOUR, [clustered('R', 'S-story', 51 * HOUR)]);
+    await seedAt(40 * HOUR, [clustered('Y', 'S-story', 51 * HOUR)]);
+    await setSetting('feed_card_state_v1', JSON.stringify({ states: { R: ['s', T0, ['S-story']] } }));
+
+    await deleteOldSuggestions(cutoff);
+    expect(await idsInDb()).toEqual(['Y']);
+
+    await deleteOldSuggestions(T0 - 30 * HOUR);
+    expect(await idsInDb()).toEqual([]);
   });
 
   it('viewed 3-member story at 50h: no member is kept', async () => {

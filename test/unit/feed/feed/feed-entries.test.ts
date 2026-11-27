@@ -399,6 +399,23 @@ describe('staleness demotion (tier 0 only)', () => {
     expect(effectiveBand(aged('e', 1.2, 47), 0, NOW)).toBe(0);
   });
 
+  it('with highSinks an unseen High drops one band at 13h and two at 25h; Emergency does not move', () => {
+    expect(effectiveBand(aged('h', 0.9, 1), 0, NOW, null, true)).toBe(1);
+    expect(effectiveBand(aged('h', 0.9, 13), 0, NOW, null, true)).toBe(2);
+    expect(effectiveBand(aged('h', 0.9, 25), 0, NOW, null, true)).toBe(3);
+    expect(effectiveBand(aged('e', 1.2, 25), 0, NOW, null, true)).toBe(0);
+    expect(effectiveBand(aged('h', 0.9, 25), 1, NOW, null, true)).toBe(1); // seen: history keeps its order
+  });
+
+  it('with highSinks the sort puts a stale High below a fresh Medium', () => {
+    const data = [aged('hOld', 0.9, 25), aged('mNew', 0.7, 1)];
+    expect(ids(sortFeedEntries(data, noStates, new Set(), [], NOW))).toEqual(['hOld', 'mNew']);
+    expect(ids(sortFeedEntries(data, noStates, new Set(), [], NOW, undefined, null, false, true))).toEqual([
+      'mNew',
+      'hOld',
+    ]);
+  });
+
   it('clamps at the existing bottom band — no new band value is invented', () => {
     expect(effectiveBand(aged('l', 0.35, 30), 0, NOW)).toBe(4);
   });

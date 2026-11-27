@@ -133,6 +133,7 @@ export const PAIRING_KEEP_SETTING_KEYS: readonly string[] = [
   'feed_view',
   'feed_minimap',
   'feed_show',
+  'feed_algo',
   'saved_group_by',
   'nav_order_world',
 ];

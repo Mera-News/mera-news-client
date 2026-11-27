@@ -91,9 +91,10 @@ export interface CardStateRecord {
   state: CardState;
   /** `stateUpdatedAt` — epoch ms of the transition INTO this state. */
   at: number;
-  /** `viewed` only: the story's other keys at view time (member ids, stable
-   *  cluster id, `sk:` story key). Lets the 7-day keep still read a sibling
-   *  after the viewed row itself was swept (read-snapshot.ts). */
+  /** The story's other keys at mark time: `viewed` carries member ids, stable
+   *  cluster id and `sk:` story key; `skipped` only the last two, to keep the
+   *  blob small. Lets the keep still read a sibling after the marked row
+   *  itself was swept (read-snapshot.ts). */
   keys?: string[];
 }
 
@@ -544,7 +545,12 @@ export const useFeedOrderStore = create<FeedOrderState>()((set, get) => ({
       // `skipped` — `at` is the first-seen moment, not the last.
       if (current[id]) continue;
       if (!next) next = { ...current };
-      next[id] = { state: 'skipped', at: nowMs };
+      const item = s.itemsById[id];
+      const keys: string[] = [];
+      const scid = item ? stableClusterIdOf(item) : null;
+      if (scid) keys.push(scid);
+      if (item?.suggestion.storyKey) keys.push(`sk:${item.suggestion.storyKey}`);
+      next[id] = { state: 'skipped', at: nowMs, ...(keys.length ? { keys } : {}) };
     }
     // No `set()` when nothing changed — a no-op set still notifies every
     // subscriber, and this runs off the scroll path.

@@ -9,9 +9,10 @@ import { getFacts } from './fact-service';
 import logger from '../../logger';
 import { parseMatchedTopicRefs, parseTopicIds, toForYouSuggestion } from './article-suggestion-mappers';
 import { getOpenedSeenSet } from './story-impression-service';
-import { FEED_WINDOW_MS, IMPORTANT_KEEP_MS, keepsPastFeedWindow } from '../../stores/fact-rows-selector';
+import { FEED_WINDOW_MS, keepsPastFeedWindow } from '../../stores/fact-rows-selector';
 import { FEED_CARD_STATE_SETTING_KEY } from '../../stores/feed-order-store';
 import { buildReadSnapshot, parseCardState } from '../../feed-ordering/read-snapshot';
+import { FEED_ALGO_SETTING_KEY, parseFeedAlgo, readOptionsOf } from '../../feed-ordering/feed-algo';
 
 const articleSuggestionsCol = database.get<ArticleSuggestionModel>('article_suggestions');
 const articleSuggestionFactsCol = database.get<ArticleSuggestionFactModel>('article_suggestion_facts');
@@ -50,10 +51,12 @@ export async function deleteSuggestionByServerId(
 
 /**
  * The 48h sweep (`cutoffMs` = now - 48h on `created_at`). Unread High and
- * Emergency stories are spared until 7 days after publish. "Unread" is
- * decided per STORY from the opened set plus the Feed's persisted card state:
- * if any member is read, no member is spared; if any old member qualifies,
- * every old member of that story inside the 7 days stays with it.
+ * Emergency stories are spared until the reader's keep (`feed_algo` keepDays,
+ * 7 by default) after publish; a keep no longer than 48h spares nothing.
+ * "Unread" is decided per STORY from the opened set plus the Feed's persisted
+ * card state (a skipped card counts as read when `skippedIsRead`): if any
+ * member is read, no member is spared; if any old member qualifies, every old
+ * member of that story inside the keep stays with it.
  */
 export async function deleteOldSuggestions(cutoffMs: number): Promise<number> {
   const old = await articleSuggestionsCol
@@ -61,8 +64,9 @@ export async function deleteOldSuggestions(cutoffMs: number): Promise<number> {
     .fetch();
   if (old.length === 0) return 0;
 
-  const keepFrom = cutoffMs + FEED_WINDOW_MS - IMPORTANT_KEEP_MS; // now - 7d
-  const recent = old.filter((r) => r.firstPubDate.getTime() >= keepFrom);
+  const readOpts = readOptionsOf(parseFeedAlgo(await getSetting(FEED_ALGO_SETTING_KEY)));
+  const keepFrom = cutoffMs + FEED_WINDOW_MS - readOpts.keepMs; // now - keep
+  const recent = readOpts.keepMs > FEED_WINDOW_MS ? old.filter((r) => r.firstPubDate.getTime() >= keepFrom) : [];
   let suggestions = old;
   if (recent.length > 0) {
     // Whole pool, so a viewed fresh sibling marks the old members read too.
@@ -71,6 +75,7 @@ export async function deleteOldSuggestions(cutoffMs: number): Promise<number> {
       parseCardState(await getSetting(FEED_CARD_STATE_SETTING_KEY)),
       await getOpenedSeenSet(),
       pool,
+      readOpts,
     );
     const keysOf = (s: { articleId: string; clusters: { stableClusterId?: string | null }[]; storyKey?: string | null }) => [
       s.articleId,
