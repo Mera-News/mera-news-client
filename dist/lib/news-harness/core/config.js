@@ -13,10 +13,10 @@ var _prompts = require("../prompts/prompts");
 // are gathered here so the harness has a single injectable config surface while
 // behaviour stays bit-identical. See config.test.ts, which pins every literal.
 
-/** SMALL_MODEL literal — mirrored from lib/llm/constants.ts (kept out of the
- *  harness import graph on purpose so the harness stays RN-free). The eval runners
- *  read it; the app ignores it: its scoring port routes by lane (lib/mera-protocol/stage-scoring). */
-const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
+/** The model of SCORING_MODELS[0] (lib/llm/profiles), as a literal: kept out of the harness
+ *  import graph on purpose so the harness stays RN-free. The eval runners read it; the app
+ *  ignores it: its scoring port routes by lane (lib/mera-protocol/stage-scoring). */
+const SCORING_HEAD_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
 
 /**
  * Deterministic math-relevance engine constants (— `scoring-engine/`).
@@ -87,7 +87,7 @@ const DEFAULT_HARNESS_CONFIG = exports.DEFAULT_HARNESS_CONFIG = {
     relevanceSystemPrompt: _prompts.CLOUD_RELEVANCE_SYSTEM_PROMPT,
     reasonSystemPrompt: _prompts.CLOUD_REASON_SYSTEM_PROMPT,
     v3NoteSystemPrompt: _prompts.CLOUD_V3_NOTE_SYSTEM_PROMPT,
-    model: SMALL_MODEL,
+    model: SCORING_HEAD_MODEL,
     // The verifier was absorbed into the judge; flag-off one release then
     // deleted (its NO-patterns live in CLOUD_JUDGE_SYSTEM_PROMPT). Code stays.
     feedVerifierEnabled: false,

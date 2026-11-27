@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.PROVIDER_INFO = exports.PROFILES = exports.DEFAULT_TABLE = void 0;
+exports.SCORING_MODELS = exports.PROVIDER_INFO = exports.PROFILES = exports.DEFAULT_TABLE = exports.CHAT_MODELS = void 0;
 exports.firstTokenDeadlineMs = firstTokenDeadlineMs;
 exports.servesBatch = exports.isProfileId = void 0;
 var _harnesses = require("../harnesses");
@@ -26,26 +26,33 @@ const PROFILES = exports.PROFILES = {
   'near/qwen3.8-27b': profile('near', 'Qwen/Qwen3.8-27B'),
   'near/qwen3.6-35b-a3b': profile('near', 'Qwen/Qwen3.6-35B-A3B-FP8'),
   'redpill/qwen3.8-27b': profile('redpill', 'qwen/qwen3.8-27b'),
-  'redpill/gemma-4-31b': profile('redpill', 'google/gemma-4-31b-it'),
-  'redpill/kimi-k2.6': profile('redpill', 'moonshotai/kimi-k2.6')
+  'redpill/gemma-4-31b': profile('redpill', 'google/gemma-4-31b-it')
 };
 const isProfileId = id => id in PROFILES;
 
-// Chat lanes rank fastest first, measured end to end with E2EE through staging on the follow
-// corpus (2026-11-27, p50 per turn): qwen3.6 2.6s, redpill qwen3.8 2.4-3.6s, gemma 5.0s, near
-// qwen3.8 16-19s. Bulk lanes keep Qwen first (the prompts are Qwen-tuned). Kimi K2.6 is in no
-// lane: RedPill stopped offering E2EE v2 for it. Mirrors mera-inference-gateway src/routing/profiles.ts.
+/**
+ * Chat lanes (tool-calling chat, article chat, the quick fact check): ordered by SPEED alone,
+ * fastest first, among the profiles that pass the evals. Measured end to end with E2EE through
+ * staging on the follow corpus (2026-11-27, p50 per turn): Qwen3.6 2.6s, RedPill Qwen3.8
+ * 2.4-3.6s, Gemma 5.0s, NEAR Qwen3.8 16-19s.
+ */
 exports.isProfileId = isProfileId;
-const CHAT = ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b', 'near/qwen3.8-27b'];
-const BULK = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
+const CHAT_MODELS = exports.CHAT_MODELS = ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b', 'near/qwen3.8-27b'];
 
-/** The gateway's seed ranking, used whenever /v1/routing has not answered. */
+/**
+ * Scoring, topics and background: ordered by speed AND cost, among the profiles that pass the
+ * evals. RedPill serves no batch or async job (`servesBatch`), so its profiles come last.
+ */
+const SCORING_MODELS = exports.SCORING_MODELS = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
+
+/** The gateway's seed ranking, used whenever /v1/routing has not answered. Mirrors
+ *  mera-inference-gateway src/routing/profiles.ts. */
 const DEFAULT_TABLE = exports.DEFAULT_TABLE = {
-  'chat-tools': CHAT,
-  'chat-single': CHAT,
-  scoring: BULK,
-  topics: BULK,
-  background: BULK
+  'chat-tools': CHAT_MODELS,
+  'chat-single': CHAT_MODELS,
+  scoring: SCORING_MODELS,
+  topics: SCORING_MODELS,
+  background: SCORING_MODELS
 };
 
 /**

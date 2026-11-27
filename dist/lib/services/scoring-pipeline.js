@@ -937,7 +937,7 @@ async function enqueueOrphanedReasons() {
   ensurePoller();
 }
 
-/** The profile a run was minted for; a run stored before profiles existed ran on the old SMALL_MODEL. */
+/** The profile a run was minted for; a run stored before profiles existed ran on the scoring head of that time. */
 function runProfile(run) {
   return run.profileId && _profiles.PROFILES[run.profileId] || _profiles.PROFILES['near/qwen3.6-35b-a3b'];
 }

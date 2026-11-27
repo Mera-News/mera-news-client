@@ -100,7 +100,7 @@ const MAX_HISTORY_USER_TURNS = exports.MAX_HISTORY_USER_TURNS = 6;
  * Chat-history token budget for the CLOUD path.
  *
  * NOT a correctness limit: the cloud path enforces no input budget of its own
- * (cloudChatStream posts what it is given, and both BIG_MODEL and its fallback
+ * (cloudChatStream posts what it is given, and both the chat head and its fallbacks
  * carry context windows far larger than this). It is a self-imposed
  * latency/cost cap, so the number is a policy choice rather than a measurement.
  *
