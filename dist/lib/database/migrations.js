@@ -2450,5 +2450,18 @@ var _default = exports.default = (0, _migrations.schemaMigrations)({
         isOptional: true
       }]
     })]
+  }, {
+    // article_suggestions.reading_score: the publication's phone reading score
+    // (0 to 100) at hydration. Optional; existing rows read NULL. Roll-forward
+    // only, like v56 to v58; addColumns, never a recreate.
+    toVersion: 59,
+    steps: [(0, _migrations.addColumns)({
+      table: 'article_suggestions',
+      columns: [{
+        name: 'reading_score',
+        type: 'number',
+        isOptional: true
+      }]
+    })]
   }]
 });

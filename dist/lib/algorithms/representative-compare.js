@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.hasImage = hasImage;
 exports.makeRepCompare = makeRepCompare;
 var _geoLanguagePriority = require("./geo-language-priority");
+var _readingRank = require("./reading-rank");
 /**
  * The ONE representative comparator every feed surface elects its story
  * front-runner with.
@@ -90,13 +91,16 @@ function repCompare(a, b) {
 }
 
 /**
- * Build the tier-aware representative comparator, in four keys:
+ * Build the tier-aware representative comparator, in five keys:
  *
  *   1. `sourcePriorityTier` — the user's EXPLICIT source preferences
  *      (preferred publication → preferred country scope → rest). This is the
  *      literal ask: "when a story has an article from a source I prefer, that
  *      should be the one used." An explicit request outranks every derived
  *      signal, so it is compared FIRST.
+ *   1b. `compareReadingRank` — the publication's phone reading score and the
+ *      reader's language (see `reading-rank.ts`). Equal rank, which includes
+ *      neither article scored, falls through unchanged.
  *   2. `repPriorityTier` — the derived geo/language priority (home country →
  *      other user country → app language → rest).
  *   3. `hasImage` — an illustrated article fronts an unillustrated one.
@@ -107,7 +111,7 @@ function repCompare(a, b) {
  * that without adopting it wholesale. Keys 1 and 2 are USER-SPECIFIC — a source
  * the user named, or their own country/language — and must not lose to a stock
  * photo on some other outlet's rewrite. Language preference is already fully
- * expressed by those two tiers, which is why neither is touched here.
+ * expressed by keys 1b and 2, which is why neither is touched here.
  *
  * A `null` `userCtx` collapses every item to source tier 2 and geo tier 3, so
  * election falls through to keys 3–4 alone. So does a context with no source
@@ -129,6 +133,14 @@ function makeRepCompare(userCtx) {
       countryCodeAlpha3: b.s.country_code
     }, userCtx);
     if (sa !== sb) return sa - sb;
+    const r = (0, _readingRank.compareReadingRank)({
+      readingScore: a.s.readingScore,
+      languageCode: a.s.language_code
+    }, {
+      readingScore: b.s.readingScore,
+      languageCode: b.s.language_code
+    }, userCtx?.appLanguageBase ?? null);
+    if (r !== 0) return r;
     const ta = (0, _geoLanguagePriority.repPriorityTier)({
       countryCodeAlpha3: a.s.country_code,
       languageCode: a.s.language_code

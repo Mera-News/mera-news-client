@@ -30,6 +30,7 @@ var _scorePropagation = require("../../feed-grouping/score-propagation");
 var _readStoryFilter = require("../../feed-grouping/read-story-filter");
 var _userGeoLanguageContext = require("../../user-context/user-geo-language-context");
 var _logger = _interopRequireDefault(require("../../logger"));
+var _appLanguageStore = require("../../stores/app-language-store");
 var _meraProtocolStore = require("../../stores/mera-protocol-store");
 var _factRowsSelector = require("../../stores/fact-rows-selector");
 var coldstartTimeline = _interopRequireWildcard(require("../../diagnostics/coldstart-timeline"));
@@ -311,6 +312,7 @@ function partitionStoryIds(missingIds, articleToTopicTexts, freeTopicTexts, head
  * followed stories first, and a foreground pass is the one that owes the whole list.
  */
 async function fetchPersonaBatches(query, ctx, background) {
+  const language = _appLanguageStore.useAppLanguageStore.getState().appLanguage;
   const startedAt = Date.now();
   const budgetMs = background ? BG_TOPIC_FETCH_BUDGET_MS : TOPIC_FETCH_BUDGET_MS;
   // A lost cursor costs a repeat of the pass, never the sync.
@@ -333,7 +335,7 @@ async function fetchPersonaBatches(query, ctx, background) {
       topHeadlines: at === start ? query.topHeadlines : undefined
     };
     try {
-      const res = await (0, _retry.withRetry)(() => _articleService.ArticleService.getArticleIdsForPersona(batch), ctx.signal, RESOLVER_ERROR_RETRIES);
+      const res = await (0, _retry.withRetry)(() => _articleService.ArticleService.getArticleIdsForPersona(batch, language), ctx.signal, RESOLVER_ERROR_RETRIES);
       topicResults.push(...res.topicResults);
       headlineResults.push(...res.headlineResults);
     } catch (err) {

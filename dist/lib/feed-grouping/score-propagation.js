@@ -12,6 +12,7 @@ var _articleSuggestionScoringWrites = require("../database/services/article-sugg
 var _articleSuggestionReads = require("../database/services/article-suggestion-reads");
 var _articleSuggestionStatus = require("../database/article-suggestion-status");
 var _geoLanguagePriority = require("../algorithms/geo-language-priority");
+var _readingRank = require("../algorithms/reading-rank");
 var _readStoryFilter = require("./read-story-filter");
 var _storyGrouping = require("../algorithms/story-grouping");
 var _logger = _interopRequireDefault(require("../logger"));
@@ -222,7 +223,11 @@ function pickDonor(donors) {
 /**
  * Elect the single representative to score for a donor-less duplicate group.
  *
- * Country/language priority comes FIRST: a lower `repPriorityTier` wins (an
+ * The reading rank comes FIRST (`compareReadingRank`: publication score and the
+ * reader's language; with a `null` `userCtx` the score alone). Equal rank,
+ * which includes neither row scored, falls through to the rest.
+ *
+ * Country/language priority comes next: a lower `repPriorityTier` wins (an
  * article from the user's HOME country → another of the user's countries → the
  * user's app-UI language → the rest). Only when two candidates share a tier do
  * the legacy tiebreaks decide: prefer a row that has a description, then newest
@@ -233,6 +238,8 @@ function pickDonor(donors) {
 function electRepresentative(candidates, userCtx) {
   // Groups are small, so computing the tier inline in the comparator is fine.
   return (0, _storyGrouping.pickRepresentative)(candidates, (a, b) => {
+    const rank = (0, _readingRank.compareReadingRank)(a, b, userCtx?.appLanguageBase ?? null);
+    if (rank !== 0) return rank;
     const tierA = (0, _geoLanguagePriority.repPriorityTier)({
       countryCodeAlpha3: a.countryCode,
       languageCode: a.languageCode

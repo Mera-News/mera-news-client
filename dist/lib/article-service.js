@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.RELATED_FILTERS_LIVE = exports.MAX_TOPICS_PER_BATCH = exports.MAX_CLUSTER_MEMBERSHIP_IDS = exports.ArticleService = void 0;
 exports.__resetClusterMembershipsSupport = __resetClusterMembershipsSupport;
 exports.__resetExploreWindowSupport = __resetExploreWindowSupport;
+exports.__resetPersonaLanguageSupport = __resetPersonaLanguageSupport;
 exports.__resetPublisherOrderSupport = __resetPublisherOrderSupport;
 exports.__resetRelatedOriginalSupport = __resetRelatedOriginalSupport;
 exports.__resetStoryKeySupport = __resetStoryKeySupport;
@@ -14,6 +15,7 @@ exports.default = void 0;
 var _client = require("@apollo/client");
 var _apolloClient = _interopRequireDefault(require("./platform/apollo-client"));
 var _logger = _interopRequireDefault(require("./logger"));
+var _geoLanguagePriority = require("./algorithms/geo-language-priority");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // GraphQL Query for fetching a single article by ID.
 const GET_ARTICLE_BY_ID = (0, _client.gql)`
@@ -180,14 +182,27 @@ ${TOP_HEADLINES_SELECTION}      facets {
     }
   }
 `;
+const GET_WORLD_HEADLINES_FOR_LANGUAGE = (0, _client.gql)`
+  query GetWorldHeadlinesForLanguage($countryCode: String, $first: Int, $after: String, $windowHours: Int, $canonicalTopicIds: [ID!], $language: String) {
+    worldHeadlines(countryCode: $countryCode, first: $first, after: $after, windowHours: $windowHours, canonicalTopicIds: $canonicalTopicIds, language: $language) {
+${TOP_HEADLINES_SELECTION}      facets {
+        topicId
+        count
+      }
+    }
+  }
+`;
 
 /** True once the server rejected worldHeadlines / canonicalTopics as unknown: the old documents serve the list for the session. */
 let worldTopicsUnsupported = false;
+/** True once the server rejected the worldHeadlines language argument: the World document without it serves the session. */
+let worldLanguageUnsupported = false;
 let canonicalTopicsCache = null;
 
 /** Test seam. */
 function __resetWorldTopicsSupport() {
   worldTopicsUnsupported = false;
+  worldLanguageUnsupported = false;
   canonicalTopicsCache = null;
 }
 
@@ -515,6 +530,19 @@ const ARTICLE_HYDRATION_FIELDS = `
         category
         maxClusterSize
 `;
+
+// The same page with the publication's reading score; a server without it rejects the whole request (see readingScoreUnsupported).
+const GET_ARTICLES_FOR_TOPICS_BY_IDS_SCORED = (0, _client.gql)`
+  query GetArticlesForTopicsByIdsScored($articleIds: [ID!]!) {
+    articlesForTopicsByIds(articleIds: $articleIds) {
+      articles {
+        ${ARTICLE_HYDRATION_FIELDS}
+        story_key
+        readingScore
+      }
+    }
+  }
+`;
 const GET_ARTICLES_FOR_TOPICS_BY_IDS = (0, _client.gql)`
   query GetArticlesForTopicsByIds($articleIds: [ID!]!) {
     articlesForTopicsByIds(articleIds: $articleIds) {
@@ -533,6 +561,19 @@ const GET_ARTICLES_FOR_TOPICS_BY_IDS_LEGACY = (0, _client.gql)`
     articlesForTopicsByIds(articleIds: $articleIds) {
       articles {
         ${ARTICLE_HYDRATION_FIELDS}
+      }
+    }
+  }
+`;
+
+// GET_ARTICLES_FOR_STORIES (below) with the publication's reading score; a server without it rejects the whole request (see readingScoreUnsupported).
+const GET_ARTICLES_FOR_STORIES_SCORED = (0, _client.gql)`
+  query GetArticlesForStoriesScored($articleIds: [ID!]!) {
+    articlesForStories(articleIds: $articleIds) {
+      articles {
+        ${ARTICLE_HYDRATION_FIELDS}
+        story_key
+        readingScore
       }
     }
   }
@@ -585,6 +626,31 @@ const GET_CLUSTER_MEMBERSHIPS_FOR_ARTICLES = (0, _client.gql)`
 const GET_ARTICLE_IDS_FOR_PERSONA = (0, _client.gql)`
   query GetArticleIdsForPersona($query: PersonaQueryInput!) {
     articleIdsForPersona(query: $query) {
+      topicResults {
+        topicText
+        articleIds
+        matchMeta {
+          articleId
+          vectorScore
+          textScore
+          stableClusterId
+        }
+        nextCursor
+        hasNextPage
+      }
+      headlineResults {
+        scope
+        countryCode
+        articleIds
+        clusterSizes
+        stableClusterIds
+      }
+    }
+  }
+`;
+const GET_ARTICLE_IDS_FOR_PERSONA_FOR_LANGUAGE = (0, _client.gql)`
+  query GetArticleIdsForPersonaForLanguage($query: PersonaQueryInput!, $language: String) {
+    articleIdsForPersona(query: $query, language: $language) {
       topicResults {
         topicText
         articleIds
@@ -666,9 +732,31 @@ let relatedFiltersUnsupported = false;
  */
 let storyKeyUnsupported = false;
 
-/** Test seam. */
+/**
+ * True once the server rejected `ArticleWithClusters.readingScore`: hydrate with
+ * today's documents for the session (rows then store a null score, which only
+ * means today's election order).
+ */
+let readingScoreUnsupported = false;
+
+/** True once the server rejected the articleIdsForPersona language argument: the persona document without it serves the session. */
+let personaLanguageUnsupported = false;
+
+/** Test seam: resets both hydration latches. */
 function __resetStoryKeySupport() {
   storyKeyUnsupported = false;
+  readingScoreUnsupported = false;
+}
+
+/** Test seam. */
+function __resetPersonaLanguageSupport() {
+  personaLanguageUnsupported = false;
+}
+
+/** The reader's base language when it is a valid 2 or 3 letter code, else undefined: the server refuses anything else, so it is never sent. */
+function newsLanguage(code) {
+  const base = (0, _geoLanguagePriority.baseLang)(code);
+  return base && /^[a-z]{2,3}$/.test(base) ? base : undefined;
 }
 
 /** True once the server rejected `clusterMembershipsForArticles`: no refresh this session. */
@@ -683,7 +771,28 @@ function __resetClusterMembershipsSupport() {
 const MAX_CLUSTER_MEMBERSHIP_IDS = exports.MAX_CLUSTER_MEMBERSHIP_IDS = 500;
 
 /** One hydration chunk. Concurrent workers that fail before the latch lands each fall back on their own, which is harmless. */
-async function hydrateBatch(field, doc, legacyDoc, articleIds) {
+async function hydrateBatch(field, scoredDoc, doc, legacyDoc, articleIds) {
+  if (!readingScoreUnsupported && !storyKeyUnsupported) {
+    try {
+      const {
+        data
+      } = await _apolloClient.default.query({
+        query: scoredDoc,
+        variables: {
+          articleIds
+        },
+        fetchPolicy: 'no-cache',
+        context: {
+          expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED']
+        }
+      });
+      return data?.[field]?.articles ?? [];
+    } catch (error) {
+      if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) throw error;
+      readingScoreUnsupported = true;
+      _logger.default.info('[ArticleService] server has no ArticleWithClusters.readingScore; hydration without it this session');
+    }
+  }
   if (!storyKeyUnsupported) {
     try {
       const {
@@ -791,9 +900,9 @@ class ArticleService {
    * One request: `query.topics` must fit the server's per-request limit, so
    * feed sync sends MAX_TOPICS_PER_BATCH at a time and owns retry and resume.
    */
-  static async getArticleIdsForPersona(query) {
+  static async getArticleIdsForPersona(query, language) {
     try {
-      return await this.queryPersonaBatch(query);
+      return await this.queryPersonaBatch(query, language);
     } catch (error) {
       _logger.default.addBreadcrumb('[ArticleService] getArticleIdsForPersona FAILED', 'article-service', {
         method: 'getArticleIdsForPersona',
@@ -802,7 +911,33 @@ class ArticleService {
       throw error;
     }
   }
-  static async queryPersonaBatch(query) {
+  static async queryPersonaBatch(query, language) {
+    const lang = newsLanguage(language);
+    if (lang && !personaLanguageUnsupported) {
+      try {
+        const {
+          data
+        } = await _apolloClient.default.query({
+          query: GET_ARTICLE_IDS_FOR_PERSONA_FOR_LANGUAGE,
+          variables: {
+            query,
+            language: lang
+          },
+          fetchPolicy: 'no-cache',
+          context: {
+            expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED']
+          }
+        });
+        return data?.articleIdsForPersona ?? {
+          topicResults: [],
+          headlineResults: []
+        };
+      } catch (error) {
+        if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) throw error;
+        personaLanguageUnsupported = true;
+        _logger.default.info('[ArticleService] server has no articleIdsForPersona language; persona document without it this session');
+      }
+    }
     const {
       data
     } = await _apolloClient.default.query({
@@ -849,7 +984,7 @@ class ArticleService {
           const idx = nextIndex++;
           if (idx >= batches.length) return;
           const batch = batches[idx];
-          const rows = await hydrateBatch('articlesForTopicsByIds', GET_ARTICLES_FOR_TOPICS_BY_IDS, GET_ARTICLES_FOR_TOPICS_BY_IDS_LEGACY, batch);
+          const rows = await hydrateBatch('articlesForTopicsByIds', GET_ARTICLES_FOR_TOPICS_BY_IDS_SCORED, GET_ARTICLES_FOR_TOPICS_BY_IDS, GET_ARTICLES_FOR_TOPICS_BY_IDS_LEGACY, batch);
           if (rows.length) results.push(...rows);
           completedIds += batch.length;
           onProgress?.(completedIds, articleIds.length);
@@ -910,7 +1045,7 @@ class ArticleService {
           const idx = nextIndex++;
           if (idx >= batches.length) return;
           const batch = batches[idx];
-          const rows = await hydrateBatch('articlesForStories', GET_ARTICLES_FOR_STORIES, GET_ARTICLES_FOR_STORIES_LEGACY, batch);
+          const rows = await hydrateBatch('articlesForStories', GET_ARTICLES_FOR_STORIES_SCORED, GET_ARTICLES_FOR_STORIES, GET_ARTICLES_FOR_STORIES_LEGACY, batch);
           if (rows.length) results.push(...rows);
           completedIds += batch.length;
           onProgress?.(completedIds, articleIds.length);
@@ -1127,7 +1262,8 @@ class ArticleService {
           endCursor: null,
           hasNextPage: false,
           pageSize: options?.first ?? 20
-        }
+        },
+        itemCursors: []
       };
     } catch (error) {
       this.reportQueryError('getArticlesForCountry', error, {
@@ -1242,19 +1378,51 @@ class ArticleService {
    * with `topicsSupported: false` and no facets, so the list keeps working.
    */
   static async getWorldHeadlines(countryCode, options) {
+    const language = newsLanguage(options.language);
+    const variables = {
+      countryCode: countryCode === 'GLOBAL' ? null : countryCode,
+      first: options.first ?? 20,
+      after: options.after,
+      windowHours: options.windowHours,
+      canonicalTopicIds: options.canonicalTopicIds?.length ? options.canonicalTopicIds : undefined
+    };
+    if (language && !worldLanguageUnsupported && !worldTopicsUnsupported) {
+      try {
+        const {
+          data
+        } = await _apolloClient.default.query({
+          query: GET_WORLD_HEADLINES_FOR_LANGUAGE,
+          variables: {
+            ...variables,
+            language
+          },
+          fetchPolicy: 'no-cache',
+          context: {
+            expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED']
+          }
+        });
+        if (data?.worldHeadlines) return {
+          ...data.worldHeadlines,
+          topicsSupported: true
+        };
+      } catch (error) {
+        if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) {
+          this.reportQueryError('getWorldHeadlines', error, {
+            countryCode
+          });
+          throw error;
+        }
+        worldLanguageUnsupported = true;
+        _logger.default.info('[ArticleService] server has no worldHeadlines language; World document without it this session');
+      }
+    }
     if (!worldTopicsUnsupported) {
       try {
         const {
           data
         } = await _apolloClient.default.query({
           query: GET_WORLD_HEADLINES,
-          variables: {
-            countryCode: countryCode === 'GLOBAL' ? null : countryCode,
-            first: options.first ?? 20,
-            after: options.after,
-            windowHours: options.windowHours,
-            canonicalTopicIds: options.canonicalTopicIds?.length ? options.canonicalTopicIds : undefined
-          },
+          variables,
           fetchPolicy: 'no-cache',
           context: {
             expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED']
@@ -1306,7 +1474,8 @@ class ArticleService {
         endCursor: null,
         hasNextPage: false,
         pageSize: first
-      }
+      },
+      itemCursors: []
     };
     const base = {
       newsPublisherId,

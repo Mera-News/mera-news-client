@@ -18,6 +18,11 @@ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e
 const articleSuggestionsCol = _index.default.get('article_suggestions');
 const articleSuggestionFactsCol = _index.default.get('article_suggestion_facts');
 
+/** A reading score is a finite number (0 is valid); anything else is absent. */
+function validScore(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 /**
  * Persona-v3 per-article metadata (supplied by feed-sync from the
  * `articleIdsForPersona` response, inverted per article). Present ⇒ the new
@@ -107,6 +112,13 @@ async function persistAndLinkV2Suggestions(fetched, articleToTopicTexts, persona
       update.nextStoryKey = a.story_key;
       hasUpdate = true;
     }
+
+    // An absent or invalid incoming score never wipes a stored one.
+    const incomingScore = validScore(a.readingScore);
+    if (incomingScore !== null && incomingScore !== row.readingScore) {
+      update.nextReadingScore = incomingScore;
+      hasUpdate = true;
+    }
     if (hasUpdate) existingUpdates.push(update);
   }
   if (toInsert.length === 0 && existingUpdates.length === 0) {
@@ -144,13 +156,15 @@ async function persistAndLinkV2Suggestions(fetched, articleToTopicTexts, persona
       row,
       nextClusterJson,
       nextMatchedTopicsJson,
-      nextStoryKey
+      nextStoryKey,
+      nextReadingScore
     } of existingUpdates) {
       if (!stillThere.has(row.id)) continue;
       ops.push(row.prepareUpdate(r => {
         if (nextClusterJson !== undefined) r.clusterMembershipsJson = nextClusterJson;
         if (nextMatchedTopicsJson !== undefined) r.matchedTopicsJson = nextMatchedTopicsJson;
         if (nextStoryKey !== undefined) r.storyKey = nextStoryKey;
+        if (nextReadingScore !== undefined) r.readingScore = nextReadingScore;
       }));
     }
     for (const a of toInsert) {
@@ -201,6 +215,7 @@ async function persistAndLinkV2Suggestions(fetched, articleToTopicTexts, persona
         r.maxClusterSize = a.maxClusterSize ?? null;
         r.stableClusterId = stableId;
         r.storyKey = a.story_key ?? null;
+        r.readingScore = validScore(a.readingScore);
         r.headlineScope = scope;
         r.headlineCountryCode = scopeCountry;
         r.matchedTopicsJson = personaMeta ? (0, _articleSuggestionMappers.buildMatchedTopicsJson)(matched) : null;

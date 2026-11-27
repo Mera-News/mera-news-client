@@ -481,7 +481,7 @@ async function removeMemberSnapshot(id, articleId) {
 /** The source fields a snapshot can be missing — see {@link backfillSnapshotSource}. */
 
 /**
- * Fill in `languageCode` / `countryCode` / `publicationName` / `storyKey` / `titleOriginal` on member snapshots
+ * Fill in `languageCode` / `countryCode` / `publicationName` / `storyKey` / `titleOriginal` / `readingScore` on member snapshots
  * that predate those fields (or were seeded from a source that never carried
  * them, e.g. the originating article of a freshly-followed story). The timeline
  * screen resolves them from the local `article_suggestions` rows and persists
@@ -509,7 +509,8 @@ async function backfillSnapshotSource(id, patches) {
       if (!merged.publicationName && p.publicationName) merged.publicationName = p.publicationName;
       if (!merged.storyKey && p.storyKey) merged.storyKey = p.storyKey;
       if (!merged.titleOriginal && p.titleOriginal) merged.titleOriginal = p.titleOriginal;
-      if (merged.languageCode === s.languageCode && merged.countryCode === s.countryCode && merged.publicationName === s.publicationName && merged.storyKey === s.storyKey && merged.titleOriginal === s.titleOriginal) {
+      if (merged.readingScore === undefined && typeof p.readingScore === 'number') merged.readingScore = p.readingScore;
+      if (merged.languageCode === s.languageCode && merged.countryCode === s.countryCode && merged.publicationName === s.publicationName && merged.storyKey === s.storyKey && merged.titleOriginal === s.titleOriginal && merged.readingScore === s.readingScore) {
         return s;
       }
       changed = true;

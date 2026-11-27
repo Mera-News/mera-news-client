@@ -48,7 +48,8 @@ function snapshotFromSuggestion(row) {
     publicationName: row.publicationName ?? undefined,
     languageCode: row.languageCode ?? undefined,
     countryCode: row.countryCode ?? undefined,
-    storyKey: row.storyKey ?? undefined
+    storyKey: row.storyKey ?? undefined,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : undefined
   };
 }
 

@@ -51,7 +51,7 @@ let HeadlineScope = exports.HeadlineScope = /*#__PURE__*/function (HeadlineScope
 }({});
 /** A single top-headlines scope. COUNTRY requires countryCode; GLOBAL takes none. */
 /** Top-headline article ids for one scope. clusterSizes and stableClusterIds are positionally aligned with articleIds. */
-/** A hybrid (text + semantic) search hit. Deliberately headline-only — hydrate the ids you want through the metered articlesForTopicsByIds to get body text and the link. */
+/** A hybrid (text + semantic) search hit. Deliberately headline-only: hydrate the ids you want through articlesForTopicsByIds to get body text and the link. */
 /** Monotonic onboarding progress marker. Values: NOTIFICATIONS, PROCESSING_MODE, PERSONA_CHAT, FINISHED. The user resumes at this stage on app launch; only FINISHED skips the wizard. */
 let OnboardingStage = exports.OnboardingStage = /*#__PURE__*/function (OnboardingStage) {
   OnboardingStage["Finished"] = "FINISHED";

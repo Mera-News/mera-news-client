@@ -21,6 +21,7 @@ const sanitizeSnapshots = raw => Array.isArray(raw) ? raw.filter(x => !!x && typ
   publicationName: typeof x.publicationName === 'string' ? x.publicationName : undefined,
   languageCode: typeof x.languageCode === 'string' ? x.languageCode : undefined,
   countryCode: typeof x.countryCode === 'string' ? x.countryCode : undefined,
-  storyKey: typeof x.storyKey === 'string' && x.storyKey ? x.storyKey : undefined
+  storyKey: typeof x.storyKey === 'string' && x.storyKey ? x.storyKey : undefined,
+  readingScore: typeof x.readingScore === 'number' && Number.isFinite(x.readingScore) ? x.readingScore : undefined
 })).filter(x => x.articleId.length > 0) : [];
 exports.sanitizeSnapshots = sanitizeSnapshots;

@@ -10,7 +10,7 @@ exports.isNewsOperation = exports.NEWS_OPERATION_NAMES = exports.NEWS_OPERATIONS
 // carries the person's identity, and a Mera service (fact checks) is not something a news server offers.
 // Every operation in the client's documents is in exactly one list; a test scans the documents.
 
-const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'NewsServerStatus', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
+const NEWS_OPERATION_NAMES = exports.NEWS_OPERATION_NAMES = ['AllCountries', 'ClusterMembershipsForArticles', 'GetArticleById', 'GetArticleIdsForPersona', 'GetArticleIdsForPersonaForLanguage', 'GetArticlesForCountry', 'GetArticlesForPublisher', 'GetArticlesForPublisherNoOrder', 'GetArticlesForStories', 'GetArticlesForStoriesLegacy', 'GetArticlesForStoriesScored', 'GetArticlesForTopicsByIds', 'GetArticlesForTopicsByIdsLegacy', 'GetArticlesForTopicsByIdsScored', 'GetCanonicalTopics', 'GetNewsClusterForArticle', 'GetRecentArticleCount', 'GetRelatedArticlesPage', 'GetRelatedArticlesPageFiltered', 'GetRelatedArticlesPageLegacy', 'GetTopHeadlinesForCountry', 'GetTopHeadlinesForCountryWindowed', 'GetWorldHeadlines', 'GetWorldHeadlinesForLanguage', 'NewsServerStatus', 'PlaceSearch', 'PublicationDisplayNames', 'PublicationSourcesForNewsPublisher', 'SearchNews'];
 
 /**
  * News operations Mera's own server answers but the public news server does not, with why. A host
@@ -23,7 +23,7 @@ const NEWS_OPERATIONS_NOT_PUBLIC = exports.NEWS_OPERATIONS_NOT_PUBLIC = {
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a
  *  server that passes news through allows them with the list above. */
-const HOST_NEWS_OPERATION_NAMES = exports.HOST_NEWS_OPERATION_NAMES = ['GetNewsPublishers', 'PublicationProfile', 'SearchPublishers'];
+const HOST_NEWS_OPERATION_NAMES = exports.HOST_NEWS_OPERATION_NAMES = ['GetNewsPublishers', 'PublicationProfile', 'PublicationProfileLegacy', 'SearchPublishers'];
 const ACCOUNT_OPERATION_NAMES = exports.ACCOUNT_OPERATION_NAMES = ['ActiveFeedbackRequests', 'AdvanceOnboardingStage', 'DeleteExpoPushToken', 'FeedbackTree', 'GetReadingPlans', 'GetUserPersona', 'IssueLlmWarning', 'RequestUnblock', 'SubmitFeedbackResponse', 'UnblockRequestStatus', 'UpdateExpoPushToken', 'UpdateNotificationWindow', 'UpdateNotificationsEnabled', 'UpdateProcessingMode', 'UpdateUserConfig'];
 const MERA_SERVICE_OPERATION_NAMES = exports.MERA_SERVICE_OPERATION_NAMES = ['GetCachedFactCheck', 'GetCachedFactCheckLegacy', 'GetFactCheck', 'GetFactCheckLegacy', 'RequestFactCheckAgain'];
 const NEWS = new Set([...NEWS_OPERATION_NAMES, ...HOST_NEWS_OPERATION_NAMES]);

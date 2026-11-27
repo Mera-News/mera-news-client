@@ -135,6 +135,7 @@ function toGroupingRow(row) {
     // Normalised like the `loadSuggestions` mapper: SQLite returns 0/1.
     scoredWithV3: row.scoredWithV3 === true || row.scoredWithV3 === 1,
     storyKey: row.storyKey ?? null,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : null,
     scoreFailedAt: typeof row.scoreFailedAt === 'number' ? row.scoreFailedAt : null
   };
 }
@@ -290,6 +291,7 @@ function toForYouSuggestion(row, factIds = []) {
     rawScore: row.rawScore,
     eventType: row.eventType,
     storyKey: row.storyKey ?? null,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : null,
     // Same parse shape as `buildStageCandidateInput` above, so story-grouping's
     // entity edge and the scorer see byte-identical entity lists.
     entities: parseJsonArray(row.entitiesJson).filter(e => typeof e === 'string' && e.length > 0),

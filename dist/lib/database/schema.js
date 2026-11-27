@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.default = void 0;
 var _watermelondb = require("@nozbe/watermelondb");
 var _default = exports.default = (0, _watermelondb.appSchema)({
-  version: 58,
+  version: 59,
   tables: [
   // ── On-Device Domain ──────────────────────────────────────────
 
@@ -225,6 +225,12 @@ var _default = exports.default = (0, _watermelondb.appSchema)({
     {
       name: 'story_key',
       type: 'string',
+      isOptional: true
+    },
+    // The publication's phone reading score (0 to 100) at hydration; NULL when the server sent none (schema v59).
+    {
+      name: 'reading_score',
+      type: 'number',
       isOptional: true
     },
     // Deterministic engine raw score (pre-judge) — audit.
