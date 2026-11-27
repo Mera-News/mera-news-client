@@ -24,7 +24,6 @@ import { getSetting, setSetting } from '@/lib/database/services/setting-service'
 import { getAll as getSuppressions } from '@/lib/database/services/suppression-service';
 import { getByFact, retire } from '@/lib/database/services/topic-service';
 import database from '@/lib/database';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import {
   advanceUntilDone,
   gatewayCalls,
@@ -45,6 +44,7 @@ import {
   userMessage,
   systemMessage,
 } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 let logs: ReturnType<typeof quietLogger>;
 let notified: ReturnType<typeof spyOnNotifications>;
@@ -179,7 +179,7 @@ describe('runOptimisationCycle: the one organise call and the stored plan', () =
 
     const calls = gatewayCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ route: 'chat', model: SMALL_MODEL, stream: false });
+    expect(calls[0]).toMatchObject({ route: 'chat', model: SCORING_HEAD, stream: false });
     expect(systemMessage(calls[0])).toContain('You organize a daily news-feed "tune-up" plan');
     // Auto nudges first, then the review candidates; each line names its fingerprint, kind and summary.
     expect(promptLines(calls[0]).sort()).toEqual(

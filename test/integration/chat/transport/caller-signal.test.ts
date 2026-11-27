@@ -2,9 +2,9 @@
 // abort ending the call with no retry and no model-failure report, and the signal bridge React
 // Native runs in production (no AbortSignal.any, so combineSignals bridges with listeners).
 import { cloudComplete, isAbortLike, isCallerAbort } from '@/lib/llm/cloudComplete';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { advanceUntil, CHAT_PATH, errorOf, fakeClock, resetTransport, respond, run, watchRequests } from './transport-kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const REQUEST = { systemPrompt: 'sys', prompt: 'p' };
 
@@ -64,7 +64,7 @@ describe.each([
     server.use(...mockGateway(respond('fine')));
     expect(await run(cloudComplete({ ...REQUEST, route: 'topics' }))).toBe('fine');
     const calls = gatewayCalls('chat');
-    expect(calls[calls.length - 1].model).toBe(SMALL_MODEL);
+    expect(calls[calls.length - 1].model).toBe(SCORING_HEAD);
   });
 });
 

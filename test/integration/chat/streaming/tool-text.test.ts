@@ -5,7 +5,6 @@
 //
 // Covers lib/llm/__tests__/cloudChatStream-sealed.test.ts and the tools-as-text cases of
 // lib/llm/__tests__/cloudComplete.test.ts > cloudChatStream.
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, type SseEvent } from '@/lib/llm/cloudComplete';
 import { FORBIDDEN_TOOL_KEYS } from '@/lib/harnesses/text-tool-protocol';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
@@ -18,6 +17,7 @@ import {
   respond,
   textOf,
 } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -41,7 +41,7 @@ describe('the outbound request', () => {
     '%s: schema, choice and replayed calls ride inside the encrypted content, and the model can read all of it',
     async (curve) => {
       const bodies = captureChatBodies();
-      server.use(...mockGateway(respond('ok'), { curve: { [SMALL_MODEL]: curve } }));
+      server.use(...mockGateway(respond('ok'), { curve: { [SCORING_HEAD]: curve } }));
       await collect(
         cloudChatStream({
           route: 'topics',

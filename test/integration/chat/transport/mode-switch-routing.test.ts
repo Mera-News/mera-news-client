@@ -1,7 +1,6 @@
 // Switching the Mera Protocol mode switches the profile set the NEXT request uses, both ways, with
 // "chat in cloud" as the third state. The router, the chat engine choice and the gate all read the
 // one store, so each is checked across a flip; a turn already in flight keeps the profile it began on.
-import { BIG_MODEL } from '@/lib/llm/constants';
 import { chatRunsInCloud } from '@/lib/llm/chat-cloud';
 import { cloudChatStream, cloudComplete } from '@/lib/llm/cloudComplete';
 import { isOnDeviceModeError } from '@/lib/llm/on-device-gate';
@@ -17,6 +16,7 @@ import {
   MESSAGES,
   textOf,
 } from '@/test/integration/chat/streaming/support';
+import { CHAT_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -106,6 +106,6 @@ describe('the gateway follows the mode on the next request', () => {
     await drive(events);
 
     expect(textOf(await events)).toBe('one two three');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD]);
   });
 });

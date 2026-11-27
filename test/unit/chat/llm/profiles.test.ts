@@ -1,7 +1,7 @@
 // The default routing table is what every lane uses when the gateway's table has not answered,
 // so a wrong entry is invisible until an outage. These pins exist so a change is deliberate.
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
-import { DEFAULT_TABLE, PROFILES, firstTokenDeadlineMs } from '@/lib/llm/profiles';
+import { CHAT_MODELS, DEFAULT_TABLE, PROFILES, SCORING_MODELS, firstTokenDeadlineMs } from '@/lib/llm/profiles';
+import { DEFAULT_HARNESS_CONFIG } from '@/lib/news-harness/core/config';
 import { LANES } from '@/lib/llm/router/lanes';
 
 describe('profiles and the default table', () => {
@@ -11,7 +11,6 @@ describe('profiles and the default table', () => {
       'near/qwen3.6-35b-a3b': ['near', 'Qwen/Qwen3.6-35B-A3B-FP8', 'qwen3.6-35b-a3b'],
       'redpill/qwen3.8-27b': ['redpill', 'qwen/qwen3.8-27b', 'qwen3.8-27b'],
       'redpill/gemma-4-31b': ['redpill', 'google/gemma-4-31b-it', 'gemma-4-31b'],
-      'redpill/kimi-k2.6': ['redpill', 'moonshotai/kimi-k2.6', 'kimi-k2.6'],
     });
   });
 
@@ -23,14 +22,17 @@ describe('profiles and the default table', () => {
       'chat-tools': chat, 'chat-single': chat,
       scoring: bulk, topics: bulk, background: bulk,
     });
-    // Mapped, but in no lane: RedPill no longer offers E2EE v2 for it.
-    for (const lane of LANES) expect(DEFAULT_TABLE[lane]).not.toContain('redpill/kimi-k2.6');
     for (const lane of LANES) expect(new Set(DEFAULT_TABLE[lane]).size).toBe(DEFAULT_TABLE[lane].length);
   });
 
-  it('keeps BIG_MODEL and SMALL_MODEL as aliases of the heads', () => {
-    expect(PROFILES[DEFAULT_TABLE['chat-tools'][0]].model).toBe(BIG_MODEL);
-    expect(PROFILES[DEFAULT_TABLE.scoring[0]].model).toBe(SMALL_MODEL);
+  it('builds the chat lanes from CHAT_MODELS and the bulk lanes from SCORING_MODELS', () => {
+    expect(DEFAULT_TABLE['chat-tools']).toBe(CHAT_MODELS);
+    expect(DEFAULT_TABLE['chat-single']).toBe(CHAT_MODELS);
+    for (const lane of ['scoring', 'topics', 'background'] as const) expect(DEFAULT_TABLE[lane]).toBe(SCORING_MODELS);
+  });
+
+  it("keeps the news harness's RN-free model literal on the scoring head", () => {
+    expect(DEFAULT_HARNESS_CONFIG.articlePipeline.model).toBe(PROFILES[SCORING_MODELS[0]].model);
   });
 
   it('gives chat lanes 30s to a first token and the rest 120s', () => {

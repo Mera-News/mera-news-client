@@ -11,7 +11,6 @@ import * as locationService from '@/lib/database/services/location-service';
 import { getRecent } from '@/lib/database/services/persona-change-log-service';
 import { getSetting, setSetting } from '@/lib/database/services/setting-service';
 import * as topicReplacement from '@/lib/database/services/topic-replacement-service';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import {
   advanceUntilDone,
   gatewayCalls,
@@ -24,6 +23,7 @@ import {
 import type { GatewayCall } from '@/test/helpers';
 
 import { DAY, T0, quietLogger, resetCloudPersonaMemory, setMode, systemMessage, userMessage } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const AMSTERDAM = 'Lives in Amsterdam, Netherlands';
 const BANGALORE = 'Works at a startup in Bangalore';
@@ -150,7 +150,7 @@ describe('fact places: names in, codes stored', () => {
     expect(res).toMatchObject({ ran: true, placed: 3, regenerated: 0, added: 1 });
     const calls = gatewayCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ route: 'batch', model: SMALL_MODEL, stream: false });
+    expect(calls[0]).toMatchObject({ route: 'batch', model: SCORING_HEAD, stream: false });
     expect(systemMessage(calls[0])).toContain('never as a code');
     expect(userMessage(calls[0])).not.toMatch(/\b(GB|NL|IN)\b/);
     expect(await placesOf(pension.id)).toEqual(['NL']);

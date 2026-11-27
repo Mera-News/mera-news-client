@@ -2,7 +2,6 @@
 // thinking flag per call, per-item and whole-request failures. Replies the responder cannot express
 // (an out-of-order batch, a per-item error, a reasoning-only item) replace the batch route with
 // serveJson, sealed toward the calling client with its real key.
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import * as e2eeService from '@/lib/e2ee/e2ee-service';
 import { cloudBatchComplete } from '@/lib/llm/cloudComplete';
 import type { BatchCall } from '@/lib/llm/types';
@@ -17,6 +16,7 @@ import {
   serveJson,
   watchRequests,
 } from './transport-kit';
+import { CHAT_HEAD, SCORING_HEAD } from '@/test/helpers/models';
 
 const SECRET = 'SENTINEL-BATCH-a91f';
 const call = (id: string, extras: Partial<BatchCall> = {}): BatchCall => ({
@@ -193,13 +193,13 @@ describe('cloudBatchComplete', () => {
   describe('the request body', () => {
     it('uses the head of the lane it is given', async () => {
       await run(cloudBatchComplete([call('x')], 'chat-tools'));
-      expect(gatewayCalls('batch')[0].model).toBe(BIG_MODEL);
+      expect(gatewayCalls('batch')[0].model).toBe(CHAT_HEAD);
       expect(gatewayCalls('batch')[0].headers['x-mera-provider']).toBe('near');
     });
 
-    it('defaults to SMALL_MODEL', async () => {
+    it('defaults to SCORING_HEAD', async () => {
       await run(cloudBatchComplete([call('x')]));
-      expect(gatewayCalls('batch')[0].model).toBe(SMALL_MODEL);
+      expect(gatewayCalls('batch')[0].model).toBe(SCORING_HEAD);
     });
 
     it.each([
@@ -257,7 +257,7 @@ describe('cloudBatchComplete', () => {
     });
 
     it('moves a stalled primary onto the next profile at once, and later batches start there', async () => {
-      server.use(...mockGateway((c) => (c.model === SMALL_MODEL ? { status: 502 } : 'recovered')));
+      server.use(...mockGateway((c) => (c.model === SCORING_HEAD ? { status: 502 } : 'recovered')));
 
       const first = await run(cloudBatchComplete([call('c1')]));
       const second = await run(cloudBatchComplete([call('c2')]));
@@ -265,7 +265,7 @@ describe('cloudBatchComplete', () => {
       expect(first).toEqual([{ id: 'c1', output: 'recovered' }]);
       expect(second).toEqual([{ id: 'c2', output: 'recovered' }]);
       // The bulk lanes rank NEAR Qwen3.8 second.
-      expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SMALL_MODEL, 'Qwen/Qwen3.8-27B', 'Qwen/Qwen3.8-27B']);
+      expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SCORING_HEAD, 'Qwen/Qwen3.8-27B', 'Qwen/Qwen3.8-27B']);
     });
   });
 });

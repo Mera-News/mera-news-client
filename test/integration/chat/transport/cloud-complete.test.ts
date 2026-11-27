@@ -2,7 +2,6 @@
 // both ways, real limiter, real model fallback. What the model side received comes from the mock's
 // decrypted call log; what is only visible on the wire (temperature, max_tokens, the thinking flag,
 // that nothing is in the clear) comes from the raw request body.
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import {
   cloudBatchComplete,
   cloudComplete,
@@ -24,6 +23,7 @@ import {
   serveJson,
   watchRequests,
 } from './transport-kit';
+import { CHAT_HEAD, SCORING_HEAD } from '@/test/helpers/models';
 
 const SECRET_SYSTEM = 'SENTINEL-SYSTEM-5e2a you are the test model';
 const SECRET_USER = 'SENTINEL-USER-b07c what is the news';
@@ -56,7 +56,7 @@ describe('cloudComplete', () => {
 
     expect(result).toBe('hello from model');
     const [call] = gatewayCalls('chat');
-    expect(call).toMatchObject({ stream: false, model: SMALL_MODEL, algo: 'ed25519' });
+    expect(call).toMatchObject({ stream: false, model: SCORING_HEAD, algo: 'ed25519' });
     expect(call.messages).toEqual([
       { role: 'system', content: SECRET_SYSTEM },
       { role: 'user', content: SECRET_USER },
@@ -76,12 +76,12 @@ describe('cloudComplete', () => {
 
   it('uses the head of the lane it is given', async () => {
     await run(cloudComplete({ ...REQUEST, route: 'chat-tools' }));
-    expect(gatewayCalls('chat')[0].model).toBe(BIG_MODEL);
+    expect(gatewayCalls('chat')[0].model).toBe(CHAT_HEAD);
   });
 
-  it('defaults to SMALL_MODEL', async () => {
+  it('defaults to SCORING_HEAD', async () => {
     await run(cloudComplete(REQUEST));
-    expect(gatewayCalls('chat')[0].model).toBe(SMALL_MODEL);
+    expect(gatewayCalls('chat')[0].model).toBe(SCORING_HEAD);
   });
 
   it.each([
@@ -237,7 +237,7 @@ describe('first-token deadline and the chain', () => {
     expect(chat.count()).toBe(2);
     expect(chat.times()[1] - chat.times()[0]).toBeGreaterThanOrEqual(120_000);
     expect(chat.times()[1] - chat.times()[0]).toBeLessThan(125_000);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, FALLBACK_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD, FALLBACK_MODEL]);
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(true);
   });
 
@@ -249,6 +249,6 @@ describe('first-token deadline and the chain', () => {
 
     expect(err?.message).toMatch(/E2EE batch failed: 502/);
     expect(batch.count()).toBe(2);
-    expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SMALL_MODEL, FALLBACK_MODEL]);
+    expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SCORING_HEAD, FALLBACK_MODEL]);
   });
 });

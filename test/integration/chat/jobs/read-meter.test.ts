@@ -3,7 +3,6 @@
 // that sends nothing while held. The pipeline side (no attempt burn, no dispatch while held,
 // resume after the reset) is test/integration/persona/scoring-pipeline-read-hold.test.ts.
 import * as limiter from '@/lib/llm/gateway-rate-limiter';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { sendInferenceRequest } from '@/lib/llm/submitInferenceJob';
 import logger from '@/lib/logger';
 import { getReadHold, isReadHeld, resetReadHold, setReadHold } from '@/lib/subscription/read-hold';
@@ -11,6 +10,7 @@ import { http, HttpResponse, server } from '@/test/helpers';
 import { setReadMeter } from '@/test/mock-backend/gateway/state';
 import { useStrictClock } from '@/test/integration/chat/_helpers';
 import { bundleOf, captureJobPosts, context, drive, resetJobModules } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
@@ -44,7 +44,7 @@ afterEach(() => {
 async function send() {
   const ctx = await drive(context());
   return drive(
-    sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground' }),
+    sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground' }),
   );
 }
 

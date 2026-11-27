@@ -3,7 +3,6 @@
 // and a sealed request builder for driving authFetch directly. Not a test file.
 import { getJwtToken } from '@/lib/platform/auth';
 import { encryptContent, prepareE2EEContext } from '@/lib/e2ee/e2ee-service';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import {
   authState,
   http,
@@ -16,6 +15,7 @@ import { driveUntilDone, resetChatModules, useStrictClock } from '@/test/integra
 
 import type { JsonBodyType } from 'msw';
 import { openFromClientV2, redpillAttestationBody, sealForClient, sealForClientV2 } from '@/test/mock-backend/gateway/crypto';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 // Aliased: a function named use* trips react-hooks/rules-of-hooks wherever it is called.
 const strictClock = useStrictClock;
@@ -84,13 +84,13 @@ export function failChatNetworkAlways(): void {
 
 /** A sealed chat request built with the real E2EE context, ready for authFetch. */
 export async function sealedInit(content: string, extra: RequestInit = {}): Promise<RequestInit> {
-  const ctx = await prepareE2EEContext(SMALL_MODEL);
+  const ctx = await prepareE2EEContext(SCORING_HEAD);
   const token = await getJwtToken();
   return {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...ctx.headers },
     body: JSON.stringify({
-      model: SMALL_MODEL,
+      model: SCORING_HEAD,
       stream: false,
       messages: [{ role: 'user', content: encryptContent(content, ctx) }],
     }),

@@ -19,7 +19,6 @@ import { recordDecline } from '@/lib/database/services/topic-decline-service';
 import { startTopicGeneration } from '@/lib/chat-tools/tool-handlers';
 import { handleTopicGenJob } from '@/lib/inference/handlers/topic-gen-handler';
 import { __setJobHandlerForTests, inferenceQueue } from '@/lib/inference/InferenceQueue';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import logger from '@/lib/logger';
 import { TOPIC_CALL_MAX_TOKENS, loadSkill } from '@/lib/mera-harness';
 import { EMPTY_RETRY_NUDGE, JUDGEMENT_NUDGE } from '@/lib/mera-harness/core/topic-call';
@@ -30,6 +29,7 @@ import { AppScheduler } from '@/lib/scheduler/AppScheduler';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { installLlama, llamaCalls } from '@/test/integration/chat/_helpers';
 import { cleanup, driveDone, driveUntil, jobRow, jobRows, prepare, untilJob, watchBodies, setMode } from './kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const HOME = 'location: neighborhood/area, city, and country (preserve specifics)';
 const JOB = 'Works as a paediatric nurse';
@@ -64,7 +64,7 @@ describe('cloud: the skill core, isolated', () => {
     expect(gatewayCalls('chat')).toHaveLength(1);
     expect(gatewayCalls('batch')).toHaveLength(0);
     const [body] = await bodies.bodies();
-    expect(body).toMatchObject({ model: SMALL_MODEL, max_tokens: TOPIC_CALL_MAX_TOKENS, stream: false });
+    expect(body).toMatchObject({ model: SCORING_HEAD, max_tokens: TOPIC_CALL_MAX_TOKENS, stream: false });
     expect(TOPIC_CALL_MAX_TOKENS).toBe(600);
     const [, user] = gatewayCalls('chat')[0].messages;
     expect(user.content).toContain('paediatric nurse');

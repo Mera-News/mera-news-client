@@ -9,7 +9,6 @@ import qwen38 from './qwen3.8-27b/harness.json';
 import qwen36 from './qwen3.6-35b-a3b/harness.json';
 import afm from './afm/harness.json';
 import gemma431 from './gemma-4-31b/harness.json';
-import kimiK26 from './kimi-k2.6/harness.json';
 
 export const HARNESS_FILES: Record<string, HarnessFile> = {
   'cloud-base': cloudBase as HarnessFile,
@@ -18,7 +17,6 @@ export const HARNESS_FILES: Record<string, HarnessFile> = {
   'qwen3.6-35b-a3b': qwen36 as HarnessFile,
   afm: afm as HarnessFile,
   'gemma-4-31b': gemma431 as HarnessFile,
-  'kimi-k2.6': kimiK26 as HarnessFile,
 };
 
 /** `<provider>:<provider model id>` -> harness folder. */

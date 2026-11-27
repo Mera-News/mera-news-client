@@ -3,7 +3,6 @@
 // attestation cache, the real interactive limiter, the real gateway mock. No module is mocked.
 import { clearAttestationCache } from '@/lib/e2ee/e2ee-cache';
 import { fetchModelPublicKey } from '@/lib/e2ee/e2ee-service';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import { useChatPhaseStore } from '@/lib/llm/chat-phase-store';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
 import { _resetForTests as resetLimiter, interactiveWaitMs } from '@/lib/llm/gateway-rate-limiter';
@@ -19,10 +18,11 @@ import {
   textOf,
   until,
 } from './support';
+import { CHAT_HEAD, SCORING_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
-const DECRYPT_400 = { status: 400, body: { error: `Provider failed for model '${SMALL_MODEL}': Decryption failed` } };
+const DECRYPT_400 = { status: 400, body: { error: `Provider failed for model '${SCORING_HEAD}': Decryption failed` } };
 
 function watch(extra: object = {}) {
   const seen: string[] = [];
@@ -33,7 +33,7 @@ function watch(extra: object = {}) {
 
 /** A warm attestation cache with an idle limiter, as the tenth message of a session sees it. */
 async function warm() {
-  await fetchModelPublicKey(SMALL_MODEL, 'interactive');
+  await fetchModelPublicKey(SCORING_HEAD, 'interactive');
   resetLimiter();
 }
 
@@ -105,7 +105,7 @@ describe('queued', () => {
   it('is reported, ahead of securing, only when the interactive lane really has to wait', async () => {
     useStrictClock('2026-10-09T00:00:00Z');
     server.use(...mockGateway(respond('ok')));
-    await drive(fetchModelPublicKey(SMALL_MODEL, 'interactive'));
+    await drive(fetchModelPublicKey(SCORING_HEAD, 'interactive'));
     resetLimiter();
     // Two calls back to back: the first spends the grant, the second finds the lane 1s out.
     await drive(collect(cloudChatStream({ messages: MESSAGES, route: 'topics' })));
@@ -119,7 +119,7 @@ describe('queued', () => {
   it('is not reported for a wait too short to read', async () => {
     useStrictClock('2026-10-09T00:00:00Z');
     server.use(...mockGateway(respond('ok')));
-    await drive(fetchModelPublicKey(SMALL_MODEL, 'interactive'));
+    await drive(fetchModelPublicKey(SCORING_HEAD, 'interactive'));
     resetLimiter();
     await drive(collect(cloudChatStream({ messages: MESSAGES, route: 'topics' })));
     while (interactiveWaitMs() > 300) await jest.advanceTimersByTimeAsync(50);
@@ -148,13 +148,13 @@ describe('retrying: any re-entry into the request builder', () => {
     useStrictClock('2026-10-09T00:00:00Z');
     // The chat head sends no first token within its 30s deadline; the next profile answers.
     server.use(...mockGateway((c) => (c.index === 0 ? { chunks: ['slow'], headerDelayMs: 60_000 } : 'fast')));
-    await drive(Promise.all([fetchModelPublicKey(SMALL_MODEL, 'interactive'), fetchModelPublicKey(BIG_MODEL, 'interactive')]));
+    await drive(Promise.all([fetchModelPublicKey(SCORING_HEAD, 'interactive'), fetchModelPublicKey(CHAT_HEAD, 'interactive')]));
     resetLimiter();
     const { seen, start } = watch({ route: 'chat-tools' });
     const events = await drive(start());
     expect(textOf(events)).toBe('fast');
     // RedPill fails the mock's NEAR-shaped attestation, so the next profile that answers is NEAR Qwen3.8.
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, 'Qwen/Qwen3.8-27B']);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD, 'Qwen/Qwen3.8-27B']);
     // The next profile builds only once the head failed, so `retrying` never shows at t=0.
     // One `retrying` per profile tried: RedPill Qwen3.8 and Gemma fail the mock's key fetch first.
     expect(seen).toEqual(['reset', 'securing', 'retrying', 'retrying', 'retrying', 'thinking']);

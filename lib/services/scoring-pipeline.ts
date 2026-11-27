@@ -1040,7 +1040,7 @@ export async function enqueueOrphanedReasons(): Promise<void> {
   ensurePoller();
 }
 
-/** The profile a run was minted for; a run stored before profiles existed ran on the old SMALL_MODEL. */
+/** The profile a run was minted for; a run stored before profiles existed ran on the scoring head of that time. */
 function runProfile(run: PipelineRun): Profile {
   return (run.profileId && PROFILES[run.profileId as keyof typeof PROFILES]) || PROFILES['near/qwen3.6-35b-a3b'];
 }

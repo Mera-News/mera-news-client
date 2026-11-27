@@ -6,7 +6,6 @@
 //  - the on-device gate when the protocol store cannot even be loaded.
 // Real auth, E2EE both ways, limiter, model fallback and logger; only the network and the
 // WatermelonDB native adapter (a native edge) are faked.
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, cloudComplete } from '@/lib/llm/cloudComplete';
 import { prepareE2EEContext } from '@/lib/e2ee/e2ee-service';
 import { isProfileMarked } from '@/lib/llm/router';
@@ -21,6 +20,7 @@ import {
 } from '@/test/helpers';
 import { sealForClient } from '@/test/mock-backend/gateway/crypto';
 import { CHAT_PATH, errorOf, fakeClock, resetTransport, run, watchRequests } from './transport-kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const REQUEST = { systemPrompt: 'sys', prompt: 'p' };
 
@@ -37,8 +37,8 @@ describe('a gateway call with no JWT to send', () => {
   it('refuses before the request is built: cloudComplete throws a clear cause and nothing reaches the chat route', async () => {
     // The attestation is already cached (a warm session), so the credential check inside the key
     // fetch is skipped and the missing JWT is first noticed when the headers are built.
-    await run(prepareE2EEContext(SMALL_MODEL));
-    expect(attestationRequests(SMALL_MODEL)).toBe(1);
+    await run(prepareE2EEContext(SCORING_HEAD));
+    expect(attestationRequests(SCORING_HEAD)).toBe(1);
     authState.jwt = null;
     const chat = watchRequests(CHAT_PATH);
 
@@ -54,7 +54,7 @@ describe('a gateway call with no JWT to send', () => {
 describe('a model-class failure, then a 4xx on the next profile', () => {
   it('the 4xx surfaces (it is the request, not the model), and only the first profile is marked', async () => {
     server.use(
-      ...mockGateway((c) => (c.model === SMALL_MODEL ? { status: 502, body: 'primary timed out' } : { status: 400, body: 'next said no' })),
+      ...mockGateway((c) => (c.model === SCORING_HEAD ? { status: 502, body: 'primary timed out' } : { status: 400, body: 'next said no' })),
     );
 
     const err = await errorOf(run(cloudComplete(REQUEST)));

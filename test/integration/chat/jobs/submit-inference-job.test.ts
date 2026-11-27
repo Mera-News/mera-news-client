@@ -10,7 +10,6 @@
 // Replaces lib/llm/__tests__/submitInferenceJob.test.ts (32 tests).
 import { NoCredentialError } from '@/lib/e2ee/e2ee-service';
 import * as limiter from '@/lib/llm/gateway-rate-limiter';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { routingVersion } from '@/lib/llm/router';
 import { bytesToHex, sendInferenceRequest } from '@/lib/llm/submitInferenceJob';
 import logger from '@/lib/logger';
@@ -25,6 +24,7 @@ import {
   resetJobModules,
   type TestCall,
 } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
@@ -72,7 +72,7 @@ async function send(args: Args = {}, bundle: { calls: TestCall[] } = bundleOf(1)
       bundle: bundle as never,
       ctx,
       token: null,
-      model: SMALL_MODEL,
+      model: SCORING_HEAD,
       context: 'foreground',
       ...args,
     }),
@@ -154,7 +154,7 @@ describe('the request on the wire', () => {
     await send({}, { calls: [{ id: 'reason:x', system: 's', prompt: 'p', maxTokens: 77 }] });
     await settled();
     expect(posts[0].body!.requests[0].body).toMatchObject({
-      model: SMALL_MODEL,
+      model: SCORING_HEAD,
       temperature: 0.3,
       max_tokens: 77,
       chat_template_kwargs: { enable_thinking: false },
@@ -196,7 +196,7 @@ describe('auth per execution context', () => {
     authState.jwt = null;
     const { posts } = captureJobPosts();
     const out = await drive(
-      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground', capabilityToken: 'cap-tok-fallback' }),
+      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground', capabilityToken: 'cap-tok-fallback' }),
     );
     expect(out.status).toBe('ok');
     expect(posts[0].headers.authorization).toBe('Bearer cap-tok-fallback');
@@ -207,7 +207,7 @@ describe('auth per execution context', () => {
     testHost.auth.getJwtToken = jest.fn().mockRejectedValueOnce(new Error('keychain unavailable'));
     const { posts } = captureJobPosts();
     const out = await drive(
-      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground', capabilityToken: 'fallback-cap' }),
+      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground', capabilityToken: 'fallback-cap' }),
     );
     expect(out.status).toBe('ok');
     expect(posts[0].headers.authorization).toBe('Bearer fallback-cap');
@@ -219,7 +219,7 @@ describe('auth per execution context', () => {
     // NoCredentialError, never a plain Error: the scoring pipeline's quiet
     // classifier maps it to 'no-auth' (no Sentry event, no auth-breaker report).
     await expect(
-      drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground' })),
+      drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground' })),
     ).rejects.toBeInstanceOf(NoCredentialError);
     expect(gatewayCalls('job')).toHaveLength(0);
   });
@@ -229,7 +229,7 @@ describe('auth per execution context', () => {
     const mints = watchMints();
     const { posts } = captureJobPosts();
     const out = await drive(
-      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'background', capabilityToken: 'bg-cap-token' }),
+      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'background', capabilityToken: 'bg-cap-token' }),
     );
     expect(out.status).toBe('ok');
     expect(posts[0].headers.authorization).toBe('Bearer bg-cap-token');
@@ -239,7 +239,7 @@ describe('auth per execution context', () => {
   it('background without a capability token throws and sends nothing', async () => {
     const ctx = await drive(context());
     await expect(
-      drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'background' })),
+      drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'background' })),
     ).rejects.toThrow('no capability token (background)');
     expect(gatewayCalls('job')).toHaveLength(0);
   });
@@ -255,7 +255,7 @@ describe('auth per execution context', () => {
     const ctx = await drive(context());
     authState.jwt = null;
     const out = await drive(
-      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'task', capabilityToken: 'cap' }),
+      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'task', capabilityToken: 'cap' }),
     );
     expect(out).toEqual({ status: 'no-auth' });
     expect(gatewayCalls('job')).toHaveLength(0);
@@ -269,7 +269,7 @@ describe('auth per execution context', () => {
     const gate = new Promise<void>((resolve) => (release = resolve));
     testHost.auth.getJwtToken = async () => (await gate, null);
     const stop = new AbortController();
-    const p = sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'task', signal: stop.signal });
+    const p = sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'task', signal: stop.signal });
     await jest.advanceTimersByTimeAsync(500);
     stop.abort();
     expect(await drive(p)).toEqual({ status: 'no-auth' });
@@ -319,7 +319,7 @@ describe('401 / 403 recovery (foreground)', () => {
     const invalidationsBefore = authState.invalidations;
     testHost.auth.getJwtToken = async () => (authState.invalidations > invalidationsBefore ? null : authState.jwt);
     const { posts } = captureJobPosts();
-    const out = await drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground' }));
+    const out = await drive(sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground' }));
     expect(out).toEqual({ status: 'failed' });
     expect(posts).toHaveLength(1);
     expect(authState.failures).toBe(1);
@@ -331,7 +331,7 @@ describe('401 / 403 recovery (foreground)', () => {
     const mints = watchMints();
     const { posts } = captureJobPosts();
     const out = await drive(
-      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'background', capabilityToken: 'bg-cap-token' }),
+      sendInferenceRequest({ bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'background', capabilityToken: 'bg-cap-token' }),
     );
     expect(out).toEqual({ status: 'failed' });
     expect(posts).toHaveLength(1);
@@ -438,7 +438,7 @@ describe('retries, deadlines and the limiter', () => {
     server.use(http.post(JOBS, () => delay('infinite')));
     const stop = new AbortController();
     const p = sendInferenceRequest({
-      bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'task',
+      bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'task',
       idempotencyKey: 'k', singleAttempt: true, signal: stop.signal,
     });
     await jest.advanceTimersByTimeAsync(3_000);
@@ -452,7 +452,7 @@ describe('retries, deadlines and the limiter', () => {
     limiter.pauseFor(600_000);
     const stop = new AbortController();
     const p = sendInferenceRequest({
-      bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground', signal: stop.signal,
+      bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground', signal: stop.signal,
     });
     await jest.advanceTimersByTimeAsync(5_000);
     stop.abort();
@@ -463,7 +463,7 @@ describe('retries, deadlines and the limiter', () => {
   it('waits for its own limiter slot, but not when the caller already holds a grant', async () => {
     const ctx = await drive(context());
     limiter.pauseFor(20_000);
-    const args = { bundle: bundleOf(1) as never, ctx, token: null, model: SMALL_MODEL, context: 'foreground' as const };
+    const args = { bundle: bundleOf(1) as never, ctx, token: null, model: SCORING_HEAD, context: 'foreground' as const };
 
     const waits = sendInferenceRequest(args);
     await jest.advanceTimersByTimeAsync(10_000);

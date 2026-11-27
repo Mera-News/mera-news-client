@@ -5,7 +5,6 @@ import * as settingService from '@/lib/database/services/setting-service';
 import { setSetting } from '@/lib/database/services/setting-service';
 import { prepareE2EEContext, rebuildE2EEContext } from '@/lib/e2ee/e2ee-service';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudBatchComplete, cloudChatStream, cloudComplete } from '@/lib/llm/cloudComplete';
 import {
   assertCloudAllowed,
@@ -25,6 +24,7 @@ import {
   run,
   watchRequests,
 } from './transport-kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const SENTINEL = 'SENTINEL-ONDEVICE-8c3b';
 const ROW = 'mera_processing_mode';
@@ -120,8 +120,8 @@ describe('every cloud entry point refuses in on-device mode', () => {
       () => cloudBatchComplete([{ id: 'a', system: SENTINEL, prompt: SENTINEL, temperature: 0.3 }]),
     ],
     ['cloudChatStream', () => cloudChatStream({ messages: [{ role: 'user', content: SENTINEL }] }).next()],
-    ['prepareE2EEContext', () => prepareE2EEContext(SMALL_MODEL)],
-    ['rebuildE2EEContext', () => rebuildE2EEContext(SMALL_MODEL, 'ab'.repeat(32), 'ed25519')],
+    ['prepareE2EEContext', () => prepareE2EEContext(SCORING_HEAD)],
+    ['rebuildE2EEContext', () => rebuildE2EEContext(SCORING_HEAD, 'ab'.repeat(32), 'ed25519')],
   ];
   const triggers: [string, () => Promise<void>][] = [
     ['the store says on-device', async () => setStoreMode(ProcessingMode.OnDevice)],
@@ -185,8 +185,8 @@ describe('cloud chat while on device: only chat calls pass', () => {
   it.each<[string, () => Promise<unknown>]>([
     ['a background cloudComplete', () => cloudComplete({ systemPrompt: SENTINEL, prompt: SENTINEL })],
     ['cloudBatchComplete', () => cloudBatchComplete([{ id: 'a', system: SENTINEL, prompt: SENTINEL, temperature: 0.3 }])],
-    ['a background prepareE2EEContext', () => prepareE2EEContext(SMALL_MODEL)],
-    ['rebuildE2EEContext', () => rebuildE2EEContext(SMALL_MODEL, 'ab'.repeat(32), 'ed25519')],
+    ['a background prepareE2EEContext', () => prepareE2EEContext(SCORING_HEAD)],
+    ['rebuildE2EEContext', () => rebuildE2EEContext(SCORING_HEAD, 'ab'.repeat(32), 'ed25519')],
   ])('%s still throws OnDeviceModeError', async (_name, call) => {
     const err = await errorOf(call());
 

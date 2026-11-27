@@ -18,7 +18,6 @@ import { getFacts } from '@/lib/database/services/fact-service';
 import { PersonaUpdateAgent } from '@/lib/llm/agents/PersonaUpdateAgent';
 import * as cloudCompleteModule from '@/lib/llm/cloudComplete';
 import { CallerAbortError, cloudChatStream, type CloudChatStreamRequest, type SseEvent } from '@/lib/llm/cloudComplete';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { REQUIRED_TOOL_REASK } from '@/lib/harnesses/text-tool-protocol';
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';
 import {

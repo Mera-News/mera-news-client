@@ -11,10 +11,10 @@ import { handleQuickFactCheck, quickFactCheckCopyKey, type QuickFactCheckAnswer,
 import { listFactChecks } from '@/lib/database/services/fact-check-record-service';
 import { loadSavedSuggestions } from '@/lib/database/services/saved-article-suggestion-service';
 import { clampVerdictToEvidence, MAX_EVIDENCE_IN_PROMPT, SYNTHESIS_DEADLINE_MS } from '@/lib/fact-check/fact-check-runner';
-import { BIG_MODEL } from '@/lib/llm/constants';
 import { advanceUntilDone, gatewayCalls, http, HttpResponse, server } from '@/test/helpers';
 import { resetChatModules, setProcessingMode, useStrictClock as installStrictClock } from '@/test/integration/chat/_helpers';
 import { askedIds, HITS, manyHits, scriptQuick, serveChecks, watchRequests, type Hit, type QuickScript } from './kit';
+import { CHAT_HEAD } from '@/test/helpers/models';
 
 const CLAIM = 'Children in the United States receive 80 different vaccines by the age of 18.';
 const TITLE = 'RFK Jr. repeats vaccine schedule claim';
@@ -136,9 +136,9 @@ describe('the answered path', () => {
     expect(answer).toMatchObject({ outcome: 'answered', verdict: 'disputed', summary: 'Sources disagree.', evidenceCount: 2 });
     expect(answer.claims).toEqual([{ claim: 'C', assessment: 'unsupported', note: undefined }]);
     expect(chatCalls()).toHaveLength(1);
-    expect(chatCalls()[0]).toMatchObject({ model: BIG_MODEL, stream: false, algo: 'ed25519' });
+    expect(chatCalls()[0]).toMatchObject({ model: CHAT_HEAD, stream: false, algo: 'ed25519' });
     const [body] = await chat.json();
-    expect(body).toMatchObject({ model: BIG_MODEL, stream: false, temperature: 0, max_tokens: 1200 });
+    expect(body).toMatchObject({ model: CHAT_HEAD, stream: false, temperature: 0, max_tokens: 1200 });
     expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
   });
 

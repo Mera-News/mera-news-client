@@ -6,11 +6,11 @@
 // dropped. Both curves, streamed and buffered.
 import { INFERENCE_ENDPOINT } from '@/lib/config/endpoints';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { FORBIDDEN_TOOL_KEYS } from '@/lib/harnesses/text-tool-protocol';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { resetChatModules } from '@/test/integration/chat/_helpers';
 import { collect } from './kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 jest.setTimeout(30_000);
 
@@ -64,7 +64,7 @@ describe.each([
 ] as const)('%s, stream %s', (curve, stream) => {
   it('the URL, every header and the body hold no tool data; the model side can read all of it', async () => {
     const seen = captureChat();
-    server.use(...mockGateway(() => 'ok', { curve: { [SMALL_MODEL]: curve } }));
+    server.use(...mockGateway(() => 'ok', { curve: { [SCORING_HEAD]: curve } }));
 
     await collect(
       cloudChatStream({

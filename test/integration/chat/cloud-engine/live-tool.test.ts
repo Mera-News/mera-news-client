@@ -1,11 +1,11 @@
 // The live tool row and the strip's phone work, through the real cloud engine: a real persona turn
 // (the loop and the device port), the gateway mock (real E2EE both ways)
 // and GraphQL held open in MSW, so the store is sampled while the tool genuinely runs.
-import { BIG_MODEL } from '@/lib/llm/constants';
 import { useChatPhaseStore, type LiveTool } from '@/lib/llm/chat-phase-store';
 import { mockGateway, mockGql, server } from '@/test/helpers';
 import { reply, resetChatModules, toolCall, until } from '@/test/integration/chat/_helpers';
 import { attachCloud, personaAgent, settle, turnDone } from './kit';
+import { CHAT_HEAD } from '@/test/helpers/models';
 
 jest.setTimeout(60_000);
 
@@ -60,7 +60,7 @@ describe('persona turn: the tool the phone runs is the live row', () => {
   });
 
   it('a retried call marks the turn, and the next send clears the mark', async () => {
-    const decrypt400 = { status: 400, body: { error: `Provider failed for model '${BIG_MODEL}': Decryption failed` } };
+    const decrypt400 = { status: 400, body: { error: `Provider failed for model '${CHAT_HEAD}': Decryption failed` } };
     const retriedAtFirstCall: boolean[] = [];
     let turn = 0;
     server.use(...mockGateway((c) => {

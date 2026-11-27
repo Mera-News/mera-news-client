@@ -7,7 +7,6 @@ import database from '@/lib/database';
 import { clearAttestationCache } from '@/lib/e2ee/e2ee-cache';
 import { prepareE2EEContext } from '@/lib/e2ee/e2ee-service';
 import { sendInferenceRequest } from '@/lib/llm/submitInferenceJob';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { _resetForTests as resetLimiter } from '@/lib/llm/gateway-rate-limiter';
 import logger from '@/lib/logger';
 import { CLOUD_SCORE_CHUNK_SIZE } from '@/lib/mera-protocol/scoring-service';
@@ -40,6 +39,7 @@ import {
 } from '@/test/helpers';
 import { sealForClient } from '@/test/mock-backend/gateway/crypto';
 import { rowsById, scorePendingReason, seedArticles } from './seed';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 const signOut = () => {
   authState.jwt = null;
@@ -62,12 +62,12 @@ function captureResults(reply: () => Response | Promise<Response> = () => HttpRe
 
 /** Submits a real job through the gateway mock; returns the ids the app needs to read it back. */
 async function submitJob(calls: { id: string; prompt: string }[]) {
-  const ctx = await prepareE2EEContext(SMALL_MODEL);
+  const ctx = await prepareE2EEContext(SCORING_HEAD);
   const sent = await sendInferenceRequest({
     bundle: { calls: calls.map((c) => ({ ...c, system: 'shared system' })) } as never,
     ctx,
     token: null,
-    model: SMALL_MODEL,
+    model: SCORING_HEAD,
     context: 'foreground',
   });
   if (sent.status !== 'ok') throw new Error(`submit ${sent.status}`);
@@ -392,8 +392,8 @@ describe('fetchResults: status handling', () => {
 
 describe('toBatchResult', () => {
   it.each(['ed25519', 'ecdsa'] as const)('%s: decrypts the choice content on an ok row, trimmed', async (curve) => {
-    server.use(...mockGateway(() => 'x', { curve: { [SMALL_MODEL]: curve } }));
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
+    server.use(...mockGateway(() => 'x', { curve: { [SCORING_HEAD]: curve } }));
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
     expect(ctx.algo).toBe(curve);
     const row: ServerResults['results'][number] = {
       id: 'reason:c1',
@@ -407,7 +407,7 @@ describe('toBatchResult', () => {
   });
 
   it('falls back to reasoning_content when content is absent', async () => {
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
     const row: ServerResults['results'][number] = {
       id: 'reason:c1',
       ok: true,
@@ -422,7 +422,7 @@ describe('toBatchResult', () => {
   });
 
   it('returns an error output for an ok=false row', async () => {
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
     const failed: ServerResults['results'][number] = { id: 'reason:c1', ok: false, error: 'upstream error' };
     const unnamed: ServerResults['results'][number] = { id: 'reason:c2', ok: false };
 
@@ -439,7 +439,7 @@ describe('toBatchResult', () => {
   });
 
   it('returns empty output when there is no encrypted content', async () => {
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
     const noContent: ServerResults['results'][number] = {
       id: 'reason:c1',
       ok: true,
@@ -452,7 +452,7 @@ describe('toBatchResult', () => {
   });
 
   it('captures decrypt failures into the error field without throwing', async () => {
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
     const row: ServerResults['results'][number] = {
       id: 'reason:c1',
       ok: true,
@@ -468,8 +468,8 @@ describe('toBatchResult', () => {
   });
 
   it('cannot open an envelope sealed toward a different client key', async () => {
-    const ctx = await prepareE2EEContext(SMALL_MODEL);
-    const other = await prepareE2EEContext(SMALL_MODEL);
+    const ctx = await prepareE2EEContext(SCORING_HEAD);
+    const other = await prepareE2EEContext(SCORING_HEAD);
     const row: ServerResults['results'][number] = {
       id: 'reason:c1',
       ok: true,

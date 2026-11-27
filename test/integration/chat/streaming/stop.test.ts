@@ -2,12 +2,12 @@
 // the SSE body, and re-types the cut as CallerAbortError (never a model verdict, never a retry).
 // Already held by harness/gateway.test.ts > chat: abort > "a caller abort mid-stream marks the recorded
 // call aborted": CallerAbortError, aborted flag, one call. This file adds what that test leaves out.
-import { BIG_MODEL } from '@/lib/llm/constants';
 import { CallerAbortError, cloudChatStream } from '@/lib/llm/cloudComplete';
 import { isProfileMarked } from '@/lib/llm/router';
 import { attestationRequests, gatewayCalls, mockGateway, server } from '@/test/helpers';
 import { useStrictClock } from '@/test/integration/chat/_helpers';
 import { advanceUntil, captureChatBodies, collect, installChatHooks, loggerSpies, MESSAGES, respond, until } from './support';
+import { CHAT_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -56,7 +56,7 @@ describe('stop while a profile is pending', () => {
     const outcome = settle(collect(cloudChatStream({ messages: MESSAGES, route: 'chat-tools', signal: stop.signal })));
     await advanceUntil(() => gatewayCalls('chat').length === 2);
     expect(gatewayCalls('chat').map((c) => [c.model, c.aborted])).toEqual([
-      [BIG_MODEL, true],
+      [CHAT_HEAD, true],
       [FALLBACK, false],
     ]);
 

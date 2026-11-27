@@ -4,7 +4,6 @@
 // Every test runs on its own fake date, three hours after the last, so no client cache carries over.
 import { invalidateJwtCache } from '@/lib/platform/auth';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
-import { BIG_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
 import { PING_DEADLINE_MS, prewarmCloudChat, useChatReadiness } from '@/lib/llm/prewarm';
 import { useCloudChatStore } from '@/lib/stores/cloud-chat-store';
@@ -30,6 +29,7 @@ import {
   MESSAGES,
   respond,
 } from './support';
+import { CHAT_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -74,19 +74,19 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     await settled();
 
     // Both lanes head on Qwen3.6 (BIG = SMALL); the seconds are RedPill Qwen3.8 (chat) and NEAR Qwen3.8 (bulk).
-    expect(attestationRequests(BIG_MODEL)).toBe(1);
+    expect(attestationRequests(CHAT_HEAD)).toBe(1);
     expect(attestationRequests('Qwen/Qwen3.8-27B')).toBe(1);
     expect(attestationRequests()).toBe(3);
     expect(gatewayCalls().map((c) => c.route)).toEqual(['chat']);
     const [call] = gatewayCalls('chat');
-    expect(call).toMatchObject({ model: BIG_MODEL, stream: false });
+    expect(call).toMatchObject({ model: CHAT_HEAD, stream: false });
     expect(call.messages).toEqual([
       { role: 'system', content: 'Reply with the single word "ready" and nothing else.' },
       { role: 'user', content: 'ping' },
     ]);
     const body = JSON.parse(bodies[0]);
     expect(body).toMatchObject({
-      model: BIG_MODEL,
+      model: CHAT_HEAD,
       max_tokens: 8,
       temperature: 0,
       chat_template_kwargs: { enable_thinking: false },
@@ -120,14 +120,14 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
   it('no reply within the deadline is an error, and a late reply (from the next profile) still turns it ready', async () => {
     // The head never sends a first token; the router leaves it at 30s and the next profile answers
     // just inside its own 30s deadline, which lands past the badge's 60s.
-    server.use(...mockGateway((c) => ({ chunks: ['ready'], headerDelayMs: c.model === BIG_MODEL ? 200_000 : 29_900 })));
+    server.use(...mockGateway((c) => ({ chunks: ['ready'], headerDelayMs: c.model === CHAT_HEAD ? 200_000 : 29_900 })));
     prewarmCloudChat({ ping: true });
     await advanceUntil(() => gatewayCalls('chat').length === 1, 60_000);
     await advanceUntil(() => status() !== 'warming', PING_DEADLINE_MS + 5_000);
     expect(status()).toBe('error');
     await advanceUntil(() => status() === 'ready', 60_000);
     // RedPill fails the mock's NEAR-shaped attestation, so the next profile that answers is NEAR Qwen3.8.
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, 'Qwen/Qwen3.8-27B']);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD, 'Qwen/Qwen3.8-27B']);
   });
 
   it("a failed turn's banner clears when the next open's ping answers: Mera is reachable again", async () => {
@@ -178,7 +178,7 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     prewarmCloudChat({ ping: true });
     await advanceUntil(() => gatewayCalls('chat').length === 3, 60_000);
     expect(gatewayCalls('chat')[2].messages[1]).toEqual({ role: 'user', content: 'ping' });
-    expect(attestationRequests(BIG_MODEL)).toBe(1);
+    expect(attestationRequests(CHAT_HEAD)).toBe(1);
   });
 
   it('app launch (no ping) attests and mints a JWT but sends no model call', async () => {
@@ -186,7 +186,7 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     prewarmCloudChat();
     await quiet();
     expect(gatewayCalls('chat')).toHaveLength(0);
-    expect(attestationRequests(BIG_MODEL)).toBe(1);
+    expect(attestationRequests(CHAT_HEAD)).toBe(1);
     expect(status()).toBe('idle');
   });
 
@@ -220,8 +220,8 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     );
     expect(() => prewarmCloudChat({ ping: true })).not.toThrow();
     await settled();
-    expect(attestationRequests(BIG_MODEL)).toBe(1);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL]);
+    expect(attestationRequests(CHAT_HEAD)).toBe(1);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD]);
   });
 
   it('swallows every attestation failing: nothing throws and no completion is sent', async () => {
@@ -305,6 +305,6 @@ describe('prewarmCloudChat, the cases where it stays quiet', () => {
     invalidateJwtCache();
     prewarmCloudChat({ ping: true });
     await settled();
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD]);
   });
 });

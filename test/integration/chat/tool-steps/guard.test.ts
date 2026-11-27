@@ -7,7 +7,6 @@
 // Without the guard the gateway mock would answer the call AND record an E2EE violation.
 import * as textToolProtocol from '@/lib/harnesses/text-tool-protocol';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { CleartextToolDataError, FORBIDDEN_TOOL_KEYS } from '@/lib/harnesses/text-tool-protocol';
 import { gatewayCalls, gatewayViolations } from '@/test/helpers';
 import { resetChatModules } from '@/test/integration/chat/_helpers';

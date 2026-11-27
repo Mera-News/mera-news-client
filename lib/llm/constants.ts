@@ -1,12 +1,6 @@
-// Cloud inference model identifiers: ALIASES of the default routing table's heads
-// (lib/llm/profiles DEFAULT_TABLE), for the eval scripts and tests. Nothing on a
-// request path reads them: every call names a lane and lib/llm/router picks the
-// profile (provider + model). A test pins that these still equal the heads.
-// BIG  — head of the chat lanes (tool-calling chat, article chat and the quick fact check).
-// SMALL — head of scoring, topics and background.
-
-export const BIG_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
-export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
+// The model order lives in lib/llm/profiles: CHAT_MODELS (speed) and SCORING_MODELS (speed and
+// cost), each holding only profiles that pass the evals. Nothing on a request path names a model:
+// every call names a lane and lib/llm/router picks the profile (provider + model).
 
 /**
  * WHY THESE MODELS, AND WHY THIS ORDER (the default ranking in lib/llm/profiles).
@@ -39,7 +33,7 @@ export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   z-ai/glm-5.3-flash   4.0s / 10.7s / 47s        8.5s / 26.1s / 55s
  *   Qwen/Qwen3.8-27B     3.3s /  4.5s /  8s        2.0s /  3.3s /  8s
  *
- *   BIG (persona chat) needs FUNCTION TOOL CALLING with schema-conformant
+ *   CHAT_MODELS (persona chat) need FUNCTION TOOL CALLING with schema-conformant
  *   arguments. Both remaining models pass confirm, decline and fact extraction;
  *   `conv` ("thanks!" after an invitation) is a behavioural difference, not a
  *   schema failure — GLM asks for confirmation where DeepSeek staged the card,
@@ -60,7 +54,7 @@ export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   INSIDE `content` as `trace</think>answer` (2/2 on a short prompt), which is
  *   the prefill leak the local path already strips.
  *
- *   SMALL (scoring / topics / reasons) sends JSON-shaped prompts with thinking
+ *   SCORING_MODELS (scoring / topics / reasons) send JSON-shaped prompts with thinking
  *   off, never function tools.
  *
  *   z-ai/glm-5.3-flash is CLOSED, not merely replaced: re-measured 2026-09-16
@@ -69,7 +63,7 @@ export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   (`enable_thinking:false` is sent and ignored). The 52/52 figure that
  *   originally selected it does not reproduce under the same model id.
  *
- *   SMALL -> Qwen/Qwen3.8-27B. Screened on the article pipeline at production
+ *   Scoring, Qwen/Qwen3.8-27B. Screened on the article pipeline at production
  *   budgets: 60/60 clean tiered parses, 0 band violations, 0 errors, 0 trace
  *   leaks. Costs +93% and runs +25% slower on a projected sync, which is
  *   acceptable for a path that only runs DURING AN OUTAGE. 262K context,
@@ -79,7 +73,7 @@ export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   A vision-language candidate screened 36% cheaper and was rejected as the
  *   text fallback by product decision, not by measurement.
  *
- *   BIG -> Qwen/Qwen3.6-35B-A3B-FP8. The chat path needs TOOLS, which rules out
+ *   Chat, Qwen/Qwen3.6-35B-A3B-FP8. The chat path needs TOOLS, which rules out
  *   most of the catalogue. Re-measured 2026-11-04 on the agent corpus (174 turns
  *   per arm, thinking off, interleaved with a twin): 0 of 1108 calls truncated
  *   and 12 of 961 tool calls schema-invalid. DeepSeek-V4.1-Flash-1017 attested and
@@ -87,10 +81,8 @@ export const SMALL_MODEL = 'Qwen/Qwen3.6-35B-A3B-FP8';
  *   An older 12 of 19 `finish_reason: length` figure was thinking ON, which chat
  *   no longer sends and the qwen3.6-35b-a3b harness forces off (`thinking: false`).
  *
- * The chat lanes rank fastest first, so both lanes now head on Qwen3.6 and
- * BIG_MODEL equals SMALL_MODEL. NEAR's Qwen models have failed as one group,
- * which is why RedPill's Qwen3.8-27B (same harness, same prompts) is second in
- * chat and third in the bulk lanes.
+ * NEAR's Qwen models have failed as one group, which is why RedPill's Qwen3.8-27B (same
+ * harness, same prompts) is in every lane: it runs on Phala, not on NEAR.
  */
 
 /**

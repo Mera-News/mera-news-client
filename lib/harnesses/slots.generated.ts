@@ -257,10 +257,6 @@ export const AFM_SLOTS: Record<string, string> = {
 export const GEMMA_4_31B_SLOTS: Record<string, string> = {
 };
 
-/** kimi-k2.6: only the slots whose text differs from its base. */
-export const KIMI_K2_6_SLOTS: Record<string, string> = {
-};
-
 /** qwen3.6-35b-a3b: only the slots whose text differs from its base. */
 export const QWEN3_6_35B_A3B_SLOTS: Record<string, string> = {
 };
@@ -314,7 +310,6 @@ export const HARNESS_SLOTS: Record<string, Record<string, string>> = {
   "cloud-base": CLOUD_BASE_SLOTS,
   "device-base": DEVICE_BASE_SLOTS,
   "gemma-4-31b": GEMMA_4_31B_SLOTS,
-  "kimi-k2.6": KIMI_K2_6_SLOTS,
   "qwen3.6-35b-a3b": QWEN3_6_35B_A3B_SLOTS,
   "qwen3.8-27b": QWEN3_8_27B_SLOTS,
 };

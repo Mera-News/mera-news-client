@@ -10,7 +10,6 @@ import {
 import { getSetting } from '@/lib/database/services/setting-service';
 import { isProfileMarked } from '@/lib/llm/router';
 import type { StagedProposal } from '@/lib/llm/types';
-import { BIG_MODEL } from '@/lib/llm/constants';
 import logger from '@/lib/logger';
 import { useFloatingChatStore } from '@/lib/stores/floating-chat-store';
 import {

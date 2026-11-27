@@ -8,7 +8,6 @@
 //   harness/gateway.test.ts > chat: faults > "429 with Retry-After 1s ..." and "... a long Retry-After is not waited out"
 //   harness/gateway.test.ts > chat: fake clock > a gap above / just under STREAM_IDLE_TIMEOUT_MS after the first chunk
 import { http, HttpResponse } from 'msw';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, STREAM_IDLE_TIMEOUT_MS, UPSTREAM_ALIGNED_TIMEOUT_MS } from '@/lib/llm/cloudComplete';
 import { EmptyReplyError } from '@/lib/llm/gateway-fetch';
 import { isProfileMarked, reportProfileFailure } from '@/lib/llm/router';
@@ -37,13 +36,14 @@ import {
   respond,
   textOf,
 } from './support';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
 // The mock gateway serves only NEAR-shaped attestation, so RedPill profiles fail it and the
 // next chat profile that answers after the Qwen3.6 head is NEAR Qwen3.8.
 const FALLBACK = 'Qwen/Qwen3.8-27B';
-const DECRYPT_400 = { status: 400, body: { error: `Provider failed for model '${SMALL_MODEL}': Decryption failed` } };
+const DECRYPT_400 = { status: 400, body: { error: `Provider failed for model '${SCORING_HEAD}': Decryption failed` } };
 const run = () => collect(cloudChatStream({ messages: MESSAGES, route: 'topics' }));
 const fail = (p: Promise<unknown>) => p.then(() => null, (e: Error & { statusCode?: number; responseBody?: string }) => e);
 
@@ -56,10 +56,10 @@ describe('decrypt-failure re-attest', () => {
     expect(textOf(events)).toBe('recovered');
     const [first, second] = gatewayCalls('chat');
     expect(gatewayCalls('chat')).toHaveLength(2);
-    expect(attestationRequests(SMALL_MODEL)).toBe(2);
+    expect(attestationRequests(SCORING_HEAD)).toBe(2);
     // A fresh client keypair: replaying the refused body would have sent the same one.
     expect(second.headers['x-client-pub-key']).not.toBe(first.headers['x-client-pub-key']);
-    expect(second.model).toBe(SMALL_MODEL);
+    expect(second.model).toBe(SCORING_HEAD);
     // A 4xx is not model evidence.
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(false);
     expect(loggerSpies().captureMessage).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe('decrypt-failure re-attest', () => {
     expect(err?.message).toBe('E2EE chat failed: 400');
     expect(err).toMatchObject({ statusCode: 400, responseBody: 'Bad request' });
     expect(gatewayCalls('chat')).toHaveLength(1);
-    expect(attestationRequests(SMALL_MODEL)).toBe(1);
+    expect(attestationRequests(SCORING_HEAD)).toBe(1);
   });
 
   it('keeps the provider\'s body out of the thrown message, breadcrumbs the failure and does not capture it', async () => {
@@ -146,7 +146,7 @@ describe('a 502 from the gateway', () => {
     expect(err?.message).toBe('E2EE chat failed: 502');
     expect(err?.responseBody).toContain('upstream gone');
     // Not an 11-attempt storm: one request per NEAR profile (RedPill fails at its key fetch in the mock).
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, FALLBACK]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD, FALLBACK]);
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(true);
   });
 });
@@ -160,7 +160,7 @@ describe('the stream dies', () => {
       { type: 'text-delta', delta: 'second try' },
       { type: 'finish', reason: 'stop' },
     ]);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD, SCORING_HEAD]);
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(false);
   });
 
@@ -220,7 +220,7 @@ describe('the stream dies', () => {
       expect(textOf(events)).toBe('second try');
       expect(served()).toBe(1);
       // Qwen3.8's empty reply came from the override, so only the marked head reaches the mock's log.
-      expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL]);
+      expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD]);
     });
 
     it('every profile empty: the first EmptyReplyError surfaces, one request per profile', async () => {
@@ -243,7 +243,7 @@ describe('the stream dies', () => {
       { type: 'finish', reason: 'stop' },
     ]);
     expect(requests()).toBe(1);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD]);
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(false);
     expect(loggerSpies().captureMessage).not.toHaveBeenCalled();
   });
@@ -276,7 +276,7 @@ describe('the two retries share one latch', () => {
 
     expect(err).not.toBeNull();
     expect(gatewayCalls('chat')).toHaveLength(2);
-    expect(attestationRequests(SMALL_MODEL)).toBe(2);
+    expect(attestationRequests(SCORING_HEAD)).toBe(2);
   });
 
   it('and neither does a stream-death retry that is then refused: one turn is at most two upstream calls', async () => {
@@ -360,6 +360,6 @@ describe('IDLE1: a stall before the first chunk', () => {
   it('is timeout-class evidence: the retry goes to the session fallback', async () => {
     await stallThenRecover();
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(true);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, FALLBACK]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD, FALLBACK]);
   });
 });

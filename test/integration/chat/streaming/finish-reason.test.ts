@@ -2,7 +2,6 @@
 //
 // A token-capped reply was once reported as a plain stop, so a caller cannot tell a
 // cut-off answer from a finished one. The client now reports `length`, streamed and buffered.
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
 import { mockGateway, server } from '@/test/helpers';
 import { captureChatBodies, collect, installChatHooks, MESSAGES, respond, textOf } from './support';

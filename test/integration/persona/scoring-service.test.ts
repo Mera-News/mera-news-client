@@ -22,7 +22,6 @@ import { addSuppression } from '@/lib/database/services/suppression-service';
 import * as topicService from '@/lib/database/services/topic-service';
 import { createTopics } from '@/lib/database/services/topic-service';
 import { ProcessingMode, type ArticleWithClusters } from '@/lib/generated/graphql-types';
-import { SMALL_MODEL } from '@/lib/llm/constants';
 import { inferenceQueue } from '@/lib/inference/InferenceQueue';
 import logger from '@/lib/logger';
 import {
@@ -56,6 +55,7 @@ import {
 } from '@/test/helpers';
 import { decideCalls, installDecide, installLlama, KEV_GPU_FAILED, llamaCalls, type LlamaCall } from '@/test/integration/chat/_helpers/llama';
 import { resetChatModules } from '@/test/integration/chat/_helpers';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 jest.setTimeout(30_000);
 
@@ -635,7 +635,7 @@ describe('batchScoreAndReason - cloud path', () => {
     const calls = gatewayCalls('batch');
     const relevance = calls.filter((c) => systemOf(c) === ART.relevanceSystemPrompt);
     expect(relevance.map(fenceCount)).toEqual([5, 2]);
-    expect(calls.every((c) => c.model === SMALL_MODEL)).toBe(true);
+    expect(calls.every((c) => c.model === SCORING_HEAD)).toBe(true);
     const bodies = await sent();
     const score = bodies.flatMap((b) => b.requests).filter((_r, i) => i < 2);
     expect(score.map((r) => r.max_tokens)).toEqual([320, 320]);

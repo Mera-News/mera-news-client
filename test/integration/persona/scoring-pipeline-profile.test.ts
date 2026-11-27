@@ -30,6 +30,7 @@ import {
   tick,
   tickUntil,
 } from './scoring-pipeline-kit';
+import { SCORING_HEAD } from '@/test/helpers/models';
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
@@ -79,7 +80,7 @@ describe('a run is bound to one profile', () => {
     expect(useForYouStore.getState().laneOutage.scoring).toBeUndefined();
   });
 
-  it('a run stored before profiles existed submits as the old SMALL_MODEL run did', async () => {
+  it('a run stored before profiles existed submits as the old SCORING_HEAD run did', async () => {
     gateway();
     await seedAndEnqueue(ids(25));
     await patchRun((run) => {

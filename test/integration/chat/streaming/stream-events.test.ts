@@ -4,7 +4,7 @@
 //   harness/gateway.test.ts > chat: streamed > "%s: sealed both ways, one attestation" (text, finish, curve rules)
 //   harness/gateway.test.ts > chat: streamed > "reasoning_content is signalled once and never shown"
 //   harness/gateway.test.ts > chat: streamed > "a body the upstream buffers (ignoreStream) is still decrypted"
-import { BIG_MODEL, CHAT_REASONING_HEADROOM_TOKENS, SMALL_MODEL } from '@/lib/llm/constants';
+import { CHAT_REASONING_HEADROOM_TOKENS } from '@/lib/llm/constants';
 import { cloudChatStream, type SseEvent } from '@/lib/llm/cloudComplete';
 import { applyRoutingTable } from '@/lib/llm/router';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
@@ -24,6 +24,7 @@ import {
   SECRET_USER,
   textOf,
 } from './support';
+import { CHAT_HEAD, SCORING_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -211,18 +212,18 @@ describe('a provider tool call in CLEAR (never expected, never silently dropped)
 });
 
 describe('the request body', () => {
-  it('carries stream true and thinking off by default, on SMALL_MODEL, with none of the optional fields', async () => {
+  it('carries stream true and thinking off by default, on SCORING_HEAD, with none of the optional fields', async () => {
     const bodies = captureChatBodies();
     server.use(...mockGateway(respond('ok')));
     await run({ model: undefined });
     const body = JSON.parse(bodies[0]);
     expect(body.stream).toBe(true);
     expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
-    expect(body.model).toBe(SMALL_MODEL);
+    expect(body.model).toBe(SCORING_HEAD);
     for (const k of ['temperature', 'max_tokens', 'max_completion_tokens', 'top_p', 'n', 'presence_penalty', 'frequency_penalty']) {
       expect(body).not.toHaveProperty(k);
     }
-    expect(gatewayCalls('chat')[0]).toMatchObject({ model: SMALL_MODEL, stream: true });
+    expect(gatewayCalls('chat')[0]).toMatchObject({ model: SCORING_HEAD, stream: true });
   });
 
   it('forwards the optional numeric fields, adding the reasoning headroom when thinking is on', async () => {
@@ -257,7 +258,7 @@ describe('the request body', () => {
   it('sends the head of the lane the caller names', async () => {
     server.use(...mockGateway(respond('ok')));
     await run({ route: 'chat-tools' });
-    expect(gatewayCalls('chat')[0].model).toBe(BIG_MODEL);
+    expect(gatewayCalls('chat')[0].model).toBe(CHAT_HEAD);
   });
 
   it('never asks a harness that cannot think to think (Qwen3.6 truncates with it on)', async () => {
@@ -265,7 +266,7 @@ describe('the request body', () => {
     server.use(...mockGateway(respond('ok')));
     await run({ maxTokens: 256, enableThinking: true });
     const body = JSON.parse(bodies[0]);
-    expect(body).toMatchObject({ model: SMALL_MODEL, chat_template_kwargs: { enable_thinking: false }, max_tokens: 256 });
+    expect(body).toMatchObject({ model: SCORING_HEAD, chat_template_kwargs: { enable_thinking: false }, max_tokens: 256 });
   });
 
   it('seals every message and leaves the caller\'s array untouched', async () => {

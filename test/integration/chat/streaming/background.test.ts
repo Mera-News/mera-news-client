@@ -3,7 +3,6 @@
 // the reply comes from the turn store when the gateway kept it, and otherwise the leg is re-sent
 // once, with `restart` clearing what was shown so nothing renders twice.
 import { http, HttpResponse } from 'msw';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import {
   cloudChatStream,
   cloudComplete,
@@ -25,6 +24,7 @@ import {
   shownText,
   textOf,
 } from './support';
+import { CHAT_HEAD, SCORING_HEAD } from '@/test/helpers/models';
 
 installChatHooks();
 
@@ -171,7 +171,7 @@ describe('flag off: every read answers turn-gone', () => {
   it('an overdue hedge timer after a departure fires no hedge and engages nothing', async () => {
     server.use(
       ...mockGateway((c) =>
-        c.index === 0 && c.model === SMALL_MODEL ? { chunks: ['late'], headerDelayMs: 300_000 } : 'hello',
+        c.index === 0 && c.model === SCORING_HEAD ? { chunks: ['late'], headerDelayMs: 300_000 } : 'hello',
       ),
     );
     const { events, done } = pump();
@@ -182,7 +182,7 @@ describe('flag off: every read answers turn-gone', () => {
     await drive(done);
 
     expect(textOf(events)).toBe('hello');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SCORING_HEAD, SCORING_HEAD]);
     expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(false);
   });
 
@@ -191,7 +191,7 @@ describe('flag off: every read answers turn-gone', () => {
     // trip, so the head gets one more deadline before the router moves on. Split on timer lateness
     // (as the old hedge did) if a brief app switch mid-turn ever shows up as slow turns.
     server.use(
-      ...mockGateway((c) => (c.model === BIG_MODEL ? { chunks: ['slow'], headerDelayMs: 60_000 } : 'fast')),
+      ...mockGateway((c) => (c.model === CHAT_HEAD ? { chunks: ['slow'], headerDelayMs: 60_000 } : 'fast')),
     );
     const { events, done } = pump({ route: 'chat-tools' });
     await advanceUntil(() => gatewayCalls('chat').length === 1);
@@ -201,7 +201,7 @@ describe('flag off: every read answers turn-gone', () => {
     await drive(done);
 
     expect(textOf(events)).toBe('fast');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, BIG_MODEL, FALLBACK]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD, CHAT_HEAD, FALLBACK]);
     expect(events.some((e) => e.type === 'restart')).toBe(false);
   });
 
@@ -471,7 +471,7 @@ describe('best-effort DELETE', () => {
       }),
       ...mockGateway((c) => {
         posts.push(c.headers['x-mera-turn-id']);
-        return c.model === BIG_MODEL ? { chunks: ['slow'], headerDelayMs: 60_000 } : 'fast';
+        return c.model === CHAT_HEAD ? { chunks: ['slow'], headerDelayMs: 60_000 } : 'fast';
       }),
     );
     const { events, done } = pump({ route: 'chat-tools' });
@@ -479,7 +479,7 @@ describe('best-effort DELETE', () => {
     await advanceUntil(() => deletes.length >= 1);
     expect(textOf(events)).toBe('fast');
     expect(deletes[0]).toBe(posts[0]);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, FALLBACK]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([CHAT_HEAD, FALLBACK]);
   });
 
   it('a finished turn is left alone', async () => {
