@@ -230,7 +230,7 @@ describe('getArticlesForCountry', () => {
     it('falls back to an empty closed page of the requested size when the field is null', async () => {
         server.use(mockGql('GetArticlesForCountry', { articlesForCountry: null }));
         const result = await ArticleService.getArticlesForCountry('NLD', { first: 7 });
-        expect(result).toEqual({ articles: [], pageInfo: { endCursor: null, hasNextPage: false, pageSize: 7 } });
+        expect(result).toEqual({ articles: [], pageInfo: { endCursor: null, hasNextPage: false, pageSize: 7 }, itemCursors: [] });
     });
 
     it('rethrows with a breadcrumb that names the country, and no capture of its own', async () => {

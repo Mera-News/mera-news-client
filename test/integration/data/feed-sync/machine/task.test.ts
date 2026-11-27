@@ -27,7 +27,7 @@ import {
   useFakeClock as freezeClockAt, // aliased: a use* name inside a plain function trips react-hooks/rules-of-hooks
 } from '@/test/helpers';
 import { jobRows, resetScheduler } from '../../scheduler/core/support';
-import { cleanupFeedSync, recordOps, resetFeedSyncMemory, seedInterest, servePersona } from '../steps/support';
+import { cleanupFeedSync, recordOps, resetFeedSyncMemory, seedInterest, servePersona, PERSONA_OP} from '../steps/support';
 import { fetchStep, gate, watchScoring, settleMachine, waitFor } from './support';
 
 jest.setTimeout(60_000);
@@ -202,7 +202,7 @@ describe('feed-sync scheduler task', () => {
   describe('maxAttempts', () => {
     it('stops its retry ladder at three attempts on the persisted job rows', async () => {
       server.use(
-        graphql.query('GetArticleIdsForPersona', () =>
+        graphql.query(PERSONA_OP, () =>
           HttpResponse.json({ errors: [{ message: 'down', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] }),
         ),
       );

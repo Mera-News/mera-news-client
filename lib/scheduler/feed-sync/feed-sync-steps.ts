@@ -50,6 +50,7 @@ import {
 import { loadUserGeoLanguageContext } from '@/lib/user-context/user-geo-language-context';
 import logger from '@/lib/logger';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
+import { useAppLanguageStore } from '@/lib/stores/app-language-store';
 import { useMeraProtocolStore } from '@/lib/stores/mera-protocol-store';
 import { passesRenderGate } from '@/lib/stores/fact-rows-selector';
 import type { ForYouSuggestion } from '@/lib/stores/for-you-store';
@@ -399,6 +400,7 @@ async function fetchPersonaBatches(
   ctx: TaskContext,
   background: boolean,
 ): Promise<PersonaQueryResult> {
+  const language = useAppLanguageStore.getState().appLanguage;
   const startedAt = Date.now();
   const budgetMs = background ? BG_TOPIC_FETCH_BUDGET_MS : TOPIC_FETCH_BUDGET_MS;
   // A lost cursor costs a repeat of the pass, never the sync.
@@ -429,7 +431,7 @@ async function fetchPersonaBatches(
     };
     try {
       const res = await withRetry(
-        () => ArticleService.getArticleIdsForPersona(batch),
+        () => ArticleService.getArticleIdsForPersona(batch, language),
         ctx.signal,
         RESOLVER_ERROR_RETRIES,
       );

@@ -18,7 +18,7 @@ import { getPipeline } from '@/lib/database/services/scoring-pipeline-store';
 import { getPipelineStatus, MIN_DISPATCH } from '@/lib/services/scoring-pipeline';
 import { useForYouStore } from '@/lib/stores/for-you-store';
 import { advanceUntilDone, assertNoGatewayViolations, gatewayCalls, graphql, HttpResponse, server } from '@/test/helpers';
-import { cleanupFeedSync, ids, resetFeedSyncMemory, resetScoringWorld, rowsById, seedInterest, serveHydrate, servePersona } from '../steps/support';
+import { cleanupFeedSync, ids, resetFeedSyncMemory, resetScoringWorld, rowsById, seedInterest, serveHydrate, servePersona, TOPICS_OP} from '../steps/support';
 import { backgroundHooks, buildRunningPipeline, oid, serveNew, settleMachine, startMachine, watchScoring } from './support';
 
 jest.setTimeout(60_000);
@@ -76,7 +76,7 @@ describe('FeedSyncMachine: arms the other machine tests leave unchecked', () => 
       await serveNew(ids(75, 'f'));
       let arrivals = 0;
       server.use(
-        graphql.query('GetArticlesForTopicsByIds', async () => {
+        graphql.query(TOPICS_OP, async () => {
           arrivals += 1;
           if (arrivals !== 3) return undefined; // falls through to the default hydrate handler
           // wait in real time only: the fake clock must not reach the coalesced refresh timer
@@ -134,7 +134,7 @@ describe('FeedSyncMachine: arms the other machine tests leave unchecked', () => 
       let arrivals = 0;
       let batchesAtLastRequest = -1;
       server.use(
-        graphql.query('GetArticlesForTopicsByIds', async () => {
+        graphql.query(TOPICS_OP, async () => {
           arrivals += 1;
           if (arrivals < 2) return undefined;
           // the second (last) request waits for the first chunk's greedy dispatch (a batch in the pipeline run), up to 20s of fake time

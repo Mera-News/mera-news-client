@@ -86,7 +86,7 @@ const storyLeaders = (list: readonly FixtureArticle[]): FixtureArticle[] =>
 // Persona ids: topic matches first (spread over the requested topics), then each
 // requested headline scope. The app inserts in that order and the server clips a
 // capped response in request order, so topics must stay ahead of headlines.
-query<'articleIdsForPersona'>('GetArticleIdsForPersona', (c) => {
+const personaIds = (c: Ctx) => {
     const input = c.variables.query ?? {};
     const topics: { text: string }[] = input.topics ?? [];
     const scopes: { scope: string; countryCode?: string | null; limit?: number | null }[] =
@@ -94,7 +94,7 @@ query<'articleIdsForPersona'>('GetArticleIdsForPersona', (c) => {
     const empty = isEmpty(c);
     return {
         articleIdsForPersona: {
-            __typename: 'PersonaQueryResult',
+            __typename: 'PersonaQueryResult' as const,
             topicResults: topics.map((t, ti) => {
                 const ids = empty ? [] : TOPIC_ARTICLE_IDS.filter((_, i) => i % topics.length === ti);
                 return {
@@ -126,26 +126,33 @@ query<'articleIdsForPersona'>('GetArticleIdsForPersona', (c) => {
             }),
         },
     };
-});
+};
+query<'articleIdsForPersona'>('GetArticleIdsForPersona', personaIds);
+// The server orders by language; the mock ignores it.
+query<'articleIdsForPersona'>('GetArticleIdsForPersonaForLanguage', personaIds);
 
 // Never truncates: every requested article that exists is delivered.
-query<'articlesForTopicsByIds'>('GetArticlesForTopicsByIds', (c) => ({
+const topicsByIds = (c: Ctx) => ({
     articlesForTopicsByIds: {
-        __typename: 'ArticlesForTopicsByIdsResponse',
+        __typename: 'ArticlesForTopicsByIdsResponse' as const,
         articles: isEmpty(c) ? [] : articlesByIds(c.variables.articleIds).map((a) => articleWithClusters(a, c)),
         dailyLimitReached: false,
         resetAt: null,
     },
-}));
+});
+query<'articlesForTopicsByIds'>('GetArticlesForTopicsByIds', topicsByIds);
+query<'articlesForTopicsByIds'>('GetArticlesForTopicsByIdsScored', topicsByIds);
 
 // Quota-exempt sibling: never capped.
-query<'articlesForStories'>('GetArticlesForStories', (c) => ({
+const storiesByIds = (c: Ctx) => ({
     articlesForStories: {
-        __typename: 'ArticlesForTopicsByIdsResponse',
+        __typename: 'ArticlesForTopicsByIdsResponse' as const,
         articles: isEmpty(c) ? [] : articlesByIds(c.variables.articleIds).map((a) => articleWithClusters(a, c)),
         dailyLimitReached: false,
     },
-}));
+});
+query<'articlesForStories'>('GetArticlesForStories', storiesByIds);
+query<'articlesForStories'>('GetArticlesForStoriesScored', storiesByIds);
 
 // Pre-story_key documents, sent only after a server answered GRAPHQL_VALIDATION_FAILED.
 query<'articlesForTopicsByIds'>('GetArticlesForTopicsByIdsLegacy', (c) => ({
@@ -191,6 +198,7 @@ const articlePage = (c: Ctx, list: readonly FixtureArticle[]) => {
         __typename: 'ArticlesForPublicationSourceResponse' as const,
         articles: page.items.map((a) => newsArticle(a, c)),
         pageInfo: page.pageInfo,
+        itemCursors: page.items.map((a) => a.id),
     };
 };
 
@@ -209,6 +217,7 @@ const headlinesPage = (c: Ctx) => {
                 __typename: 'TopHeadline' as const,
                 stableClusterId: stableClusterId(a),
                 clusterSize: clusterSize(a),
+                publisherCount: 0,
                 article: newsArticle(a, c),
             })),
             pageInfo: page.pageInfo,
@@ -230,31 +239,31 @@ ops.push({
         ],
     }),
 });
-ops.push({
-    kind: 'query',
-    name: 'GetWorldHeadlines',
-    resolve: (c) => {
-        const ids: string[] = c.variables.canonicalTopicIds ?? [];
-        const all = storyLeaders(articlesForCountry(c.variables.countryCode));
-        const base = headlinesPage(c).topHeadlinesForCountry;
-        const matches = ids.length === 0 || ids.includes('ct-politics');
-        const page = pageOf(isEmpty(c) || !matches ? [] : all, c.variables.first, c.variables.after);
-        return {
-            worldHeadlines: {
-                __typename: 'WorldHeadlinesResponse',
-                headlines: page.items.map((a) => ({
-                    __typename: 'TopHeadline',
-                    stableClusterId: stableClusterId(a),
-                    clusterSize: clusterSize(a),
-                    article: newsArticle(a, c),
-                })),
-                pageInfo: page.pageInfo,
-                editionBuiltAt: base.editionBuiltAt,
-                facets: isEmpty(c) ? [] : [{ __typename: 'CanonicalTopicFacet', topicId: 'ct-politics', count: all.length }],
-            },
-        };
-    },
-});
+const worldHeadlines = (c: Ctx) => {
+    const ids: string[] = c.variables.canonicalTopicIds ?? [];
+    const all = storyLeaders(articlesForCountry(c.variables.countryCode));
+    const base = headlinesPage(c).topHeadlinesForCountry;
+    const matches = ids.length === 0 || ids.includes('ct-politics');
+    const page = pageOf(isEmpty(c) || !matches ? [] : all, c.variables.first, c.variables.after);
+    return {
+        worldHeadlines: {
+            __typename: 'WorldHeadlinesResponse',
+            headlines: page.items.map((a) => ({
+                __typename: 'TopHeadline',
+                stableClusterId: stableClusterId(a),
+                clusterSize: clusterSize(a),
+                publisherCount: 0,
+                article: newsArticle(a, c),
+            })),
+            pageInfo: page.pageInfo,
+            editionBuiltAt: base.editionBuiltAt,
+            facets: isEmpty(c) ? [] : [{ __typename: 'CanonicalTopicFacet', topicId: 'ct-politics', count: all.length }],
+        },
+    };
+};
+ops.push({ kind: 'query', name: 'GetWorldHeadlines', resolve: worldHeadlines });
+// The server orders by language; the mock ignores it.
+ops.push({ kind: 'query', name: 'GetWorldHeadlinesForLanguage', resolve: worldHeadlines });
 
 // The publisher's own articles (three per fixture outlet), newest first unless the
 // caller asks for TOP_HEADLINES, which ranks by story size.

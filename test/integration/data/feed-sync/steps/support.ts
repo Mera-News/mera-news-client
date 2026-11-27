@@ -190,6 +190,14 @@ export function art(id: string, over: Partial<ArticleWithClusters> = {}): Articl
 export const ids = (n: number, prefix = 'a'): string[] =>
   Array.from({ length: n }, (_, i) => `${prefix}${String(i).padStart(3, '0')}`);
 
+/**
+ * The client asks for the scored / language documents first and falls back to today's; a handler
+ * answers every name one request can arrive under, and recordings count them under today's name.
+ */
+export const PERSONA_OP = /^GetArticleIdsForPersona(ForLanguage)?$/;
+export const TOPICS_OP = /^GetArticlesForTopicsByIds(Scored)?$/;
+const baseOp = (op: string): string => op.replace(/(Scored|ForLanguage)$/, '');
+
 export interface PersonaServe {
   /** topic text -> article ids it matched, in the order the server lists them */
   topics?: Record<string, string[]>;
@@ -207,7 +215,7 @@ export interface PersonaServe {
  */
 export function servePersona(serve: PersonaServe) {
   const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
-  return graphql.query('GetArticleIdsForPersona', ({ variables }) => {
+  return graphql.query(PERSONA_OP, ({ variables }) => {
     const query = (variables.query ?? {}) as {
       topics?: { text: string }[];
       topHeadlines?: { scopes?: { scope: string; countryCode?: string | null }[] };
@@ -291,7 +299,7 @@ export function serveHydrate(serve: HydrateServe = {}) {
   const stats: HydrateStats = { inFlight: 0, maxInFlight: 0, requests: [] };
   const build = serve.article ?? ((id: string) => art(id));
   const handler = (op: 'GetArticlesForTopicsByIds' | 'GetArticlesForStories') =>
-    graphql.query(op, async ({ variables }) => {
+    graphql.query(new RegExp(`^${op}Scored$|^${op}$`), async ({ variables }) => {
       const requested = (variables.articleIds ?? []) as string[];
       stats.requests.push({ op, ids: requested });
       serve.timeline?.push(`${op}:${requested.length}`);
@@ -355,7 +363,7 @@ export function recordOps() {
         .clone()
         .json()
         .then((b: { operationName?: string; variables?: Record<string, any> }) => {
-          slot.op = b.operationName ?? '';
+          slot.op = baseOp(b.operationName ?? '');
           slot.variables = b.variables ?? {};
         }),
     );

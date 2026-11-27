@@ -34,6 +34,7 @@ import {
   serveHydrate,
   servePersona,
   spyOnExport,
+  PERSONA_OP,
 } from '../steps/support';
 import {
   backgroundHooks,
@@ -195,7 +196,7 @@ describe('FeedSyncMachine in background mode', () => {
   describe('a background run that fails', () => {
     it('fails silently: the cause reaches the caller, with no status, no toast and no failed snapshot', async () => {
       await serveFresh(3);
-      server.use(graphql.query('GetArticleIdsForPersona', () => HttpResponse.error()));
+      server.use(graphql.query(PERSONA_OP, () => HttpResponse.error()));
 
       await expect(run(backgroundHooks())).rejects.toBeDefined();
 

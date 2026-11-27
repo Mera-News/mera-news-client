@@ -36,6 +36,8 @@ export interface FixtureArticle {
     entities: string[];
     city: string | null;
     region: string | null;
+    /** The publication's reading score, 0 to 100; absent on most fixtures. */
+    readingScore?: number | null;
 }
 
 export interface FixtureArticleSet {
@@ -90,6 +92,8 @@ const articles: FixtureArticle[] = rows.map(([title, description, category, even
     entities: [city ?? 'Sample Coast'],
     city,
     region,
+    // Two scored fixtures; the rest stay unscored.
+    readingScore: i === 0 ? 72 : i === 3 ? 15 : null,
 }));
 
 export const articleFixtures: FixtureArticleSet = { publications, articles };
@@ -216,6 +220,7 @@ export function articleWithClusters(a: FixtureArticle, ctx: BuildContext): Artic
         maxClusterSize: clusterMembers(a).length,
         // Own id: every fixture article is its own story, so no dedup edge joins them.
         story_key: a.id,
+        readingScore: a.readingScore ?? null,
     };
 }
 

@@ -3,7 +3,12 @@
 import logger from '@/lib/logger';
 import { _resetNetworkTrackingForTests, useNetworkStore } from '@/lib/stores/network-store';
 import { useForYouStore } from '@/lib/stores/for-you-store';
-import { __resetExploreWindowSupport, __resetPublisherOrderSupport, __resetStoryKeySupport } from '@/lib/article-service';
+import {
+    __resetExploreWindowSupport,
+    __resetPersonaLanguageSupport,
+    __resetPublisherOrderSupport,
+    __resetStoryKeySupport,
+} from '@/lib/article-service';
 import { authState, graphql, HttpResponse, server } from '@/test/helpers';
 
 export interface Sent {
@@ -23,6 +28,7 @@ export function resetServiceState(): void {
     __resetPublisherOrderSupport();
     __resetExploreWindowSupport();
     __resetStoryKeySupport();
+    __resetPersonaLanguageSupport();
     _resetNetworkTrackingForTests();
     useNetworkStore.setState({ isConnected: true, serverReachable: true, serverSlow: false, internetReachable: true });
     useForYouStore.getState().setSyncStatusMessage(null);

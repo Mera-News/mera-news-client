@@ -38,7 +38,9 @@ import {
   seedTracked,
   servePersona,
   spyOnExport,
+  PERSONA_OP,
 } from './support';
+import { useAppLanguageStore } from '@/lib/stores/app-language-store';
 import { PERSONA_V3_MIGRATION_KEY } from '@/lib/services/persona-migration-service';
 
 beforeEach(resetFeedSyncMemory);
@@ -55,6 +57,20 @@ describe('which retrieval path runs', () => {
     expect(await sent.count('GetArticleIdsForTopics')).toBe(0);
     expect(out.personaMeta).toBeDefined();
     expect(out.freeTopicTexts).toEqual(new Set());
+  });
+
+  it('sends the reader\'s base language with every persona request', async () => {
+    await seedInterest('I follow Formula 1 racing', ['formula 1']);
+    useAppLanguageStore.setState({ appLanguage: 'pt-BR' });
+    const sent = recordOps();
+    try {
+      await stepFetchTopicIds('', makeCtx().ctx);
+    } finally {
+      useAppLanguageStore.setState({ appLanguage: 'en' });
+    }
+
+    const [persona] = await sent.named('GetArticleIdsForPersona');
+    expect(persona.variables.language).toBe('pt');
   });
 
   it('with no topic rows, a fact that still lists topics in its metadata gets the country and world headlines, never a per-topic query', async () => {
@@ -269,7 +285,7 @@ describe('what the persona request carries', () => {
       HttpResponse.json({ data: null, errors: [{ message: 'resolver timed out', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] });
     /** Answers every batch; `fail` decides per batch whether this request errors. */
     const serveBatches = (fail: (firstText: string) => boolean = () => false, onBatch: (firstText: string) => void = () => {}) =>
-      graphql.query('GetArticleIdsForPersona', ({ variables }) => {
+      graphql.query(PERSONA_OP, ({ variables }) => {
         const query = variables.query as { topics: Asked[]; topHeadlines?: unknown };
         const first = query.topics[0]?.text ?? '';
         onBatch(first);
@@ -637,7 +653,7 @@ describe('a resolver error inside a 200', () => {
     const t = makeCtx();
     let calls = 0;
     server.use(
-      graphql.query('GetArticleIdsForPersona', () => {
+      graphql.query(PERSONA_OP, () => {
         calls += 1;
         t.abort();
         return HttpResponse.json({
@@ -656,7 +672,7 @@ describe('a resolver error inside a 200', () => {
     await seedInterest('I follow racing', ['formula 1']);
     let calls = 0;
     server.use(
-      graphql.query('GetArticleIdsForPersona', () => {
+      graphql.query(PERSONA_OP, () => {
         calls += 1;
         return HttpResponse.json({
           data: null,

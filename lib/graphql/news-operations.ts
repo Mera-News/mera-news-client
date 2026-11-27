@@ -9,13 +9,16 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
   'ClusterMembershipsForArticles',
   'GetArticleById',
   'GetArticleIdsForPersona',
+  'GetArticleIdsForPersonaForLanguage',
   'GetArticlesForCountry',
   'GetArticlesForPublisher',
   'GetArticlesForPublisherNoOrder',
   'GetArticlesForStories',
   'GetArticlesForStoriesLegacy',
+  'GetArticlesForStoriesScored',
   'GetArticlesForTopicsByIds',
   'GetArticlesForTopicsByIdsLegacy',
+  'GetArticlesForTopicsByIdsScored',
   'GetCanonicalTopics',
   'GetNewsClusterForArticle',
   'GetRecentArticleCount',
@@ -25,6 +28,7 @@ export const NEWS_OPERATION_NAMES: readonly string[] = [
   'GetTopHeadlinesForCountry',
   'GetTopHeadlinesForCountryWindowed',
   'GetWorldHeadlines',
+  'GetWorldHeadlinesForLanguage',
   'NewsServerStatus',
   'PlaceSearch',
   'PublicationDisplayNames',
@@ -43,7 +47,7 @@ export const NEWS_OPERATIONS_NOT_PUBLIC: Readonly<Record<string, string>> = {
 
 /** News operations whose documents live in the app, not here. The app's own test checks them; a
  *  server that passes news through allows them with the list above. */
-export const HOST_NEWS_OPERATION_NAMES: readonly string[] = ['GetNewsPublishers', 'PublicationProfile', 'SearchPublishers'];
+export const HOST_NEWS_OPERATION_NAMES: readonly string[] = ['GetNewsPublishers', 'PublicationProfile', 'PublicationProfileLegacy', 'SearchPublishers'];
 
 export const ACCOUNT_OPERATION_NAMES: readonly string[] = [
   'ActiveFeedbackRequests',

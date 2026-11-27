@@ -62,13 +62,16 @@ describe('the operation classes', () => {
       'ClusterMembershipsForArticles',
       'GetArticleById',
       'GetArticleIdsForPersona',
+      'GetArticleIdsForPersonaForLanguage',
       'GetArticlesForCountry',
       'GetArticlesForPublisher',
       'GetArticlesForPublisherNoOrder',
       'GetArticlesForStories',
       'GetArticlesForStoriesLegacy',
+      'GetArticlesForStoriesScored',
       'GetArticlesForTopicsByIds',
       'GetArticlesForTopicsByIdsLegacy',
+      'GetArticlesForTopicsByIdsScored',
       'GetCanonicalTopics',
       'GetNewsClusterForArticle',
       'GetRecentArticleCount',
@@ -78,6 +81,7 @@ describe('the operation classes', () => {
       'GetTopHeadlinesForCountry',
       'GetTopHeadlinesForCountryWindowed',
       'GetWorldHeadlines',
+      'GetWorldHeadlinesForLanguage',
       'NewsServerStatus',
       'PlaceSearch',
       'PublicationDisplayNames',
@@ -93,6 +97,7 @@ describe('the operation classes', () => {
   it('answers news only for a listed news operation', () => {
     expect(isNewsOperation('GetArticleIdsForPersona')).toBe(true);
     expect(isNewsOperation('PublicationProfile')).toBe(true);
+    expect(isNewsOperation('PublicationProfileLegacy')).toBe(true);
     expect(isNewsOperation('GetUserPersona')).toBe(false);
     expect(isNewsOperation('GetFactCheck')).toBe(false);
     expect(isNewsOperation('SomethingNew')).toBe(false);

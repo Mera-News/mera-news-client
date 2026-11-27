@@ -38,6 +38,7 @@ import {
   seedTracked,
   servePersona,
   serveHydrate,
+  PERSONA_OP,
 } from './support';
 
 beforeEach(resetFeedSyncMemory);
@@ -223,7 +224,7 @@ describe('a sync that stopped short, then resumed', () => {
     Array.from({ length: count }, (_, i) => `${prefix} ${String(i).padStart(3, '0')}`);
   /** The batch starting at `first` errors while `down()` says so; everything else falls through. */
   const failBatch = (first: string, down: () => boolean) =>
-    graphql.query('GetArticleIdsForPersona', ({ variables }) => {
+    graphql.query(PERSONA_OP, ({ variables }) => {
       const asked = (variables.query as { topics: { text: string }[] }).topics;
       if (!down() || asked[0]?.text !== first) return undefined;
       return HttpResponse.json({ data: null, errors: [{ message: 'down', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] });

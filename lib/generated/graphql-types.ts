@@ -101,6 +101,8 @@ export type ArticleWithClusters = {
   maxClusterSize?: Maybe<Scalars['Int']['output']>;
   pubDate: Scalars['DateTime']['output'];
   publication_name?: Maybe<Scalars['String']['output']>;
+  /** The publication's phone reading score, 0 to 100, from the reading check. Null when it has none. */
+  readingScore?: Maybe<Scalars['Int']['output']>;
   significance?: Maybe<Scalars['Int']['output']>;
   story_key?: Maybe<Scalars['String']['output']>;
   title?: Maybe<Scalars['String']['output']>;
@@ -112,6 +114,8 @@ export type ArticleWithClusters = {
 export type ArticlesForPublicationSourceResponse = {
   __typename?: 'ArticlesForPublicationSourceResponse';
   articles: Array<NewsArticle>;
+  /** One cursor per article, in the same order: passed as after, it continues right after that article, so a caller that keeps only part of a page loses nothing. */
+  itemCursors: Array<Scalars['String']['output']>;
   pageInfo: CursorPageInfo;
 };
 
@@ -472,7 +476,7 @@ export type NewsPublishersResponse = {
   pageInfo: CursorPageInfo;
 };
 
-/** A hybrid (text + semantic) search hit. Deliberately headline-only — hydrate the ids you want through the metered articlesForTopicsByIds to get body text and the link. */
+/** A hybrid (text + semantic) search hit. Deliberately headline-only: hydrate the ids you want through articlesForTopicsByIds to get body text and the link. */
 export type NewsSearchHit = {
   __typename?: 'NewsSearchHit';
   _id: Scalars['ID']['output'];
@@ -597,6 +601,8 @@ export type PublicationProfile = {
   /** Page through its articles with articlesForPublisher. */
   newsPublisherId: Scalars['ID']['output'];
   publicationType?: Maybe<Scalars['String']['output']>;
+  /** The publication's phone reading score, 0 to 100, from the reading check. Null when it has none. */
+  readingScore?: Maybe<Scalars['Int']['output']>;
   /** Every source publication_name under this publisher. Key per-publication preferences on these. */
   sourceNames: Array<Scalars['String']['output']>;
   /** The publisher's subscribe page. Null means it sells no consumer subscription. */
@@ -746,6 +752,7 @@ export type QueryArticleByIdArgs = {
 
 
 export type QueryArticleIdsForPersonaArgs = {
+  language?: InputMaybe<Scalars['String']['input']>;
   query: PersonaQueryInput;
 };
 
@@ -958,6 +965,7 @@ export type QueryWorldHeadlinesArgs = {
   canonicalTopicIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   countryCode?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
+  language?: InputMaybe<Scalars['String']['input']>;
   windowHours?: InputMaybe<Scalars['Int']['input']>;
 };
 
@@ -1050,6 +1058,10 @@ export type TopHeadline = {
   article: NewsArticle;
   /** Global cluster size across the clustering window; 0 for a singleton. */
   clusterSize: Scalars['Int']['output'];
+  /** Passed as after, continues right after this headline. Null where the list gives no per-headline cursor. */
+  cursor?: Maybe<Scalars['String']['output']>;
+  /** Distinct publishers among the cluster members, counted when the edition was built; 0 for a singleton. */
+  publisherCount: Scalars['Int']['output'];
   /** Stable cross-run identity of this headline's cluster; null for a singleton. */
   stableClusterId?: Maybe<Scalars['String']['output']>;
 };

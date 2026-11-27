@@ -1,7 +1,7 @@
 // The two reads that fall back for a server older than the app: a publisher's articles (`order`)
 // and a country's top headlines (Explore's `windowHours`), plus the headlines read's error policy.
 // Real Apollo client against MSW. The fallback flags are session memory, reset in beforeEach.
-import ArticleService from '@/lib/article-service';
+import ArticleService, { __resetWorldTopicsSupport } from '@/lib/article-service';
 import {
     advanceUntilDone,
     graphql,
@@ -54,6 +54,7 @@ describe('getArticlesForPublisher', () => {
         expect(result).toEqual({
             articles: [],
             pageInfo: { endCursor: null, hasNextPage: false, pageSize: 20 },
+            itemCursors: [],
             orderApplied: true,
         });
     });
@@ -311,5 +312,68 @@ describe('getTopHeadlinesForCountry', () => {
             expectNoServiceCapture(logs.capture);
             expect(breakerFailures()).toBe(0);
         });
+    });
+});
+
+// World asks for the reader's language first and falls back to today's documents, in order.
+describe('getWorldHeadlines: language', () => {
+    beforeEach(__resetWorldTopicsSupport);
+    const todays = { countryCode: 'NLD', first: 20 };
+
+    it('sends the base language of a full tag with the language document and today\'s other variables', async () => {
+        const sent = recordOps();
+        const page = await ArticleService.getWorldHeadlines('NLD', { language: 'fr-CA' });
+        const calls = await sentOf(sent);
+        expect(calls.map((c) => c.op)).toEqual(['GetWorldHeadlinesForLanguage']);
+        expect(calls[0].variables).toEqual({ ...todays, language: 'fr' });
+        expect(page.topicsSupported).toBe(true);
+    });
+
+    it.each([[undefined], [null], [''], ['english'], ['f1']])('never sends %j as a language', async (language) => {
+        const sent = recordOps();
+        await ArticleService.getWorldHeadlines('NLD', { language });
+        const calls = await sentOf(sent);
+        expect(calls.map((c) => c.op)).toEqual(['GetWorldHeadlines']);
+        expect(calls[0].variables).toEqual(todays);
+        expect(calls[0].variables).not.toHaveProperty('language');
+    });
+
+    it('a rejected language document latches: that call and the next send the World document', async () => {
+        const logs = spyLogger();
+        server.use(validationFailed('GetWorldHeadlinesForLanguage'));
+        const sent = recordOps();
+        const first = await ArticleService.getWorldHeadlines('NLD', { language: 'en' });
+        await ArticleService.getWorldHeadlines('NLD', { language: 'en' });
+        expect(await opNames(sent)).toEqual(['GetWorldHeadlinesForLanguage', 'GetWorldHeadlines', 'GetWorldHeadlines']);
+        expect(first.topicsSupported).toBe(true);
+        expectNoServiceCapture(logs.capture);
+    });
+
+    it('when the World document is rejected too, the country document serves, and the next call skips both', async () => {
+        server.use(validationFailed('GetWorldHeadlinesForLanguage'), validationFailed('GetWorldHeadlines'));
+        const sent = recordOps();
+        const first = await ArticleService.getWorldHeadlines('NLD', { language: 'en' });
+        expect(first.topicsSupported).toBe(false);
+        const before = (await sentOf(sent)).length;
+        const next = await ArticleService.getWorldHeadlines('NLD', { language: 'en' });
+        expect(next.topicsSupported).toBe(false);
+        const after = (await sentOf(sent)).slice(before).map((c) => c.op);
+        expect(after).toEqual(['GetTopHeadlinesForCountry']);
+    });
+
+    it('any other error rethrows with the breadcrumb and does not latch', async () => {
+        const logs = spyLogger();
+        server.use(mockGqlError('GetWorldHeadlinesForLanguage', 'INTERNAL_SERVER_ERROR', { message: 'world failed' }));
+        await expect(ArticleService.getWorldHeadlines('NLD', { language: 'en' })).rejects.toThrow('world failed');
+        expect(logs.crumb).toHaveBeenCalledWith(
+            expect.stringContaining('getWorldHeadlines'),
+            'article-service',
+            expect.anything(),
+            expect.anything(),
+        );
+        server.resetHandlers();
+        const sent = recordOps();
+        await ArticleService.getWorldHeadlines('NLD', { language: 'en' });
+        expect(await opNames(sent)).toEqual(['GetWorldHeadlinesForLanguage']);
     });
 });

@@ -20,6 +20,7 @@ import {
     WorldHeadlinesResponse,
 } from './generated/graphql-types';
 import logger from './logger';
+import { baseLang } from '@/lib/algorithms/geo-language-priority';
 
 // GraphQL Query for fetching a single article by ID.
 const GET_ARTICLE_BY_ID = gql`
@@ -192,13 +193,27 @@ ${TOP_HEADLINES_SELECTION}      facets {
   }
 `;
 
+const GET_WORLD_HEADLINES_FOR_LANGUAGE = gql`
+  query GetWorldHeadlinesForLanguage($countryCode: String, $first: Int, $after: String, $windowHours: Int, $canonicalTopicIds: [ID!], $language: String) {
+    worldHeadlines(countryCode: $countryCode, first: $first, after: $after, windowHours: $windowHours, canonicalTopicIds: $canonicalTopicIds, language: $language) {
+${TOP_HEADLINES_SELECTION}      facets {
+        topicId
+        count
+      }
+    }
+  }
+`;
+
 /** True once the server rejected worldHeadlines / canonicalTopics as unknown: the old documents serve the list for the session. */
 let worldTopicsUnsupported = false;
+/** True once the server rejected the worldHeadlines language argument: the World document without it serves the session. */
+let worldLanguageUnsupported = false;
 let canonicalTopicsCache: Promise<CanonicalTopic[]> | null = null;
 
 /** Test seam. */
 export function __resetWorldTopicsSupport(): void {
     worldTopicsUnsupported = false;
+    worldLanguageUnsupported = false;
     canonicalTopicsCache = null;
 }
 
@@ -549,6 +564,19 @@ const ARTICLE_HYDRATION_FIELDS = `
         maxClusterSize
 `;
 
+// The same page with the publication's reading score; a server without it rejects the whole request (see readingScoreUnsupported).
+const GET_ARTICLES_FOR_TOPICS_BY_IDS_SCORED = gql`
+  query GetArticlesForTopicsByIdsScored($articleIds: [ID!]!) {
+    articlesForTopicsByIds(articleIds: $articleIds) {
+      articles {
+        ${ARTICLE_HYDRATION_FIELDS}
+        story_key
+        readingScore
+      }
+    }
+  }
+`;
+
 const GET_ARTICLES_FOR_TOPICS_BY_IDS = gql`
   query GetArticlesForTopicsByIds($articleIds: [ID!]!) {
     articlesForTopicsByIds(articleIds: $articleIds) {
@@ -567,6 +595,19 @@ const GET_ARTICLES_FOR_TOPICS_BY_IDS_LEGACY = gql`
     articlesForTopicsByIds(articleIds: $articleIds) {
       articles {
         ${ARTICLE_HYDRATION_FIELDS}
+      }
+    }
+  }
+`;
+
+// GET_ARTICLES_FOR_STORIES (below) with the publication's reading score; a server without it rejects the whole request (see readingScoreUnsupported).
+const GET_ARTICLES_FOR_STORIES_SCORED = gql`
+  query GetArticlesForStoriesScored($articleIds: [ID!]!) {
+    articlesForStories(articleIds: $articleIds) {
+      articles {
+        ${ARTICLE_HYDRATION_FIELDS}
+        story_key
+        readingScore
       }
     }
   }
@@ -620,6 +661,32 @@ const GET_CLUSTER_MEMBERSHIPS_FOR_ARTICLES = gql`
 const GET_ARTICLE_IDS_FOR_PERSONA = gql`
   query GetArticleIdsForPersona($query: PersonaQueryInput!) {
     articleIdsForPersona(query: $query) {
+      topicResults {
+        topicText
+        articleIds
+        matchMeta {
+          articleId
+          vectorScore
+          textScore
+          stableClusterId
+        }
+        nextCursor
+        hasNextPage
+      }
+      headlineResults {
+        scope
+        countryCode
+        articleIds
+        clusterSizes
+        stableClusterIds
+      }
+    }
+  }
+`;
+
+const GET_ARTICLE_IDS_FOR_PERSONA_FOR_LANGUAGE = gql`
+  query GetArticleIdsForPersonaForLanguage($query: PersonaQueryInput!, $language: String) {
+    articleIdsForPersona(query: $query, language: $language) {
       topicResults {
         topicText
         articleIds
@@ -716,9 +783,31 @@ let relatedFiltersUnsupported = false;
  */
 let storyKeyUnsupported = false;
 
-/** Test seam. */
+/**
+ * True once the server rejected `ArticleWithClusters.readingScore`: hydrate with
+ * today's documents for the session (rows then store a null score, which only
+ * means today's election order).
+ */
+let readingScoreUnsupported = false;
+
+/** True once the server rejected the articleIdsForPersona language argument: the persona document without it serves the session. */
+let personaLanguageUnsupported = false;
+
+/** Test seam: resets both hydration latches. */
 export function __resetStoryKeySupport(): void {
     storyKeyUnsupported = false;
+    readingScoreUnsupported = false;
+}
+
+/** Test seam. */
+export function __resetPersonaLanguageSupport(): void {
+    personaLanguageUnsupported = false;
+}
+
+/** The reader's base language when it is a valid 2 or 3 letter code, else undefined: the server refuses anything else, so it is never sent. */
+function newsLanguage(code: string | null | undefined): string | undefined {
+    const base = baseLang(code);
+    return base && /^[a-z]{2,3}$/.test(base) ? base : undefined;
 }
 
 /** True once the server rejected `clusterMembershipsForArticles`: no refresh this session. */
@@ -735,11 +824,27 @@ export const MAX_CLUSTER_MEMBERSHIP_IDS = 500;
 /** One hydration chunk. Concurrent workers that fail before the latch lands each fall back on their own, which is harmless. */
 async function hydrateBatch(
     field: 'articlesForTopicsByIds' | 'articlesForStories',
+    scoredDoc: DocumentNode,
     doc: DocumentNode,
     legacyDoc: DocumentNode,
     articleIds: string[],
 ): Promise<ArticleWithClusters[]> {
     type Data = Partial<Record<typeof field, ArticlesForTopicsByIdsResponse>>;
+    if (!readingScoreUnsupported && !storyKeyUnsupported) {
+        try {
+            const { data } = await client.query<Data>({
+                query: scoredDoc,
+                variables: { articleIds },
+                fetchPolicy: 'no-cache',
+                context: { expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED'] },
+            });
+            return data?.[field]?.articles ?? [];
+        } catch (error) {
+            if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) throw error;
+            readingScoreUnsupported = true;
+            logger.info('[ArticleService] server has no ArticleWithClusters.readingScore; hydration without it this session');
+        }
+    }
     if (!storyKeyUnsupported) {
         try {
             const { data } = await client.query<Data>({
@@ -845,9 +950,10 @@ export class ArticleService {
      */
     static async getArticleIdsForPersona(
         query: PersonaQueryInput,
+        language?: string | null,
     ): Promise<PersonaQueryResult> {
         try {
-            return await this.queryPersonaBatch(query);
+            return await this.queryPersonaBatch(query, language);
         } catch (error) {
             logger.addBreadcrumb(
                 '[ArticleService] getArticleIdsForPersona FAILED',
@@ -861,7 +967,24 @@ export class ArticleService {
 
     private static async queryPersonaBatch(
         query: PersonaQueryInput,
+        language?: string | null,
     ): Promise<PersonaQueryResult> {
+        const lang = newsLanguage(language);
+        if (lang && !personaLanguageUnsupported) {
+            try {
+                const { data } = await client.query<{ articleIdsForPersona: PersonaQueryResult }>({
+                    query: GET_ARTICLE_IDS_FOR_PERSONA_FOR_LANGUAGE,
+                    variables: { query, language: lang },
+                    fetchPolicy: 'no-cache',
+                    context: { expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED'] },
+                });
+                return data?.articleIdsForPersona ?? { topicResults: [], headlineResults: [] };
+            } catch (error) {
+                if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) throw error;
+                personaLanguageUnsupported = true;
+                logger.info('[ArticleService] server has no articleIdsForPersona language; persona document without it this session');
+            }
+        }
         const { data } = await client.query<{
             articleIdsForPersona: PersonaQueryResult;
         }>({
@@ -908,6 +1031,7 @@ export class ArticleService {
                         const batch = batches[idx];
                         const rows = await hydrateBatch(
                             'articlesForTopicsByIds',
+                            GET_ARTICLES_FOR_TOPICS_BY_IDS_SCORED,
                             GET_ARTICLES_FOR_TOPICS_BY_IDS,
                             GET_ARTICLES_FOR_TOPICS_BY_IDS_LEGACY,
                             batch,
@@ -977,6 +1101,7 @@ export class ArticleService {
                         const batch = batches[idx];
                         const rows = await hydrateBatch(
                             'articlesForStories',
+                            GET_ARTICLES_FOR_STORIES_SCORED,
                             GET_ARTICLES_FOR_STORIES,
                             GET_ARTICLES_FOR_STORIES_LEGACY,
                             batch,
@@ -1181,6 +1306,7 @@ export class ArticleService {
             return data?.articlesForCountry || {
                 articles: [],
                 pageInfo: { endCursor: null, hasNextPage: false, pageSize: options?.first ?? 20 },
+                itemCursors: [],
             };
         } catch (error) {
             this.reportQueryError('getArticlesForCountry', error, { countryCode });
@@ -1280,19 +1406,39 @@ export class ArticleService {
      */
     static async getWorldHeadlines(
         countryCode: string | null | undefined,
-        options: { first?: number; after?: string; windowHours?: number; canonicalTopicIds?: string[] }
+        options: { first?: number; after?: string; windowHours?: number; canonicalTopicIds?: string[]; language?: string | null }
     ): Promise<WorldHeadlinesPage> {
+        const language = newsLanguage(options.language);
+        const variables = {
+            countryCode: countryCode === 'GLOBAL' ? null : countryCode,
+            first: options.first ?? 20,
+            after: options.after,
+            windowHours: options.windowHours,
+            canonicalTopicIds: options.canonicalTopicIds?.length ? options.canonicalTopicIds : undefined,
+        };
+        if (language && !worldLanguageUnsupported && !worldTopicsUnsupported) {
+            try {
+                const { data } = await client.query<{ worldHeadlines: Omit<WorldHeadlinesPage, 'topicsSupported'> }>({
+                    query: GET_WORLD_HEADLINES_FOR_LANGUAGE,
+                    variables: { ...variables, language },
+                    fetchPolicy: 'no-cache',
+                    context: { expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED'] },
+                });
+                if (data?.worldHeadlines) return { ...data.worldHeadlines, topicsSupported: true };
+            } catch (error) {
+                if (!graphQLErrorCodes(error).includes('GRAPHQL_VALIDATION_FAILED')) {
+                    this.reportQueryError('getWorldHeadlines', error, { countryCode });
+                    throw error;
+                }
+                worldLanguageUnsupported = true;
+                logger.info('[ArticleService] server has no worldHeadlines language; World document without it this session');
+            }
+        }
         if (!worldTopicsUnsupported) {
             try {
                 const { data } = await client.query<{ worldHeadlines: Omit<WorldHeadlinesPage, 'topicsSupported'> }>({
                     query: GET_WORLD_HEADLINES,
-                    variables: {
-                        countryCode: countryCode === 'GLOBAL' ? null : countryCode,
-                        first: options.first ?? 20,
-                        after: options.after,
-                        windowHours: options.windowHours,
-                        canonicalTopicIds: options.canonicalTopicIds?.length ? options.canonicalTopicIds : undefined,
-                    },
+                    variables,
                     fetchPolicy: 'no-cache',
                     context: { expectedErrorCodes: ['GRAPHQL_VALIDATION_FAILED'] },
                 });
@@ -1337,6 +1483,7 @@ export class ArticleService {
         const empty: ArticlesForPublicationSourceResponse = {
             articles: [],
             pageInfo: { endCursor: null, hasNextPage: false, pageSize: first },
+            itemCursors: [],
         };
         const base = { newsPublisherId, first, after: options?.after };
         const withOrder = options?.order !== undefined && !publisherOrderUnsupported;

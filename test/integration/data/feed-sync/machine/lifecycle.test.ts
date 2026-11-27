@@ -45,6 +45,7 @@ import {
   servePersona,
   spyOnExport,
   tickUntilScored,
+  PERSONA_OP,
 } from '../steps/support';
 import {
   feedSyncMachine,
@@ -521,7 +522,7 @@ describe('FeedSyncMachine lifecycle', () => {
 
     it('a real server failure on the persona query fails the same way', async () => {
       await serveNew(ids(3));
-      server.use(graphql.query('GetArticleIdsForPersona', () => HttpResponse.error()));
+      server.use(graphql.query(PERSONA_OP, () => HttpResponse.error()));
 
       await expect(run()).rejects.toBeDefined();
 

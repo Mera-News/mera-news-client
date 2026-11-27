@@ -69,7 +69,9 @@ describe('FeedSyncMachine bookkeeping faults', () => {
     // The persona query is refused with a non-retryable error whose message classifies to a code.
     const refusePersonaQuery = async () => {
       await serveNew(ids(3));
-      server.use(mockGqlError('GetArticleIdsForPersona', 'BAD_USER_INPUT', { message: 'storage backend refused the persona query' }));
+      for (const op of ['GetArticleIdsForPersonaForLanguage', 'GetArticleIdsForPersona']) {
+        server.use(mockGqlError(op, 'BAD_USER_INPUT', { message: 'storage backend refused the persona query' }));
+      }
     };
     const failSnapshotWriteOnce = () => {
       const original = persistence.saveMachineSnapshot;

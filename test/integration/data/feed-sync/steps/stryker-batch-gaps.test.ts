@@ -43,6 +43,7 @@ import {
   seedInterest,
   serveHydrate,
   stageRowsById,
+  PERSONA_OP,
 } from './support';
 
 beforeEach(resetFeedSyncMemory);
@@ -50,7 +51,7 @@ afterEach(cleanupFeedSync);
 
 /** A persona answer from a server that sends no per-article match metadata and no stable ids. */
 function servePersonaWithoutMeta(topicText: string, topicIds: string[], headlineIds: string[]) {
-  return graphql.query('GetArticleIdsForPersona', () =>
+  return graphql.query(PERSONA_OP, () =>
     HttpResponse.json({
       data: {
         articleIdsForPersona: {

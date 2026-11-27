@@ -155,6 +155,55 @@ describe('getArticleIdsForPersona', () => {
             'warning',
         );
     });
+
+    describe('the reader\'s language', () => {
+        const query = personaQuery({ topics: personaTopics(1) });
+        const validationFailed = () =>
+            mockGqlError('GetArticleIdsForPersonaForLanguage', 'GRAPHQL_VALIDATION_FAILED', {
+                httpStatus: 400,
+                headers: { 'Content-Type': 'application/graphql-response+json' },
+            });
+
+        it('a valid language goes with the language document', async () => {
+            const sent = recordOps();
+            await ArticleService.getArticleIdsForPersona(query, 'hi');
+            const calls = await sentOf(sent);
+            expect(calls.map((c) => c.op)).toEqual(['GetArticleIdsForPersonaForLanguage']);
+            expect(calls[0].variables).toEqual({ query, language: 'hi' });
+        });
+
+        it.each([[undefined], [null], [''], ['english'], ['f1']])('%j sends today\'s document with the query only', async (language) => {
+            const sent = recordOps();
+            await ArticleService.getArticleIdsForPersona(query, language);
+            const calls = await sentOf(sent);
+            expect(calls.map((c) => c.op)).toEqual(['GetArticleIdsForPersona']);
+            expect(calls[0].variables).toEqual({ query });
+        });
+
+        it('a rejected language document latches: no capture, today\'s document answers in the same call', async () => {
+            const logs = spyLogger();
+            server.use(validationFailed());
+            const sent = recordOps();
+            const result = await ArticleService.getArticleIdsForPersona(query, 'hi');
+            await ArticleService.getArticleIdsForPersona(query, 'hi');
+            expect((await sentOf(sent)).map((c) => c.op)).toEqual([
+                'GetArticleIdsForPersonaForLanguage',
+                'GetArticleIdsForPersona',
+                'GetArticleIdsForPersona',
+            ]);
+            expect(result.topicResults).toHaveLength(1);
+            expect(logs.capture).not.toHaveBeenCalled();
+        });
+
+        it('any other error rethrows and does not latch', async () => {
+            server.use(mockGqlError('GetArticleIdsForPersonaForLanguage', 'INTERNAL_SERVER_ERROR', { message: 'persona language failed' }));
+            await expect(ArticleService.getArticleIdsForPersona(query, 'hi')).rejects.toThrow('persona language failed');
+            server.resetHandlers();
+            const sent = recordOps();
+            await ArticleService.getArticleIdsForPersona(query, 'hi');
+            expect((await sentOf(sent)).map((c) => c.op)).toEqual(['GetArticleIdsForPersonaForLanguage']);
+        });
+    });
 });
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `id-${i}`);
@@ -173,42 +222,82 @@ const hydrate = (op: string, key: string, over: (asked: string[]) => Record<stri
         };
     });
 
-// A server without ArticleWithClusters.story_key answers the real graphql-response+json 400.
+// An older server rejects a document with the real graphql-response+json 400.
 describe.each([
     ['getArticlesForTopicsByIds', 'GetArticlesForTopicsByIds'],
     ['getArticlesForStories', 'GetArticlesForStories'],
-] as const)('%s on a server without story_key', (method, op) => {
-    const reject = () =>
-        mockGqlError(op, 'GRAPHQL_VALIDATION_FAILED', {
+] as const)('%s hydration tiers', (method, op) => {
+    const reject = (name: string) =>
+        mockGqlError(name, 'GRAPHQL_VALIDATION_FAILED', {
             httpStatus: 400,
             headers: { 'Content-Type': 'application/graphql-response+json' },
         });
+    const wanted = ARTICLE_IDS.slice(0, 2);
+    const sequence = async (sent: Awaited<ReturnType<typeof recordOps>>) => (await sentOf(sent)).map((c) => c.op);
 
-    it('falls back to the Legacy document once, latches, and neither captures nor raises the sync banner', async () => {
-        const logs = spyLogger();
-        server.use(reject());
+    it('sends the scored document first and returns the fixture reading scores', async () => {
         const sent = recordOps();
-        const wanted = ARTICLE_IDS.slice(0, 2);
+        const result = await ArticleService[method]([ARTICLE_IDS[0], ARTICLE_IDS[1], ARTICLE_IDS[3]]);
+        expect(await sequence(sent)).toEqual([`${op}Scored`]);
+        const scoreOf = (id: string) => result.articles.find((a) => a._id === id)?.readingScore;
+        expect([scoreOf(ARTICLE_IDS[0]), scoreOf(ARTICLE_IDS[1]), scoreOf(ARTICLE_IDS[3])]).toEqual([72, null, 15]);
+    });
+
+    it('a server without readingScore falls back to today\'s document once, latches, and neither captures nor raises the sync banner', async () => {
+        const logs = spyLogger();
+        server.use(reject(`${op}Scored`));
+        const sent = recordOps();
         const result = await ArticleService[method]([...wanted]);
         await ArticleService[method]([...wanted]);
-        expect((await sentOf(sent)).map((c) => c.op)).toEqual([op, `${op}Legacy`, `${op}Legacy`]);
+        expect(await sequence(sent)).toEqual([`${op}Scored`, op, op]);
         expect(result.articles.map((a) => a._id).sort()).toEqual([...wanted].sort());
         expect(logs.capture).not.toHaveBeenCalled();
         expect(useForYouStore.getState().syncStatusMessage).toBeNull();
     });
 
-    it('any other error is rethrown and does not latch', async () => {
-        server.use(mockGqlError(op, 'INTERNAL_SERVER_ERROR'));
+    it('a server without story_key (and so without readingScore) walks scored, today\'s, then Legacy, and latches both', async () => {
+        const logs = spyLogger();
+        server.use(reject(`${op}Scored`), reject(op));
+        const sent = recordOps();
+        const result = await ArticleService[method]([...wanted]);
+        await ArticleService[method]([...wanted]);
+        expect(await sequence(sent)).toEqual([`${op}Scored`, op, `${op}Legacy`, `${op}Legacy`]);
+        expect(result.articles.map((a) => a._id).sort()).toEqual([...wanted].sort());
+        expect(logs.capture).not.toHaveBeenCalled();
+        expect(useForYouStore.getState().syncStatusMessage).toBeNull();
+    });
+
+    it('after both are latched, the next call goes straight to Legacy', async () => {
+        server.use(reject(`${op}Scored`), reject(op));
+        await ArticleService[method]([...wanted]);
+        server.resetHandlers();
+        const sent = recordOps();
+        await ArticleService[method]([...wanted]);
+        expect(await sequence(sent)).toEqual([`${op}Legacy`]);
+    });
+
+    it('any other error on the scored document is rethrown and does not latch', async () => {
+        server.use(mockGqlError(`${op}Scored`, 'INTERNAL_SERVER_ERROR'));
         await expect(ArticleService[method]([ARTICLE_IDS[0]])).rejects.toThrow();
         server.resetHandlers();
         const sent = recordOps();
         await ArticleService[method]([ARTICLE_IDS[0]]);
-        expect((await sentOf(sent)).map((c) => c.op)).toEqual([op]);
+        expect(await sequence(sent)).toEqual([`${op}Scored`]);
+    });
+
+    it('any other error on today\'s document is rethrown and does not latch', async () => {
+        server.use(reject(`${op}Scored`), mockGqlError(op, 'INTERNAL_SERVER_ERROR'));
+        await expect(ArticleService[method]([ARTICLE_IDS[0]])).rejects.toThrow();
+        server.resetHandlers();
+        const sent = recordOps();
+        await ArticleService[method]([ARTICLE_IDS[0]]);
+        // The scored document is latched off by its own rejection; today's document is tried again.
+        expect(await sequence(sent)).toEqual([op]);
     });
 });
 
 describe('getArticlesForTopicsByIds', () => {
-    const echo = () => hydrate('GetArticlesForTopicsByIds', 'articlesForTopicsByIds');
+    const echo = () => hydrate('GetArticlesForTopicsByIdsScored', 'articlesForTopicsByIds');
 
     it('returns an empty result for no ids without sending a request', async () => {
         const sent = recordOps();
@@ -222,7 +311,7 @@ describe('getArticlesForTopicsByIds', () => {
         const result = await ArticleService.getArticlesForTopicsByIds([...wanted]);
         expect(result.articles.map((a) => a._id).sort()).toEqual([...wanted].sort());
         expect(Object.keys(result)).toEqual(['articles']);
-        expect(await sentOf(sent, 'GetArticlesForTopicsByIds')).toHaveLength(1);
+        expect(await sentOf(sent, 'GetArticlesForTopicsByIdsScored')).toHaveLength(1);
     });
 
     it.each([
@@ -234,7 +323,7 @@ describe('getArticlesForTopicsByIds', () => {
         server.use(echo());
         const sent = recordOps();
         const result = await ArticleService.getArticlesForTopicsByIds(ids(count));
-        const calls = await sentOf(sent, 'GetArticlesForTopicsByIds');
+        const calls = await sentOf(sent, 'GetArticlesForTopicsByIdsScored');
         expect(calls.map((c) => c.variables.articleIds.length).sort((a, b) => b - a)).toEqual(sizes);
         expect(result.articles).toHaveLength(count);
     });
@@ -243,7 +332,7 @@ describe('getArticlesForTopicsByIds', () => {
         server.use(echo());
         const sent = recordOps();
         await ArticleService.getArticlesForTopicsByIds(ids(60));
-        const calls = (await sentOf(sent, 'GetArticlesForTopicsByIds')).map((c) => c.variables.articleIds as string[]);
+        const calls = (await sentOf(sent, 'GetArticlesForTopicsByIdsScored')).map((c) => c.variables.articleIds as string[]);
         const first = calls.find((c) => c[0] === 'id-0')!;
         const second = calls.find((c) => c[0] === 'id-50')!;
         expect(first).toHaveLength(50);
@@ -254,7 +343,7 @@ describe('getArticlesForTopicsByIds', () => {
         // The granted prefix of each chunk, the way articlesForTopicsByIds clips while
         // the server's download cap is on. The extra fields are not in the document.
         server.use(
-            hydrate('GetArticlesForTopicsByIds', 'articlesForTopicsByIds', (asked) => ({
+            hydrate('GetArticlesForTopicsByIdsScored', 'articlesForTopicsByIds', (asked) => ({
                 articles: asked.slice(0, 2).map(articleWithClusters),
                 dailyLimitReached: true,
                 resetAt: '2026-06-25T00:00:00.000Z',
@@ -264,7 +353,7 @@ describe('getArticlesForTopicsByIds', () => {
         const result = await ArticleService.getArticlesForTopicsByIds(ids(51));
         expect(result.articles.map((a) => a._id).sort()).toEqual(['id-0', 'id-1', 'id-50'].sort());
         expect(Object.keys(result)).toEqual(['articles']);
-        const [first] = await sentOf(sent, 'GetArticlesForTopicsByIds');
+        const [first] = await sentOf(sent, 'GetArticlesForTopicsByIdsScored');
         expect(first.query).toContain('articlesForTopicsByIds');
         expect(first.query).not.toMatch(/dailyLimitReached|resetAt/);
     });
@@ -280,14 +369,14 @@ describe('getArticlesForTopicsByIds', () => {
     });
 
     it('treats a null field as an empty result', async () => {
-        server.use(mockGql('GetArticlesForTopicsByIds', { articlesForTopicsByIds: null }));
+        server.use(mockGql('GetArticlesForTopicsByIdsScored', { articlesForTopicsByIds: null }));
         const result = await ArticleService.getArticlesForTopicsByIds(['id1']);
         expect(result).toEqual({ articles: [] });
     });
 
     it('rethrows with an error-level breadcrumb and no capture of its own', async () => {
         const logs = spyLogger();
-        server.use(mockGqlError('GetArticlesForTopicsByIds', 'INTERNAL_SERVER_ERROR', { message: 'batch fetch error' }));
+        server.use(mockGqlError('GetArticlesForTopicsByIdsScored', 'INTERNAL_SERVER_ERROR', { message: 'batch fetch error' }));
         await expect(ArticleService.getArticlesForTopicsByIds(['id1'])).rejects.toThrow('batch fetch error');
         expectNoServiceCapture(logs.capture);
         expect(logs.crumb).toHaveBeenCalledWith(
@@ -314,11 +403,11 @@ describe('getArticlesForStories', () => {
     });
 
     it('splits 51 ids into 50 then 1 and reports progress', async () => {
-        server.use(hydrate('GetArticlesForStories', 'articlesForStories'));
+        server.use(hydrate('GetArticlesForStoriesScored', 'articlesForStories'));
         const sent = recordOps();
         const progress: number[] = [];
         const result = await ArticleService.getArticlesForStories(ids(51), (done) => progress.push(done));
-        const calls = await sentOf(sent, 'GetArticlesForStories');
+        const calls = await sentOf(sent, 'GetArticlesForStoriesScored');
         expect(calls.map((c) => c.variables.articleIds.length).sort((a, b) => b - a)).toEqual([50, 1]);
         expect(result.articles).toHaveLength(51);
         expect(progress[0]).toBe(0);
@@ -327,7 +416,7 @@ describe('getArticlesForStories', () => {
 
     it('rethrows with an error-level breadcrumb and no capture of its own', async () => {
         const logs = spyLogger();
-        server.use(mockGqlError('GetArticlesForStories', 'INTERNAL_SERVER_ERROR', { message: 'stories failed' }));
+        server.use(mockGqlError('GetArticlesForStoriesScored', 'INTERNAL_SERVER_ERROR', { message: 'stories failed' }));
         await expect(ArticleService.getArticlesForStories(['id1'])).rejects.toThrow('stories failed');
         expectNoServiceCapture(logs.capture);
         expect(logs.crumb).toHaveBeenCalledWith(
