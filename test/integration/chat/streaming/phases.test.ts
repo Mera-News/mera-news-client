@@ -153,9 +153,11 @@ describe('retrying: any re-entry into the request builder', () => {
     const { seen, start } = watch({ route: 'chat-tools' });
     const events = await drive(start());
     expect(textOf(events)).toBe('fast');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, SMALL_MODEL]);
+    // RedPill fails the mock's NEAR-shaped attestation, so the next profile that answers is NEAR Qwen3.8.
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, 'Qwen/Qwen3.8-27B']);
     // The next profile builds only once the head failed, so `retrying` never shows at t=0.
-    expect(seen).toEqual(['reset', 'securing', 'retrying', 'thinking']);
+    // One `retrying` per profile tried: RedPill Qwen3.8 and Gemma fail the mock's key fetch first.
+    expect(seen).toEqual(['reset', 'securing', 'retrying', 'retrying', 'retrying', 'thinking']);
   });
 
   it('a stream-death retry says retrying after the first thinking', async () => {

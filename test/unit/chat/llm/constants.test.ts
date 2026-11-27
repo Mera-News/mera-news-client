@@ -10,7 +10,7 @@ describe('llm/constants', () => {
     });
 
     it('contains the expected model identifier', () => {
-      expect(BIG_MODEL).toBe('Qwen/Qwen3.8-27B');
+      expect(BIG_MODEL).toBe('Qwen/Qwen3.6-35B-A3B-FP8');
     });
 
     it('follows the provider/model-name pattern', () => {
@@ -32,8 +32,8 @@ describe('llm/constants', () => {
       expect(SMALL_MODEL).toMatch(/^[^/]+\/.+$/);
     });
 
-    it('is distinct from BIG_MODEL', () => {
-      expect(SMALL_MODEL).not.toBe(BIG_MODEL);
+    it('equals BIG_MODEL: the chat and bulk lanes both head on Qwen3.6', () => {
+      expect(SMALL_MODEL).toBe(BIG_MODEL);
     });
   });
 

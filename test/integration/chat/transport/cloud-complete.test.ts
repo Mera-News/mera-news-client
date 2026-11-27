@@ -28,7 +28,9 @@ import {
 const SECRET_SYSTEM = 'SENTINEL-SYSTEM-5e2a you are the test model';
 const SECRET_USER = 'SENTINEL-USER-b07c what is the news';
 const REQUEST = { systemPrompt: SECRET_SYSTEM, prompt: SECRET_USER };
-const FALLBACK_MODEL = BIG_MODEL;
+// The mock gateway serves only NEAR-shaped attestation, so RedPill profiles fail it and the
+// next profile that answers after Qwen3.6 is NEAR Qwen3.8 (in the chat lanes as in the bulk ones).
+const FALLBACK_MODEL = 'Qwen/Qwen3.8-27B';
 
 beforeEach(async () => {
   await resetTransport({ signIn: false });

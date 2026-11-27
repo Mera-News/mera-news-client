@@ -226,8 +226,8 @@ async function chatReply(call: GatewayCall, reply: GatewayReply, request: Reques
 // --- routes --------------------------------------------------------------
 
 // GET /v1/routing: no auth, the gateway's seed ranking with every profile healthy (version 1).
-const CHAT_RANKING = ['near/qwen3.8-27b', 'near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b'];
-const BULK_RANKING = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b'];
+const CHAT_RANKING = ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b', 'near/qwen3.8-27b'];
+const BULK_RANKING = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
 const routing = http.get('*/v1/routing', () =>
   HttpResponse.json({
     version: 1,

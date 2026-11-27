@@ -264,7 +264,8 @@ describe('cloudBatchComplete', () => {
 
       expect(first).toEqual([{ id: 'c1', output: 'recovered' }]);
       expect(second).toEqual([{ id: 'c2', output: 'recovered' }]);
-      expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SMALL_MODEL, BIG_MODEL, BIG_MODEL]);
+      // The bulk lanes rank NEAR Qwen3.8 second.
+      expect(gatewayCalls('batch').map((c) => c.model)).toEqual([SMALL_MODEL, 'Qwen/Qwen3.8-27B', 'Qwen/Qwen3.8-27B']);
     });
   });
 });

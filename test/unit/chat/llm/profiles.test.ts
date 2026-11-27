@@ -17,13 +17,14 @@ describe('profiles and the default table', () => {
 
   it('ranks every lane per the contract, every profile once', () => {
     // Same lists as mera-inference-gateway src/routing/profiles.ts LANES.
-    const chat = ['near/qwen3.8-27b', 'near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
+    const chat = ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b', 'near/qwen3.8-27b'];
     const bulk = ['near/qwen3.6-35b-a3b', 'near/qwen3.8-27b', 'redpill/qwen3.8-27b', 'redpill/gemma-4-31b'];
-    const kimi = 'redpill/kimi-k2.6';
     expect(DEFAULT_TABLE).toEqual({
-      'chat-tools': [...chat, kimi], 'chat-single': [...chat, kimi],
-      scoring: bulk, topics: [...bulk, kimi], background: bulk,
+      'chat-tools': chat, 'chat-single': chat,
+      scoring: bulk, topics: bulk, background: bulk,
     });
+    // Mapped, but in no lane: RedPill no longer offers E2EE v2 for it.
+    for (const lane of LANES) expect(DEFAULT_TABLE[lane]).not.toContain('redpill/kimi-k2.6');
     for (const lane of LANES) expect(new Set(DEFAULT_TABLE[lane]).size).toBe(DEFAULT_TABLE[lane].length);
   });
 

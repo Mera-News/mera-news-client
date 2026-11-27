@@ -4,7 +4,7 @@
 // Every test runs on its own fake date, three hours after the last, so no client cache carries over.
 import { invalidateJwtCache } from '@/lib/platform/auth';
 import { ProcessingMode } from '@/lib/generated/graphql-types';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
+import { BIG_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream } from '@/lib/llm/cloudComplete';
 import { PING_DEADLINE_MS, prewarmCloudChat, useChatReadiness } from '@/lib/llm/prewarm';
 import { useCloudChatStore } from '@/lib/stores/cloud-chat-store';
@@ -66,17 +66,17 @@ const requestCounter = () => {
 };
 
 describe('prewarmCloudChat, cloud mode, signed in', () => {
-  it('attests BIG and SMALL once each and sends BIG the one fixed ping: nothing else', async () => {
+  it('attests the top two of each lane once each and sends BIG the one fixed ping: nothing else', async () => {
     const bodies = captureChatBodies();
     server.use(...mockGateway(respond('ready')));
 
     expect(prewarmCloudChat({ ping: true })).toBeUndefined();
     await settled();
 
-    // Exactly the two primaries, which since 2026-09-16 are also each other's fallback.
+    // Both lanes head on Qwen3.6 (BIG = SMALL); the seconds are RedPill Qwen3.8 (chat) and NEAR Qwen3.8 (bulk).
     expect(attestationRequests(BIG_MODEL)).toBe(1);
-    expect(attestationRequests(SMALL_MODEL)).toBe(1);
-    expect(attestationRequests()).toBe(2);
+    expect(attestationRequests('Qwen/Qwen3.8-27B')).toBe(1);
+    expect(attestationRequests()).toBe(3);
     expect(gatewayCalls().map((c) => c.route)).toEqual(['chat']);
     const [call] = gatewayCalls('chat');
     expect(call).toMatchObject({ model: BIG_MODEL, stream: false });
@@ -126,7 +126,8 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     await advanceUntil(() => status() !== 'warming', PING_DEADLINE_MS + 5_000);
     expect(status()).toBe('error');
     await advanceUntil(() => status() === 'ready', 60_000);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, SMALL_MODEL]);
+    // RedPill fails the mock's NEAR-shaped attestation, so the next profile that answers is NEAR Qwen3.8.
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, 'Qwen/Qwen3.8-27B']);
   });
 
   it("a failed turn's banner clears when the next open's ping answers: Mera is reachable again", async () => {
@@ -211,7 +212,7 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
   it('swallows a failing secondary attestation: the primary is still warmed', async () => {
     server.use(
       http.get('*/api/attestation/report', ({ request }) =>
-        new URL(request.url).searchParams.get('model') === SMALL_MODEL
+        new URL(request.url).searchParams.get('model') === 'Qwen/Qwen3.8-27B'
           ? new HttpResponse('nope', { status: 403 })
           : undefined,
       ),

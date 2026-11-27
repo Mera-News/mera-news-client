@@ -6,6 +6,7 @@
 //   harness/gateway.test.ts > chat: streamed > "a body the upstream buffers (ignoreStream) is still decrypted"
 import { BIG_MODEL, CHAT_REASONING_HEADROOM_TOKENS, SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, type SseEvent } from '@/lib/llm/cloudComplete';
+import { applyRoutingTable } from '@/lib/llm/router';
 import { gatewayCalls, mockGateway, server } from '@/test/helpers';
 import {
   captureChatBodies,
@@ -227,6 +228,8 @@ describe('the request body', () => {
   it('forwards the optional numeric fields, adding the reasoning headroom when thinking is on', async () => {
     const bodies = captureChatBodies();
     server.use(...mockGateway(respond('ok')));
+    // Headroom only rides a harness that can think: the Qwen3.6 head cannot, so pin Qwen3.8.
+    applyRoutingTable({ version: 99, lanes: { 'chat-tools': { state: 'ok', profiles: ['near/qwen3.8-27b'] } } });
     await run({ route: 'chat-tools', temperature: 0.9, maxTokens: 256, topP: 0.95, presencePenalty: 0.1, frequencyPenalty: 0.2, n: 2, enableThinking: true });
     const body = JSON.parse(bodies[0]);
     expect(body).toMatchObject({ temperature: 0.9, top_p: 0.95, presence_penalty: 0.1, frequency_penalty: 0.2, n: 2 });

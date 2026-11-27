@@ -2,7 +2,7 @@
 // the SSE body, and re-types the cut as CallerAbortError (never a model verdict, never a retry).
 // Already held by harness/gateway.test.ts > chat: abort > "a caller abort mid-stream marks the recorded
 // call aborted": CallerAbortError, aborted flag, one call. This file adds what that test leaves out.
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
+import { BIG_MODEL } from '@/lib/llm/constants';
 import { CallerAbortError, cloudChatStream } from '@/lib/llm/cloudComplete';
 import { isProfileMarked } from '@/lib/llm/router';
 import { attestationRequests, gatewayCalls, mockGateway, server } from '@/test/helpers';
@@ -11,7 +11,9 @@ import { advanceUntil, captureChatBodies, collect, installChatHooks, loggerSpies
 
 installChatHooks();
 
-const FALLBACK = BIG_MODEL;
+// The mock gateway serves only NEAR-shaped attestation, so RedPill profiles fail it and the
+// next profile that answers after Qwen3.6 is NEAR Qwen3.8 (in the chat lanes as in the bulk ones).
+const FALLBACK = 'Qwen/Qwen3.8-27B';
 const SLOW = 60_000;
 const settle = (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e);
 
@@ -55,7 +57,7 @@ describe('stop while a profile is pending', () => {
     await advanceUntil(() => gatewayCalls('chat').length === 2);
     expect(gatewayCalls('chat').map((c) => [c.model, c.aborted])).toEqual([
       [BIG_MODEL, true],
-      [SMALL_MODEL, false],
+      [FALLBACK, false],
     ]);
 
     stop.abort();
@@ -64,8 +66,8 @@ describe('stop while a profile is pending', () => {
     expect(await outcome).toBeInstanceOf(CallerAbortError);
     expect(gatewayCalls('chat').map((c) => c.aborted)).toEqual([true, true]);
     // The deadline was a verdict on the head; the stop is none on the next profile.
-    expect(isProfileMarked('near/qwen3.8-27b')).toBe(true);
-    expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(false);
+    expect(isProfileMarked('near/qwen3.6-35b-a3b')).toBe(true);
+    expect(isProfileMarked('near/qwen3.8-27b')).toBe(false);
     expect(loggerSpies().captureMessage).not.toHaveBeenCalled();
   });
 });

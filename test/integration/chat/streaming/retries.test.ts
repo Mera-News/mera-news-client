@@ -40,7 +40,9 @@ import {
 
 installChatHooks();
 
-const FALLBACK = BIG_MODEL;
+// The mock gateway serves only NEAR-shaped attestation, so RedPill profiles fail it and the
+// next chat profile that answers after the Qwen3.6 head is NEAR Qwen3.8.
+const FALLBACK = 'Qwen/Qwen3.8-27B';
 const DECRYPT_400 = { status: 400, body: { error: `Provider failed for model '${SMALL_MODEL}': Decryption failed` } };
 const run = () => collect(cloudChatStream({ messages: MESSAGES, route: 'topics' }));
 const fail = (p: Promise<unknown>) => p.then(() => null, (e: Error & { statusCode?: number; responseBody?: string }) => e);

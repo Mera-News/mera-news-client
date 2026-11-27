@@ -293,8 +293,10 @@ describe('chat: first-token deadline', () => {
     expect(seen).toEqual(['fast']);
     const [head, next] = gatewayCalls('chat');
     expect(head).toMatchObject({ model: BIG_MODEL, aborted: true });
-    expect(next).toMatchObject({ model: SMALL_MODEL, aborted: false });
-    expect(attestationRequests()).toBe(2);
+    // RedPill fails the mock's NEAR-shaped attestation, so the next profile that answers is NEAR Qwen3.8.
+    expect(next).toMatchObject({ model: 'Qwen/Qwen3.8-27B', aborted: false });
+    // One key fetch per profile tried: the head, the two RedPill profiles, then NEAR Qwen3.8.
+    expect(attestationRequests()).toBe(4);
   });
 });
 

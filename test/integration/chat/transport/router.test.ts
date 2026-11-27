@@ -3,7 +3,6 @@
 // failed is ONE error event and an outage; 401, 429 and an offline device never switch. Real stack
 // against the gateway mock; the mock serves NEAR only, so a RedPill leg is seen at its key fetch.
 import { http, HttpResponse } from 'msw';
-import { BIG_MODEL, SMALL_MODEL } from '@/lib/llm/constants';
 import { cloudChatStream, cloudComplete } from '@/lib/llm/cloudComplete';
 import { MIN_INTERACTIVE_INTERVAL_MS } from '@/lib/llm/gateway-rate-limiter';
 import { PROFILES } from '@/lib/llm/profiles';
@@ -39,6 +38,10 @@ import {
 installChatHooks();
 
 const REDPILL_MODEL = PROFILES['redpill/qwen3.8-27b'].model;
+// The two NEAR models. The chat lanes rank RedPill between them, and the mock's RedPill key fetch
+// fails, so a chat failover from the head reaches NEAR Qwen3.8 next.
+const QWEN36 = PROFILES['near/qwen3.6-35b-a3b'].model;
+const QWEN38 = PROFILES['near/qwen3.8-27b'].model;
 const DOWN = { status: 503, body: { error: { code: 'model_unavailable', message: 'down' } } };
 const chat = () => collect(cloudChatStream({ messages: MESSAGES, route: 'chat-tools' }));
 const fail = (p: Promise<unknown>) => p.then(() => null, (e: Error & { statusCode?: number }) => e);
@@ -79,30 +82,31 @@ describe('a model down mid-turn', () => {
     const sentAt: number[] = [];
     server.use(...mockGateway((c) => {
       sentAt.push(Date.now());
-      return c.model === BIG_MODEL ? DOWN : 'hello';
+      return c.model === QWEN36 ? DOWN : 'hello';
     }));
 
     const events = chat();
     await drive(events);
 
     expect(textOf(await events)).toBe('hello');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([QWEN36, QWEN38]);
     expect(gatewayCalls('chat').map((c) => c.headers['x-mera-provider'])).toEqual(['near', 'near']);
-    expect(sentAt[1] - sentAt[0]).toBeLessThanOrEqual(MIN_INTERACTIVE_INTERVAL_MS + 100);
+    // One limiter slot per leg: the two RedPill key fetches, then the NEAR send.
+    expect(sentAt[1] - sentAt[0]).toBeLessThanOrEqual(3 * MIN_INTERACTIVE_INTERVAL_MS + 100);
     // Absorbed: a breadcrumb, never an event.
     expect(loggerSpies().captureException).not.toHaveBeenCalled();
     expect(loggerSpies().addBreadcrumb).toHaveBeenCalledWith(
       'model profile failed, next profile', 'router',
-      expect.objectContaining({ lane: 'chat-tools', profile: 'near/qwen3.8-27b', failure_class: 'model_unavailable' }),
+      expect.objectContaining({ lane: 'chat-tools', profile: 'near/qwen3.6-35b-a3b', failure_class: 'model_unavailable' }),
       'warning',
     );
     // The next call starts on the healthy profile.
-    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.6-35b-a3b');
+    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.8-27b');
   });
 
   it('leaves a model that sends no first token after the 30s chat deadline, not 130s', async () => {
     useStrictClock('2026-11-10T00:00:00Z');
-    server.use(...mockGateway((c) => (c.model === BIG_MODEL ? { chunks: ['late'], headerDelayMs: 200_000 } : 'hello')));
+    server.use(...mockGateway((c) => (c.model === QWEN36 ? { chunks: ['late'], headerDelayMs: 200_000 } : 'hello')));
     const events = chat();
     await advanceUntil(() => gatewayCalls('chat').length === 1);
     const openedAt = Date.now();
@@ -115,13 +119,13 @@ describe('a model down mid-turn', () => {
   });
 
   it('moves a buffered call on from an empty 2xx', async () => {
-    server.use(...mockGateway((c) => (c.model === SMALL_MODEL ? { status: 200, body: '' } : 'ok')));
+    server.use(...mockGateway((c) => (c.model === QWEN36 ? { status: 200, body: '' } : 'ok')));
     const out = await cloudComplete({ systemPrompt: 's', prompt: 'p', route: 'background' });
     expect(out).toBe('ok');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([SMALL_MODEL, BIG_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([QWEN36, QWEN38]);
   });
 
-  it('reaches RedPill Qwen third, with its own provider on the key fetch', async () => {
+  it('reaches RedPill Qwen second, with its own provider on the key fetch', async () => {
     useStrictClock('2026-11-10T00:00:00Z');
     const attests = watchAttestations();
     server.use(...mockGateway(() => ({ status: 502, body: { error: 'upstream gone' } })));
@@ -142,11 +146,11 @@ describe('a lane whose whole chain failed', () => {
 
     // The head's failure, as callers have always seen it; the event names where the chain ended.
     expect(err?.message).toBe('E2EE chat failed: 502');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([QWEN36, QWEN38]);
     expect(exhaustedEvents()).toHaveLength(1);
     expect(exhaustedEvents()[0][1]).toEqual(expect.objectContaining({
       level: 'error',
-      tags: { lane: 'chat-tools', profile: 'redpill/kimi-k2.6', failure_class: 'attestation', routing_version: '0' },
+      tags: { lane: 'chat-tools', profile: 'near/qwen3.8-27b', failure_class: 'upstream', routing_version: '0' },
     }));
     expect(useForYouStore.getState().laneOutage['chat-tools']).toEqual({ since: expect.any(Number) });
   });
@@ -164,7 +168,7 @@ describe('failures that are not the model never switch', () => {
     server.use(...mockGateway(() => ({ status: 401, body: 'Unauthorized' })));
     const err = await fail(chat());
     expect(err).toMatchObject({ statusCode: 401 });
-    expect(new Set(gatewayCalls('chat').map((c) => c.model))).toEqual(new Set([BIG_MODEL]));
+    expect(new Set(gatewayCalls('chat').map((c) => c.model))).toEqual(new Set([QWEN36]));
     expect(gatewayCalls('chat')).toHaveLength(2);
     expect(exhaustedEvents()).toHaveLength(0);
   });
@@ -173,8 +177,8 @@ describe('failures that are not the model never switch', () => {
     server.use(...mockGateway(() => ({ status: 429, body: 'slow down', headers: { 'Retry-After': '30' } })));
     const err = await fail(chat());
     expect(err?.name).toBe('RateLimitedError');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL]);
-    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.8-27b');
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([QWEN36]);
+    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.6-35b-a3b');
   });
 
   it('offline: a deadline proves nothing, so nothing is marked and nothing switches', async () => {
@@ -184,8 +188,8 @@ describe('failures that are not the model never switch', () => {
     const outcome = fail(chat());
     await drive(outcome, 60_000);
     expect(await outcome).not.toBeNull();
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL]);
-    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.8-27b');
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([QWEN36]);
+    expect(routeLane('chat-tools')[0].id).toBe('near/qwen3.6-35b-a3b');
   });
 });
 
@@ -209,7 +213,7 @@ describe('the routing table', () => {
   });
 
   it('a fast-fail 503 carries the table, which the app takes at once', async () => {
-    server.use(...mockGateway((c) => (c.model === BIG_MODEL
+    server.use(...mockGateway((c) => (c.model === QWEN36
       ? { status: 503, body: { ...DOWN.body, routing: table(9, ['near/qwen3.6-35b-a3b', 'redpill/qwen3.8-27b']) } }
       : 'ok')));
     expect(textOf(await chat())).toBe('ok');
@@ -263,7 +267,7 @@ describe('mode and call shape', () => {
     expect(routeLane('scoring')).toEqual([]);
     expect(routingSnapshot().lanes.scoring.active).toBeNull();
     useMeraProtocolStore.setState({ chatInCloud: true });
-    expect(routeLane('chat-single').length).toBe(5);
+    expect(routeLane('chat-single').length).toBe(4);
     expect(routeLane('topics')).toEqual([]);
   });
 

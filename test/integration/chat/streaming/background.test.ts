@@ -28,7 +28,9 @@ import {
 
 installChatHooks();
 
-const FALLBACK = BIG_MODEL;
+// The mock gateway serves only NEAR-shaped attestation, so RedPill profiles fail it and the
+// next chat profile that answers after the Qwen3.6 head is NEAR Qwen3.8.
+const FALLBACK = 'Qwen/Qwen3.8-27B';
 /** The topics lane's first-token deadline (lib/harnesses cloud-base): pump() runs on topics. */
 const DEADLINE_MS = 120_000;
 const ID = /^[A-Za-z0-9_-]{16,64}$/;
@@ -199,7 +201,7 @@ describe('flag off: every read answers turn-gone', () => {
     await drive(done);
 
     expect(textOf(events)).toBe('fast');
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, BIG_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, BIG_MODEL, FALLBACK]);
     expect(events.some((e) => e.type === 'restart')).toBe(false);
   });
 
@@ -477,7 +479,7 @@ describe('best-effort DELETE', () => {
     await advanceUntil(() => deletes.length >= 1);
     expect(textOf(events)).toBe('fast');
     expect(deletes[0]).toBe(posts[0]);
-    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, SMALL_MODEL]);
+    expect(gatewayCalls('chat').map((c) => c.model)).toEqual([BIG_MODEL, FALLBACK]);
   });
 
   it('a finished turn is left alone', async () => {
