@@ -189,6 +189,25 @@ describe('prewarmCloudChat, cloud mode, signed in', () => {
     expect(status()).toBe('idle');
   });
 
+  it('a launch that asks for both pings once and fetches the routing table; a chat open never fetches it', async () => {
+    const routing: string[] = [];
+    server.events.on('request:start', ({ request }) => {
+      if (new URL(request.url).pathname.endsWith('/v1/routing')) routing.push(request.url);
+    });
+    server.use(...mockGateway(respond('ready')));
+
+    prewarmCloudChat({ ping: true, routing: true });
+    await settled();
+    expect(gatewayCalls('chat')).toHaveLength(1);
+    expect(routing).toHaveLength(1);
+    expect(status()).toBe('ready');
+
+    prewarmCloudChat({ ping: true });
+    await settled();
+    expect(gatewayCalls('chat')).toHaveLength(2);
+    expect(routing).toHaveLength(1);
+  });
+
   it('swallows a failing secondary attestation: the primary is still warmed', async () => {
     server.use(
       http.get('*/api/attestation/report', ({ request }) =>
