@@ -636,7 +636,7 @@ describe('arrivalFloor and extendPin (nothing on screen moves)', () => {
   it('closes when an arrival could only land above rows rendered after the picks, and stays closed', () => {
     const sorted = ['p1', 'p2'].map((id) => item(id));
     const closed = extendPin(EMPTY_PIN, sorted, null, 6, 4);
-    expect(closed).toEqual({ ids: ['p1', 'p2'], closed: true, expanded: false, belowIds: [] });
+    expect(closed).toEqual({ ids: ['p1', 'p2'], closed: true, belowIds: [] });
     expect(extendPin(closed, sorted, null, 0, 0)).toBe(closed);
     const out = sortFeedEntries([...sorted, item('hot', 0.95)], noStates, new Set(), closed.ids, Date.now(), undefined, null, closed.closed);
     expect(ids(out)).toEqual(['p1', 'p2']);

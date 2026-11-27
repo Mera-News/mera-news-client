@@ -1,11 +1,10 @@
 // layoutFeed — the Feed's fold: a stable partition of the sorted
-// list by sort band, Medium and up above the fold, Low below it. The fold card
-// is the list's terminal card while collapsed; once expanded its label rides
-// the first Low row's divider slot, so every rendered row stays a real story.
+// list by sort band, Medium and up above the fold, Low below it. Always open
+// (owner): the "Good to know" label rides the first Low row's divider slot, so
+// every rendered row stays a real story.
 
 import {
   EMPTY_PIN,
-  expandFold,
   extendPin,
   layoutFeed,
   type FeedLayoutInput,
@@ -69,19 +68,21 @@ function layout(o: Partial<FeedLayoutInput> & { data: FeedListItem[] }) {
 }
 
 describe('layoutFeed: the fold line', () => {
-  it('puts the fold at the Medium/Low line, Low rows folded behind the fold card', () => {
-    const out = layout({ data: [low('l1'), high('h1'), med('m1'), low('l2')] });
-    expect(ids(out.rows)).toEqual(['h1', 'm1']);
+  it('puts the fold at the Medium/Low line; Low rows render after it under the label', () => {
+    const out = layout({ data: [low('l1'), high('h1'), med('m1'), low('l2')], tail: [notRead('t1')] });
+    expect(ids(out.above)).toEqual(['h1', 'm1']);
     expect(ids(out.below)).toEqual(['l1', 'l2']);
-    expect(out.terminal).toBe('fold');
-    expect(out.foldIndex).toBeNull(); // collapsed: the card is the terminal, not a row divider
-    expect(out.picks).toBe(2);
+    expect(ids(out.rows)).toEqual(['h1', 'm1', 'l1', 'l2', 't1']);
+    expect(out.foldIndex).toBe(2); // the label rides the first Low row's divider slot
+    expect(out.picks).toBe(4); // the not-read divider sits after every scored row
+    expect(out.terminal).toBe('end');
+    expect(out.renderedAfterPicks).toBe(3);
   });
 
   it('is a stable partition across tiers: seen High and Medium stay above, unseen Low below', () => {
     const data = [low('l1'), high('hSeen'), med('mSeen'), med('m1')];
     const out = layout({ data, cardStates: { hSeen: seen(), mSeen: seen() } });
-    expect(ids(out.rows)).toEqual(['m1', 'hSeen', 'mSeen']);
+    expect(ids(out.above)).toEqual(['m1', 'hSeen', 'mSeen']);
     expect(ids(out.below)).toEqual(['l1']);
   });
 
@@ -92,31 +93,30 @@ describe('layoutFeed: the fold line', () => {
 
   it('a stale unread Medium is demoted into the Low band and so folds', () => {
     const out = layout({ data: [med('mOld', { ageH: 30 }), high('h1')] });
-    expect(ids(out.rows)).toEqual(['h1']);
+    expect(ids(out.above)).toEqual(['h1']);
     expect(ids(out.below)).toEqual(['mOld']);
   });
 
   it('a card waiting for its note sinks to the end of its own side, not below every Low', () => {
     const data = [pending('pHigh', 0.9), med('m1'), low('l1'), pending('pLow', 0.45), low('l2')];
     const open = layout({ data });
-    expect(ids(open.rows)).toEqual(['m1', 'pHigh']);
+    expect(ids(open.above)).toEqual(['m1', 'pHigh']);
     expect(ids(open.below)).toEqual(['l1', 'l2', 'pLow']);
   });
 
-  it('nothing reaches Medium: the fold still shows, with no row above it', () => {
+  it('nothing reaches Medium: the label sits over the first row', () => {
     const out = layout({ data: [low('l1'), low('l2')] });
-    expect(out.rows).toEqual([]);
-    expect(out.terminal).toBe('fold');
-    expect(out.below).toHaveLength(2);
+    expect(ids(out.rows)).toEqual(['l1', 'l2']);
+    expect(out.foldIndex).toBe(0);
+    expect(out.above).toEqual([]);
   });
 });
 
 describe('layoutFeed: the fold count never holds a row Mera has not read', () => {
-  it('the not-read tail waits behind the fold and is not counted in it', () => {
+  it('the not-read tail follows the Low rows and is not counted in them', () => {
     const out = layout({ data: [high('h1'), low('l1')], tail: [notRead('t1'), notRead('t2')] });
-    expect(ids(out.rows)).toEqual(['h1']);
+    expect(ids(out.rows)).toEqual(['h1', 'l1', 't1', 't2']);
     expect(ids(out.below)).toEqual(['l1']);
-    expect(out.terminal).toBe('fold');
   });
 
   it('no Low but a not-read tail: no fold; the tail renders after the picks, then the end card', () => {
@@ -150,13 +150,11 @@ describe('layoutFeed: the Show filter', () => {
   const tail = [notRead('t1')];
   const discarded = [item('d1', 0.2)];
 
-  it("'picks' folds the same way, with no tail", () => {
+  it("'picks' lays out the same way, with no tail", () => {
     const out = layout({ data, tail, show: 'picks' });
-    expect(ids(out.rows)).toEqual(['h1']);
-    expect(out.terminal).toBe('fold');
-    const expanded = layout({ data, tail, show: 'picks', pin: expandFold(EMPTY_PIN, out) });
-    expect(ids(expanded.rows)).toEqual(['h1', 'l1']);
-    expect(expanded.picks).toBe(2);
+    expect(ids(out.rows)).toEqual(['h1', 'l1']);
+    expect(out.picks).toBe(2);
+    expect(out.foldIndex).toBe(1);
   });
 
   it("'unread' and 'discarded' never fold", () => {
@@ -178,17 +176,16 @@ describe('layoutFeed: insertion around the fold (nothing on screen moves)', () =
     return extendPin(pin, before.above, null, floor, before.renderedAfterPicks, ids(before.below));
   };
 
-  it('fold card on screen: the pin closes, a High arriving is held and the rendered ids do not change', () => {
+  it('Low rows on screen: the pin closes, a High arriving is held and the rendered ids do not change', () => {
     const data = [high('h1'), med('m1'), low('l1')];
-    // Both picks and the fold card on screen: floor = last(1) + 1 + 2 = 4 > 2 picks.
-    const pin = step(EMPTY_PIN, data, 4);
+    // All three rows on screen: floor = last(2) + 1 + 3 = 6 > 2 picks.
+    const pin = step(EMPTY_PIN, data, 6);
     expect(pin.closed).toBe(true);
     expect(pin.belowIds).toEqual(['l1']);
     const before = layout({ data, pin });
     const after = layout({ data: [high('hot'), ...data], pin });
     expect(ids(after.rows)).toEqual(ids(before.rows));
     expect(after.heldCount).toBe(1);
-    expect(after.terminal).toBe('fold');
     expect(ids(after.below)).toEqual(['l1']);
   });
 
@@ -229,50 +226,16 @@ describe('layoutFeed: insertion around the fold (nothing on screen moves)', () =
     const data = [high('h1'), med('m1'), low('l1')];
     const pin = step(EMPTY_PIN, data, 0);
     const rescored = [high('h1'), low('m1'), low('l1')];
-    expect(ids(layout({ data: rescored, pin }).rows)).toEqual(['h1', 'm1']);
+    expect(ids(layout({ data: rescored, pin }).above)).toEqual(['h1', 'm1']);
   });
 });
 
-describe('expandFold (Show them)', () => {
-  it('pins rendered and folded rows, closed and expanded; Low renders, then the tail, then the end card', () => {
-    const data = [high('h1'), med('m1'), low('l1'), low('l2')];
-    const tail = [notRead('t1')];
-    const collapsed = layout({ data, tail });
-    const pin = expandFold(EMPTY_PIN, collapsed);
-    expect(pin).toEqual({ ids: ['h1', 'm1', 'l1', 'l2'], closed: true, expanded: true, belowIds: ['l1', 'l2'] });
-    const out = layout({ data, tail, pin });
-    expect(ids(out.rows)).toEqual(['h1', 'm1', 'l1', 'l2', 't1']);
-    expect(out.foldIndex).toBe(2); // the label rides the first Low row's divider slot
-    expect(out.picks).toBe(4); // the not-read divider sits after every scored row
-    expect(out.terminal).toBe('end');
-  });
-
-  it('held picks are not pinned and wait for the next session', () => {
-    const data = [high('h1'), low('l1')];
-    const pin = expandFold(EMPTY_PIN, layout({ data }));
-    const out = layout({ data: [high('hot'), low('lNew'), ...data], pin });
-    expect(ids(out.rows)).toEqual(['h1', 'l1']);
-    expect(out.heldCount).toBe(2);
-  });
-
-  it('extendPin keeps an expanded pin as it is', () => {
-    const data = [high('h1'), low('l1')];
-    const pin = expandFold(EMPTY_PIN, layout({ data }));
-    const out = layout({ data, pin });
-    expect(extendPin(pin, out.above, 'h1', 99, out.renderedAfterPicks, ids(out.below))).toBe(pin);
-  });
-
+describe('the closed pin', () => {
   it('every folded row gone: no label', () => {
     const data = [high('h1'), low('l1')];
-    const pin = expandFold(EMPTY_PIN, layout({ data }));
-    const out = layout({ data: [high('h1')], pin });
-    expect(out.foldIndex).toBeNull();
-  });
-
-  it('resetSession (EMPTY_PIN) collapses the fold', () => {
-    const data = [high('h1'), low('l1')];
-    expect(layout({ data, pin: EMPTY_PIN }).terminal).toBe('fold');
-    expect(EMPTY_PIN.expanded).toBe(false);
+    const first = layout({ data });
+    const pin = extendPin(EMPTY_PIN, first.above, null, 9, first.renderedAfterPicks, ids(first.below));
+    expect(layout({ data: [high('h1')], pin }).foldIndex).toBeNull();
   });
 
   it('the tail rendered and the pin closed with no fold: no fold for the rest of the session', () => {
@@ -315,14 +278,9 @@ describe('layoutFeed: the reader algorithm options', () => {
     expect(ids(out.above)).toEqual(['h1', 'm1']);
     expect(ids(out.below)).toEqual(['l1', 'hSeen']);
     expect(out.belowSeen).toBe(1);
-    expect(out.seenIndex).toBeNull(); // collapsed
-
-    const pin = expandFold(EMPTY_PIN, out);
-    const open = layout({ data, cardStates, algo: { seenBelowFold: true }, pin });
-    expect(ids(open.rows)).toEqual(['h1', 'm1', 'l1', 'hSeen']);
-    expect(open.foldIndex).toBe(2);
-    expect(open.seenIndex).toBe(3);
-    expect(open.belowSeen).toBe(1);
+    expect(ids(out.rows)).toEqual(['h1', 'm1', 'l1', 'hSeen']);
+    expect(out.foldIndex).toBe(2);
+    expect(out.seenIndex).toBe(3);
   });
 
   it('seenBelowFold: a card only scrolled past stays above; only a tapped or opened one folds', () => {

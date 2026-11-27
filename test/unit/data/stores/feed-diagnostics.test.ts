@@ -330,7 +330,7 @@ describe('computeFeedFunnel — order stage', () => {
     };
     expect(computeFeedFunnel(baseInput(over)).layout).toBeNull();
     const r = computeFeedFunnel(baseInput({ ...over, algo: FEED_ALGO_DEFAULTS }));
-    expect(r.layout).toEqual({ above: 3, below: 1, belowSeen: 1, terminal: 'fold' });
+    expect(r.layout).toEqual({ above: 3, below: 1, belowSeen: 1, terminal: 'end' });
   });
 
   it('derives the divider from rendered-and-unseen rows (cardStates entry OR opened articleId)', () => {
