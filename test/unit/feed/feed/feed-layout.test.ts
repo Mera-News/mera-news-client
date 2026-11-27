@@ -52,7 +52,8 @@ const pending = (id: string, relevance: number) =>
 
 const ids = (xs: readonly FeedListItem[]) => xs.map((x) => x.id);
 const noStates: Record<string, CardStateRecord> = {};
-const seen = (at = 1): CardStateRecord => ({ state: 'skipped', at });
+const seen = (at = 1): CardStateRecord => ({ state: 'viewed', at });
+const scrolledPast = (at = 1): CardStateRecord => ({ state: 'skipped', at });
 
 function layout(o: Partial<FeedLayoutInput> & { data: FeedListItem[] }) {
   return layoutFeed({
@@ -322,6 +323,22 @@ describe('layoutFeed: the reader algorithm options', () => {
     expect(open.foldIndex).toBe(2);
     expect(open.seenIndex).toBe(3);
     expect(open.belowSeen).toBe(1);
+  });
+
+  it('seenBelowFold: a card only scrolled past stays above; only a tapped or opened one folds', () => {
+    // The owner's phone: dwell marks most cards skipped, and the feed emptied behind the fold.
+    const data = [high('hPast'), med('mPast'), med('mTapped'), med('mOpened'), low('lPast')];
+    const out = layout({
+      data,
+      cardStates: { hPast: scrolledPast(), mPast: scrolledPast(), mTapped: seen(), lPast: scrolledPast() },
+      openedArticleIds: new Set(['mOpened']),
+      algo: { seenBelowFold: true },
+    });
+    expect(ids(out.above).sort()).toEqual(['hPast', 'mPast']);
+    // Behind the fold the sort keeps the reading tiers: scrolled past and tapped are both tier 1.
+    expect(ids(out.below)).toEqual(['mTapped', 'lPast', 'mOpened']);
+    // A scrolled-past Low folds for its band and is not counted as seen.
+    expect(out.belowSeen).toBe(2);
   });
 
   it('seenBelowFold: an opened row folds too, and a pinned seen row stays above', () => {

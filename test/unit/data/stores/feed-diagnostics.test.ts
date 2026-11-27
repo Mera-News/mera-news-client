@@ -25,6 +25,7 @@ import {
   type FeedFunnelInput,
   type HydrateProvenance,
 } from '@/lib/stores/feed-diagnostics';
+import { FEED_ALGO_DEFAULTS } from '@/lib/feed-ordering/feed-algo';
 import { FEED_WINDOW_MS } from '@/lib/stores/fact-rows-selector';
 import type { FeedListItem } from '@/lib/stores/feed-list-selector';
 import { ArticleSuggestionStatus } from '@/lib/database/article-suggestion-status';
@@ -311,6 +312,25 @@ describe('computeFeedFunnel — order stage', () => {
       }),
     );
     expect(r.cardStates).toEqual({ skipped: 1, viewed: 1, unviewed: 2, staleEntries: 0 });
+  });
+
+  it('lays out the fold as a fresh session would: only a tapped card folds, a scrolled-past one stays above', () => {
+    const med = (id: string) => {
+      const it = item(id);
+      Object.assign(it.suggestion, { relevance: 0.7, status: 'complete', reason: 'why' });
+      return it;
+    };
+    const over = {
+      order: ['a', 'b', 'c', 'd'],
+      itemsById: { a: med('a'), b: med('b'), c: med('c'), d: med('d') },
+      cardStates: {
+        a: { state: 'viewed' as const, at: NOW },
+        b: { state: 'skipped' as const, at: NOW },
+      },
+    };
+    expect(computeFeedFunnel(baseInput(over)).layout).toBeNull();
+    const r = computeFeedFunnel(baseInput({ ...over, algo: FEED_ALGO_DEFAULTS }));
+    expect(r.layout).toEqual({ above: 3, below: 1, belowSeen: 1, terminal: 'fold' });
   });
 
   it('derives the divider from rendered-and-unseen rows (cardStates entry OR opened articleId)', () => {

@@ -47,6 +47,9 @@ import type {
   SharedNoteBreakdown,
 } from '@/lib/database/services/article-suggestion-diagnostics';
 import type { CardStateRecord } from './feed-order-store';
+import { EMPTY_PIN, layoutFeed } from '@/lib/feed-ordering/feed-entries';
+import type { FeedAlgoPrefs } from '@/lib/feed-ordering/feed-algo';
+import type { RankingContext } from '@/lib/feed-ordering/publication-tags';
 import type { ForYouSuggestion } from './for-you-store';
 import type { UserGeoLanguageContext } from '@/lib/algorithms/geo-language-priority';
 
@@ -165,6 +168,9 @@ export interface FeedFunnelInput {
   /** Shared-note counts from the DB. Null ⇒ the read failed or was not
    *  requested, which the report distinguishes from "nothing is shared". */
   sharedNotes?: SharedNoteBreakdown | null;
+  /** The reader's Feed algorithm choices. Given, the report carries `layout`: what a
+   *  fresh session of the Continuous Feed puts above and behind the fold. */
+  algo?: FeedAlgoPrefs | null;
 
   /** Packed sign-bit sidecars (`ArticleWithClusters.vector_sidecar_packed`,
    *  base64) keyed by ARTICLE id, for the duplicate-candidate counters below.
@@ -185,6 +191,10 @@ export interface FeedFunnelReport {
   generatedAtMs: number;
   /** False ⇒ every number below is meaningless by construction, not broken. */
   hydrated: { order: boolean; opened: boolean };
+  /** The fold as a fresh session lays it out (no pin), from the stored order and card
+   *  states. Null when no algo was passed. The other counts can look healthy while
+   *  `above` is 0, which is exactly an empty Feed. */
+  layout: { above: number; below: number; belowSeen: number; terminal: string } | null;
 
   gates: {
     /** The gate NEW scores are stamped at — i.e. the active flag's gate. Since
@@ -651,9 +661,28 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
       visibleCount ===
     input.suggestions.length;
 
+  let layout: FeedFunnelReport['layout'] = null;
+  if (input.algo) {
+    const data = input.order.map((id) => input.itemsById[id]).filter((it): it is FeedListItem => !!it);
+    const l = layoutFeed({
+      data,
+      cardStates: input.cardStates,
+      openedArticleIds: input.openedArticleIds,
+      nowMs,
+      pin: EMPTY_PIN,
+      tail: [],
+      show: 'all',
+      ready: true,
+      ctx: input.userCtx as RankingContext | null,
+      algo: input.algo,
+    });
+    layout = { above: l.above.length, below: l.below.length, belowSeen: l.belowSeen, terminal: l.terminal };
+  }
+
   return {
     generatedAtMs: nowMs,
     hydrated: { order: input.orderHydrated, opened: input.openedHydrated },
+    layout,
     gates: {
       renderGate: effectiveRenderGate(),
       mixedVintage: {
