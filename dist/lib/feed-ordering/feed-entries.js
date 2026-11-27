@@ -9,7 +9,6 @@ exports.arrivedAtOf = arrivedAtOf;
 exports.countUnviewed = countUnviewed;
 exports.deriveLastLeftAt = deriveLastLeftAt;
 exports.effectiveBand = effectiveBand;
-exports.expandFold = expandFold;
 exports.extendPin = extendPin;
 exports.extendPinnedIds = extendPinnedIds;
 exports.isAwaitingNote = isAwaitingNote;
@@ -139,12 +138,11 @@ function arrivalFloor(renderedIds, onScreen) {
 
 /** The session's pinned prefix, and whether it has stopped admitting picks. */
 
-/** `resetSession` sets this, which also collapses the fold. */
+/** `resetSession` sets this. */
 const EMPTY_PIN = exports.EMPTY_PIN = {
   ids: [],
   closed: false,
-  belowIds: [],
-  expanded: false
+  belowIds: []
 };
 
 /** `extendPinnedIds` plus the close rule. `sorted` is the rendered ABOVE-fold
@@ -407,14 +405,13 @@ highSinks = false) {
 // below fresher ones), and `seenBelowFold` sends every unpinned seen row behind
 // the fold, where it trails the unseen Low by the sort's tier order.
 //
-// No row is ever a non-story: while collapsed the fold card is the list's
-// TERMINAL card (footer); once expanded its label rides the divider slot of the
-// first folded row (`foldIndex`). The not-read tail waits behind the fold and is
-// never counted in it (`below` holds scored stories only); with nothing folded
-// it renders after the picks as before. 'unread' and 'discarded' never fold.
+// No row is ever a non-story: the rows below the fold render after the picks,
+// always open (owner: no "Show them" card), and the "Good to know" label rides
+// the divider slot of the first one (`foldIndex`). They wait for the session's
+// first run, then the not-read tail follows them (`below` holds scored stories
+// only). 'unread' and 'discarded' never fold.
 
-/** The footer: Mera still reading the session's first run, the fold card, or
- *  the end card. */
+/** The footer: Mera still reading the session's first run, or the end card. */
 
 /** Lay the Feed out: sort (`sortFeedEntries`), split at the fold, apply the
  *  closed pin and the Show filter. Pure. */
@@ -480,53 +477,24 @@ function layoutFeed(input) {
     };
   }
   const tailShown = show === 'all' ? tail : [];
-  if (pin.expanded) {
-    const picks = [...above, ...below];
-    return {
-      ...base,
-      rows: [...picks, ...tailShown],
-      picks: picks.length,
-      foldIndex: below.length > 0 ? above.length : null,
-      seenIndex: firstSeen < 0 ? null : above.length + firstSeen,
-      terminal: 'end',
-      renderedAfterPicks: below.length + tailShown.length
-    };
-  }
-  const picksOnly = {
-    ...base,
-    rows: above,
-    picks: above.length
-  };
   // The reading line never closes the pin: picks keep arriving in the first run.
   if (!ready) return {
-    ...picksOnly,
+    ...base,
+    rows: above,
+    picks: above.length,
     terminal: 'reading',
     renderedAfterPicks: 0
   };
-  // The fold card renders after the picks, so it counts as one row there.
-  if (below.length > 0) return {
-    ...picksOnly,
-    terminal: 'fold',
-    renderedAfterPicks: 1
-  };
+  const picks = [...above, ...below];
   return {
-    ...picksOnly,
-    rows: [...above, ...tailShown],
+    ...base,
+    rows: [...picks, ...tailShown],
+    picks: picks.length,
+    foldIndex: below.length > 0 ? above.length : null,
+    seenIndex: firstSeen < 0 ? null : above.length + firstSeen,
     terminal: 'end',
-    renderedAfterPicks: tailShown.length
-  };
-}
-
-/** "Show them": pin every rendered and folded row, closed and expanded. Held
- *  picks stay out until the next session. */
-function expandFold(prev, layout) {
-  const belowIds = layout.below.map(it => it.id);
-  return {
-    ...prev,
-    ids: [...layout.above.map(it => it.id), ...belowIds],
-    closed: true,
-    expanded: true,
-    belowIds
+    // `extendPin`'s `sorted` is `above`: the folded rows and the tail render after it.
+    renderedAfterPicks: below.length + tailShown.length
   };
 }
 
