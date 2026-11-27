@@ -334,6 +334,47 @@ describe('gateUnscoredForScoring: geo/language priority election', () => {
   });
 });
 
+describe('gateUnscoredForScoring: reading rank election', () => {
+  const ctx: UserGeoLanguageContext = {
+    homeCountryAlpha3: 'USA',
+    otherCountriesAlpha3: [],
+    appLanguageBase: 'fr',
+  };
+
+  it('elects the reader-language row scored 50 over a home-country row scored 100', async () => {
+    await seedUnscored(
+      { id: 'home', countryCode: 'USA', languageCode: 'en', readingScore: 100 },
+      { id: 'fr', countryCode: null, languageCode: 'fr-FR', readingScore: 50 },
+    );
+
+    const result = await gateUnscoredForScoring(new Set(), ctx);
+
+    expect(result.enqueueIds).toEqual(['fr']);
+  });
+
+  it('with no reader context, elects the higher score over the described, newer row', async () => {
+    await seedUnscored(
+      { id: 'scored', hasDescription: false, firstPubDateMs: 1_000, readingScore: 40 },
+      { id: 'described', hasDescription: true, firstPubDateMs: 9_000, readingScore: null },
+    );
+
+    const result = await gateUnscoredForScoring(new Set());
+
+    expect(result.enqueueIds).toEqual(['scored']);
+  });
+
+  it('keeps the geo tier when the scores are equal', async () => {
+    await seedUnscored(
+      { id: 'home', countryCode: 'USA', languageCode: 'en', readingScore: 70, firstPubDateMs: 1_000 },
+      { id: 'rest', countryCode: null, languageCode: 'en', readingScore: 70, firstPubDateMs: 9_000 },
+    );
+
+    const result = await gateUnscoredForScoring(new Set(), ctx);
+
+    expect(result.enqueueIds).toEqual(['home']);
+  });
+});
+
 // ===========================================================================
 // gateUnscoredForScoring: in-flight exclusion + empties + fail-open
 // ===========================================================================
