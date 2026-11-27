@@ -24,10 +24,17 @@ const firstCallThen = (first: ReturnType<GatewayResponder>): GatewayResponder =>
   call.route === 'chat' && call.index === 0 ? first : defaultResponder(call);
 
 const ackOf = () => cloud().messages.find((m) => m.id.endsWith('-ack'));
+/** The leg's headers are in and its first chunks follow at once: the stream is open. */
+const midStream = async () => {
+  await until(() => { const v = useChatPhaseStore.getState().view; return v.kind === 'phase' && v.id === 'thinking'; }, 10_000, 'stream open');
+  await new Promise((r) => setTimeout(r, 300));
+};
+/** Long enough to be shown while it streams (a short opening line is held to the stream's end). */
+const LONG_OPENING = 'The AI Act sorts systems by risk and sets a duty for each tier, from the ones it leaves alone to the ones it bans outright, and a reply this long streams while it is written. ';
 const answerOf = () => cloud().messages.find((m) => m.role === 'assistant' && !m.id.endsWith('-ack'));
 
 describe('stop on the persona loop', () => {
-  it('mid-stream: the partial text stays as stopped, no error, busy clears, the call is cut and no further leg is sent', async () => {
+  it('mid-stream: nothing of the cut leg shows, the turn reads as stopped, busy clears, the call is cut and no further leg is sent', async () => {
     server.use(
       ...mockGateway(
         firstCallThen({
@@ -39,15 +46,16 @@ describe('stop on the persona loop', () => {
     );
     const { engine } = await attachCloud();
     engine.send('What is new today?');
-    await until(() => (ackOf()?.content ?? '').includes('One moment'), 10_000, 'partial text');
+    await midStream();
+    // The route leg's text is never shown while the turn runs.
+    expect(ackOf()?.content).toBe('');
 
     stopChatTurn();
     await until(idle, 5000, 'busy clears after stop');
 
     expect(cloud().error).toBeNull();
-    expect(ackOf()).toMatchObject({ stopped: true });
-    expect(ackOf()?.content).toContain('One moment');
-    expect(answerOf()?.content).toBe('');
+    expect(answerOf()).toMatchObject({ stopped: true, content: '' });
+    expect(ackOf()?.content).toBe('');
     expect(cloud().messages.every((m) => m.toolCalls === undefined)).toBe(true);
     await until(() => gatewayCalls('chat')[0].aborted, 5000, 'the call is recorded as aborted');
     expect(streamHolds()).toBe(0);
@@ -66,13 +74,13 @@ describe('stop on the persona loop', () => {
     expect(cloud().error).toBeNull();
     expect(answerOf()?.content).toBe('');
     expect(cloud().messages.filter((m) => m.role === 'assistant' && m.content === 'E2E fixture answer.')).toHaveLength(1);
-    // What the reader SAW of the stopped turn is the earlier exchange the next turn reads.
+    // The reader saw none of the stopped turn's text, so the next turn is told of the question only.
     const recent = gatewayCalls('chat')[1].messages.map((m) => m.content).find((c) => c.startsWith('<recent>')) ?? '';
     expect(recent).toContain('They said: What is new today?');
-    expect(recent).toContain('You replied: One moment while I look');
+    expect(recent).not.toContain('One moment');
   });
 
-  it('between legs: the stopped turn keeps its text, drops its tool calls and sends no further leg', async () => {
+  it('between legs: the stopped turn shows no text, drops its tool calls and sends no further leg', async () => {
     // Leg 0 (route) answers at once with a skill load; leg 1 never answers in time.
     server.use(
       ...mockGateway((call) =>
@@ -89,8 +97,8 @@ describe('stop on the persona loop', () => {
 
     expect(cloud().error).toBeNull();
     expect(cloud().messages.every((m) => m.toolCalls === undefined)).toBe(true);
-    expect(ackOf()).toMatchObject({ stopped: true });
-    expect(ackOf()?.content.trim()).toBe('One moment.');
+    expect(answerOf()).toMatchObject({ stopped: true, content: '' });
+    expect(ackOf()?.content).toBe('');
     await until(() => gatewayCalls('chat')[1].aborted, 5000, 'leg 1 is recorded as aborted');
     // Past the mock's header delay, so nothing of this call is left running into the next test.
     await new Promise((r) => setTimeout(r, 2500));
@@ -101,7 +109,7 @@ describe('stop on the persona loop', () => {
 describe('stop on a single-shot agent', () => {
   it('keeps the partial, and what the reader saw is history for the next turn', async () => {
     server.use(
-      ...mockGateway(firstCallThen({ chunks: ['The AI Act sorts ', 'systems by risk, ', 'and then it goes on.'], stallAfter: 2 })),
+      ...mockGateway(firstCallThen({ chunks: [LONG_OPENING, 'It names four tiers, ', 'and then it goes on.'], stallAfter: 2 })),
     );
     const { engine } = await attachCloud(articleAgent());
     engine.send('Explain the EU AI Act');
@@ -113,7 +121,7 @@ describe('stop on a single-shot agent', () => {
     expect(answerOf()).toMatchObject({ stopped: true });
     const seen = answerOf()!.content.trim();
     expect(seen).toContain('sorts');
-    expect(seen).toContain('systems by risk');
+    expect(seen).toContain('It names four tiers');
     expect(seen).not.toContain('goes on');
     expect(answerOf()?.toolCalls).toBeUndefined();
     await until(() => gatewayCalls('chat')[0].aborted, 5000, 'the call is recorded as aborted');
@@ -160,7 +168,7 @@ describe('stop with a hidden turn queued', () => {
     server.use(...mockGateway(firstCallThen({ chunks: ['Slow ', 'answer ', 'text.'], stallAfter: 2 })));
     const { engine } = await attachCloud(articleAgent());
     engine.send('Tell me');
-    await until(() => (answerOf()?.content ?? '').length > 0, 10_000, 'streaming');
+    await midStream();
     engine.sendHidden('Follow-up note');
 
     stopChatTurn();

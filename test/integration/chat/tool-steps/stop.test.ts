@@ -11,6 +11,7 @@
 //
 // Timing: the strict clock, driven in small steps with a real event-loop turn per step. After a
 // Stop, 40 s of virtual time pass and the call count is read again: no hedge, retry or later leg.
+import { useChatPhaseStore } from '@/lib/llm/chat-phase-store';
 import { stopChatTurn } from '@/lib/chat-session/chat-session';
 import { makeAgentDeps } from '@/lib/chat-tools/agent-device-port';
 import { getFacts } from '@/lib/database/services/fact-service';
@@ -66,6 +67,12 @@ const idleAfterStop = async () => {
 const chatCalls = (): GatewayCall[] => gatewayCalls('chat');
 const lastContent = (c: GatewayCall) => c.messages[c.messages.length - 1].content;
 
+/** The call's headers are in and its chunks have arrived: Stop now lands mid-stream. */
+const streamOpen = async () => {
+  await advanceUntil(() => { const v = useChatPhaseStore.getState().view; return v.kind === 'phase' && v.id === 'thinking'; });
+  await jest.advanceTimersByTimeAsync(300);
+};
+
 describe('Stop with a call half-parsed', () => {
   it('stream level: CallerAbortError, no tool-call-delta, and no tag text in any text-delta', async () => {
     server.use(...mockGateway(() => stalledOn(HALF_CALL('recordNote', 'note'))));
@@ -100,7 +107,8 @@ describe('Stop with a call half-parsed', () => {
     server.use(...mockGateway(() => stalledOn(HALF_CALL('recordNote', 'note'))));
     const { engine } = await attachCloud(noteAgent(executed));
     engine.send('Save my note');
-    await advanceUntil(() => (cloud().messages.find((m) => m.role === 'assistant')?.content ?? '').includes('Saving'));
+    // A short opening line is held to the stream's end, so wait for the open stream, not the text.
+    await streamOpen();
 
     stopChatTurn();
     await idleAfterStop();
@@ -122,14 +130,15 @@ describe('Stop with a call half-parsed', () => {
     server.use(...mockGateway(stallFirst(HALF_CALL('load_skill', 'id'))));
     const { engine } = await attachCloud(personaAgentFor());
     engine.send('I follow Formula 1 racing');
-    await advanceUntil(() => (cloud().messages.find((m) => m.id.endsWith('-ack'))?.content ?? '').includes('Saving'));
+    await streamOpen();
 
     stopChatTurn();
     await idleAfterStop();
 
+    // The route leg's text is never shown: the stopped turn carries the mark and no words.
     const ack = cloud().messages.find((m) => m.id.endsWith('-ack'));
-    expect(ack).toMatchObject({ stopped: true });
-    expect(ack?.content.trim()).toBe('Saving.');
+    expect(ack?.content).toBe('');
+    expect(cloud().messages.find((m) => m.role === 'assistant' && !m.id.endsWith('-ack'))).toMatchObject({ stopped: true, content: '' });
     expect(cloud().messages.every((m) => m.toolCalls === undefined)).toBe(true);
     expect(cloud().error).toBeNull();
     expect(chatCalls()).toHaveLength(1);

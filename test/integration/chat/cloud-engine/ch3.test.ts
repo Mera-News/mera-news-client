@@ -15,8 +15,11 @@ import { articleAgent, attachCloud, busy, cloud, settle, streamHolds } from './k
 
 jest.setTimeout(90_000);
 
-const A_CHUNKS = ['a1 ', 'a2 ', 'a3 ', 'a4 ', 'a5 ', 'a6.'];
-const B_CHUNKS = ['b1 ', 'b2 ', 'b3 ', 'b4 ', 'b5 ', 'b6 ', 'b7 ', 'b8 ', 'b9 ', 'b10.'];
+// The first chunk is long enough to be shown while the reply streams: a short opening line is
+// held to the stream's end.
+const OPENING = 'This reply opens with a sentence that is long enough to be written to the thread while the rest of it is still arriving, chunk by chunk, over the wire. ';
+const A_CHUNKS = [`${OPENING}a1 `, 'a2 ', 'a3 ', 'a4 ', 'a5 ', 'a6.'];
+const B_CHUNKS = [`${OPENING}b1 `, 'b2 ', 'b3 ', 'b4 ', 'b5 ', 'b6 ', 'b7 ', 'b8 ', 'b9 ', 'b10.'];
 const B_FULL = B_CHUNKS.join('');
 
 afterEach(settle);

@@ -55,6 +55,10 @@ interface CloudChatState {
   setError: (error: string | null) => void;
   setInterrupted: (interrupted: boolean) => void;
   setAgentTurnState: (state: AgentTurnState | null) => void;
+  /** Index in `messages` where the current (or last) turn's rows start. A view
+   *  uses it to tell this turn's cards from earlier ones while the turn runs. */
+  turnFrom: number | null;
+  setTurnFrom: (index: number) => void;
   setAgentTerminal: (reason: AgentTurnResult['terminalReason'] | null) => void;
   pushWireMessage: (msg: WireMessage) => void;
   getWireMessages: () => WireMessage[];
@@ -71,6 +75,7 @@ const initialState = {
   wireMessages: [] as WireMessage[],
   agentTurnState: null as AgentTurnState | null,
   agentTerminal: null as AgentTurnResult['terminalReason'] | null,
+  turnFrom: null as number | null,
 };
 
 export const useCloudChatStore = create<CloudChatState>((set, get) => ({
@@ -94,6 +99,7 @@ export const useCloudChatStore = create<CloudChatState>((set, get) => ({
 
   setAgentTurnState: (agentTurnState) => set({ agentTurnState }),
   setAgentTerminal: (agentTerminal) => set({ agentTerminal }),
+  setTurnFrom: (turnFrom) => set({ turnFrom }),
 
   pushWireMessage: (msg) =>
     set((state) => ({ wireMessages: [...state.wireMessages, msg] })),

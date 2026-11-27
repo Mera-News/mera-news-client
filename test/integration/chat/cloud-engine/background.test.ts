@@ -85,13 +85,16 @@ describe('tools', () => {
 });
 
 describe('the reply', () => {
+  /** Long enough to be shown while it streams (a short opening line is held to the stream's end). */
+  const PART = 'The AI Act sorts systems by risk and sets a duty for each tier, from the ones it leaves alone to the ones it bans outright, and a reply this long streams while it is written. ';
+
   it('single-shot, mid-stream: the partial leaves the bubble and the wire stays whole', async () => {
     server.use(
-      ...mockGateway((c) => (c.index === 0 ? { chunks: ['Par', 'tial'], stallAfter: 1 } : 'Whole answer')),
+      ...mockGateway((c) => (c.index === 0 ? { chunks: [PART, 'tial'], stallAfter: 1 } : 'Whole answer')),
     );
     const { engine } = await advanceUntilDone(attachCloud(articleAgent()));
     engine.send('Why this story?');
-    await advanceUntil(() => answer().join('') === 'Par');
+    await advanceUntil(() => answer().join('') === PART.trim() || answer().join('') === PART);
 
     await awayFor(IDLE_WINDOW);
     await advanceUntil(idle);
@@ -101,7 +104,7 @@ describe('the reply', () => {
     expect(gatewayCalls('chat')).toHaveLength(2);
   });
 
-  it('the persona loop, mid-stream: the acknowledgement restarts too', async () => {
+  it('the persona loop, mid-stream: the leg is sent again and nothing of the cut one ever shows', async () => {
     server.use(
       ...mockGateway((c) => {
         if (!isRouteLeg(c)) return 'Fine.';
@@ -112,31 +115,34 @@ describe('the reply', () => {
     );
     const { engine } = await advanceUntilDone(attachCloud());
     engine.send('What is new?');
-    await advanceUntil(() => answer().join('') === 'Half an ack');
+    await advanceUntil(() => gatewayCalls('chat').length === 1);
+    await jest.advanceTimersByTimeAsync(300);
+    expect(answer()).toEqual([]);
 
     await awayFor(IDLE_WINDOW);
     await advanceUntil(idle);
 
+    expect(gatewayCalls('chat').filter(isRouteLeg)).toHaveLength(2);
     expect(answer().join(' ')).not.toContain('Half an ack');
     expect(cloud().error).toBeNull();
   });
 
   it('when the re-send fails too: Retry copy, the partial marked failed in the store and the table', async () => {
-    server.use(...mockGateway(() => ({ chunks: ['Par', 'tial'], stallAfter: 1 })));
+    server.use(...mockGateway(() => ({ chunks: [PART, 'tial'], stallAfter: 1 })));
     const { conversationId, engine } = await advanceUntilDone(attachCloud(articleAgent()));
     engine.send('Why this story?');
-    await advanceUntil(() => answer().join('') === 'Par');
+    await advanceUntil(() => answer().join('') === PART);
     await awayFor(IDLE_WINDOW);
     await advanceUntil(() => gatewayCalls('chat').length === 2);
-    await advanceUntil(() => answer().join('') === 'Par');
+    await advanceUntil(() => answer().join('') === PART);
     await awayFor(IDLE_WINDOW);
     await advanceUntil(idle);
 
     expect(cloud().error).not.toBeNull();
     expect(cloud().interrupted).toBe(true);
-    expect(cloud().messages.find((m) => m.role === 'assistant')).toMatchObject({ content: 'Par', failed: true });
+    expect(cloud().messages.find((m) => m.role === 'assistant')).toMatchObject({ content: PART, failed: true });
     const rows = await advanceUntilDone(fetchMessagesForConversation(conversationId));
-    expect(rows.find((m) => m.role === 'assistant')).toMatchObject({ content: 'Par', failed: true });
+    expect(rows.find((m) => m.role === 'assistant')).toMatchObject({ content: PART, failed: true });
   });
 
   it('an HTTP verdict during a departure stays a service error, with its report', async () => {

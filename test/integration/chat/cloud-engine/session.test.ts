@@ -91,14 +91,14 @@ describe('a persona turn', () => {
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(calls.map((c) => c.stream)).toEqual([true, ...calls.slice(1).map(() => false)]);
 
-    // Two bubbles during the turn (the acknowledgement streamed in), one at the end.
+    // Two rows for the turn; nothing is written into either while it runs, one holds the answer at the end.
     const ack = cloud().messages.find((m) => m.id.endsWith('-ack'));
     const answer = cloud().messages.find((m) => m.role === 'assistant' && !m.id.endsWith('-ack'));
     expect(ack).toBeDefined();
     expect(answer?.id).toBe(ack?.id.replace(/-ack$/, ''));
     expect(answer?.content).toBe('E2E fixture answer.');
     expect(ack?.content).toBe('');
-    expect(watch.samples.some((s) => s.ack.length > 0)).toBe(true);
+    expect(watch.samples.every((s) => s.ack.length === 0)).toBe(true);
 
     // The mirror is exact on every change, the hold is one acquire and one release.
     expect(watch.samples.length).toBeGreaterThan(0);
@@ -145,7 +145,7 @@ describe('New chat mid-turn', () => {
     server.use(...mockGateway(() => ({ chunks: ['Slow ', 'answer ', 'text.'], chunkDelayMs: 300 })));
     const { engine } = await attachCloud(articleAgent());
     engine.send('Tell me');
-    await until(() => (cloud().messages.find((m) => m.role === 'assistant')?.content ?? '').length > 0, 10_000, 'streaming');
+    await until(() => gatewayCalls('chat').length === 1, 10_000, 'the call is in flight');
     expect(streamHolds()).toBe(1);
 
     resetChatSession();

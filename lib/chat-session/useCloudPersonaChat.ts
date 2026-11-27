@@ -68,6 +68,9 @@ import {
   MAX_HISTORY_USER_TURNS,
 } from '../news-harness/persona-management/persona-agent-core';
 
+/** A single-shot reply shorter than this is written whole, never streamed. */
+const OPENING_HOLD_CHARS = 160;
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -200,13 +203,12 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
       agentStateRef.current.surfaceContext = surfaceFor();
       agentStateRef.current.followedInChat = followedInChatLabels(store.messages);
 
-      // TWO BUBBLES PER TURN. The acknowledgement streams into its own bubble
-      // and is never replaced; the answer lands in the second one, which also
-      // carries every tool call (and so every card) of the turn. One bubble
-      // used to take every leg's text in turn and then swap to the final
-      // reply, so the words being read changed under the reader and the
-      // bubble jumped. An empty bubble with no cards is not rendered, so a turn
-      // with no acknowledgement shows one bubble, exactly as before.
+      // TWO ROWS PER TURN, BOTH EMPTY UNTIL THE TURN ENDS. Nothing the model
+      // writes is shown while the turn runs: the wait row and the steps box are
+      // the progress, and the final write below lands the sentence together
+      // with the turn's cards. The second row carries every tool call (and so
+      // every card); the first holds the acknowledgement when the turn ends
+      // with no other reply. An empty row with no cards is not rendered.
       const ackId = `${assistantId}-ack`;
       store.setMessages((prev) => [
         ...prev,
@@ -214,29 +216,9 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
         { id: assistantId, role: 'assistant', content: '' } as ConversationMessage,
       ]);
 
-      // Per-FRAME bubble writes, not per token: every delta is one token, and
-      // cloning the message array per token competes with the per-token
-      // decrypt for the same JS thread on a low-end device.
-      let acc = '';
-      let queued = false;
-      let armed = true;
       // Cleared as the turn OPENS, so a box never shows the previous turn's
       // terminal while this one is still running.
       cloud().setAgentTerminal(null);
-      const flush = () => {
-        queued = false;
-        if (!armed) return;
-        useCloudChatStore
-          .getState()
-          .setMessages((prev) =>
-            prev.map((m) => (m.id === ackId ? { ...m, content: acc } : m)),
-          );
-      };
-      const schedule = () => {
-        if (queued) return;
-        queued = true;
-        scheduleFrame(flush);
-      };
 
       const onLeg = (leg: AgentLeg) => {
         // The SHAPE of each leg: which tools, how many facts it proposed, and
@@ -299,25 +281,8 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           forcedSkill,
           deps: withCombinedFactMemory(makeAgentDeps(
             userMessage,
-            (d) => {
-              if (d.restart) {
-                acc = '';
-                schedule();
-                return;
-              }
-              // The arrival signal carries no payload, and the line is already
-              // on `thinking` from the post-headers route, so there is nothing
-              // to do here but avoid falling into the content branch.
-              if (d.reasoning !== undefined && acc === '') return;
-              if (d.content) {
-                // The ACKNOWLEDGEMENT. It is not the answer, so the wait line
-                // below it keeps running until the answer lands; releasing it
-                // here emptied the wait bubble under the acknowledgement
-                // The turn's own finally releases it.
-                acc += d.content;
-                schedule();
-              }
-            },
+            // The route leg's text is not shown while the turn runs.
+            () => {},
             (signal) => phaseSinkRef.current?.(signal),
             stopRef.current.signal,
             cardTools(),
@@ -332,7 +297,6 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
             followCard: i18nInstance().t('trackedStories.followCardLine'),
           },
         });
-        if (queued) flush();
         if (stopRef.current.signal.aborted) {
           // STOPPED: the partial acknowledgement stays as the reply, and nothing
           // else the turn produced is kept (no cards, no terminal, no state).
@@ -349,10 +313,10 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
             confirmedPlace: null,
             offeredStatements: [],
             lastUserMessage: userMessage,
-            lastReply: replaceClauseDashes(acc).trim() || null,
+            lastReply: null,
           });
           // The loop has already recorded this exchange with its own view of
-          // the reply; the reader saw the partial text instead.
+          // the reply; the reader saw none of it.
           {
             const t = agentStateRef.current.turn;
             t.recentExchanges = [
@@ -367,15 +331,6 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           if (alive && card && card.turn === agentStateRef.current.turn.turnNumber && shown && card.proposalId === shown.id) {
             useFloatingChatStore.getState().setProposal(null);
           }
-          cloud().setMessages((prev) =>
-            prev.map((m) =>
-              m.id === ackId
-                ? { ...m, content: replaceClauseDashes(acc) }
-                : m.id === assistantId
-                  ? { ...m, content: '' }
-                  : m,
-            ),
-          );
           return;
         }
         // The loop's text is dash-cleaned and gated; the streamed accumulation
@@ -427,7 +382,6 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           });
         }
       } finally {
-        armed = false;
         // The line is released in `startTurn`'s finally, which is the ONE
         // owner. This block runs inside that try, and a second release here
         // would only make the ownership ambiguous for the next reader.
@@ -442,6 +396,15 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
     ): Promise<void> => {
       const store = cloud();
       logger.debug(`${TAG} runSingleShot ENTER`, { tools: tools.length, wireMessages: store.wireMessages.length });
+
+      // An opening line held back by the stream (see OPENING_HOLD_CHARS), by row id.
+      const heldText = new Map<string, string>();
+      const landHeldText = (targetId: string) => {
+        const text = heldText.get(targetId);
+        if (text === undefined) return;
+        heldText.delete(targetId);
+        cloud().setMessages((prev) => prev.map((m) => (m.id === targetId ? { ...m, content: text } : m)));
+      };
 
       // Stream one assistant turn into the bubble identified by `targetId`.
       // `includeContext` re-injects fresh context onto the last user message
@@ -516,6 +479,11 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
         // a bubble that lags the accumulated text.
         let renderQueued = false;
         let renderArmed = true;
+        // A SHORT OPENING LINE WAITS for the stream's end, and for its tools
+        // when it called any: a one-line sentence ahead of a card would
+        // otherwise sit alone until the card arrives. A longer answer streams.
+        let rendered = false;
+        let streamDone = false;
         // Hands the wait line over. Idempotent in the sink.
         const releaseWaitLine = () => phaseSinkRef.current?.(null);
         const renderContent = () => {
@@ -525,6 +493,8 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           // landed after the stream re-wrapped a finished bubble by a line
           // (a 21pt shift after the reply had settled).
           const shown = replaceClauseDashes(accContent);
+          if (!rendered && !streamDone && shown.length < OPENING_HOLD_CHARS) return;
+          rendered = true;
           // THE HANDOVER, in the same tick as the first visible text. It used
           // to happen on the delta, a frame before this render, so the wait
           // bubble emptied and the thread dropped 42pt, then rose again when
@@ -539,9 +509,6 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           if (renderQueued) return;
           renderQueued = true;
           scheduleFrame(renderContent);
-        };
-        const flushContentRender = () => {
-          if (renderQueued) renderContent();
         };
 
         let eventCount = 0;
@@ -591,21 +558,23 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
             throw new Error(event.message);
           }
         }
-        flushContentRender();
         // THE DASH RULE, for the agents that do not run through the loop. The
         // loop cleans its own replies; the single-shot "why was this shown"
         // answer reached users with an em dash in it. Applied once the stream
         // is whole, so a clause dash split across two deltas is still seen.
-        const cleaned = replaceClauseDashes(accContent);
-        if (cleaned !== accContent) {
-          accContent = cleaned;
-          renderContent();
-        }
+        accContent = replaceClauseDashes(accContent);
+        streamDone = true;
+        // Never shown and tools follow: the text lands when they settle.
+        if (!rendered && toolCallAccumulators.size > 0 && accContent.trim().length > 0) heldText.set(targetId, accContent);
+        else renderContent();
         } catch (err) {
           // STOP: land the tokens already received before the exception
           // disarms the render, or the last frame's worth of the partial reply
           // never reaches the bubble.
-          if (stopRef.current.signal.aborted) flushContentRender();
+          if (stopRef.current.signal.aborted) {
+            streamDone = true;
+            renderContent();
+          }
           throw err;
         } finally {
           renderArmed = false;
@@ -674,6 +643,7 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
         toolCalls: ReturnType<typeof finalizeToolCalls>,
       ) => {
         // No tool starts after Stop. One already running finishes atomically.
+        if (stopRef.current.signal.aborted) landHeldText(targetId);
         throwIfStopped();
         const pendingRecords: ToolCallRecord[] = toolCalls.map((tc) => ({
           id: tc.id,
@@ -766,6 +736,7 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
           );
         } finally {
           if (ownsLine()) useChatPhaseStore.getState().setDeviceWork(false);
+          landHeldText(targetId);
         }
 
         // The WIRE push stays here, after every call has settled: the wire is
@@ -1016,6 +987,7 @@ export function createCloudEngine(initialAgent: IAgent): ChatEngine {
 
       const assistantId = `asst-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const turnStart = cloud().messages.length;
+      cloud().setTurnFrom(turnStart);
       let turnContext = again?.context;
       const removed = again?.removed;
       const forcedSkill = again?.forcedSkill;
