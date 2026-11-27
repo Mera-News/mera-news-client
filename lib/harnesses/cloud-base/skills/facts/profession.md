@@ -17,7 +17,6 @@ tools:
   - "ask_choice"
   - "saveExtractedFacts"
   - "deleteUserFacts"
-  - "webSearch"
 ---
 
 What the user does for a living. Specific enough to retrieve news, and anchored to nothing.

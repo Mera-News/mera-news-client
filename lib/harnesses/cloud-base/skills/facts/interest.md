@@ -18,7 +18,6 @@ tools:
   - "ask_choice"
   - "saveExtractedFacts"
   - "deleteUserFacts"
-  - "webSearch"
 ---
 
 A pastime, a sport, a team, a musician, a genre, a game. This is also where anything lands that is

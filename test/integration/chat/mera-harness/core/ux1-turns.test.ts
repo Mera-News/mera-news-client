@@ -773,7 +773,7 @@ describe('the persona agent can search the web', () => {
   const NOBODY: AgentPersona = { surface: 'CONFIG', languageName: 'English', facts: [] };
   const names = (c: Call) => c.tools.map((t) => t.function.name);
 
-  it('declares webSearch on facts and question legs, never on the route leg', async () => {
+  it('declares webSearch on question legs, never on the route leg', async () => {
     const webSearch = jest.fn(async () => ({ searched: true, results: [] }));
     const h = harness(
       [

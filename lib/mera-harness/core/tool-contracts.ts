@@ -207,7 +207,7 @@ export const SAVE_INTEREST_FACTS_TOOL: ToolDefinition = {
  * out. The query leaves the device in plaintext and is not linked to the user,
  * which the existing chat web-search disclosure already says.
  *
- * Declared only on facts and question legs, and only when the device offers
+ * Declared only on question legs, and only when the device offers
  * the tool (the "Web search in chat" setting is on). Never on the route leg.
  */
 export const WEB_SEARCH_TOOL: ToolDefinition = {
@@ -454,14 +454,14 @@ const SKILL_TOOL_DEFS: Record<(typeof SKILL_TOOL_ORDER)[number], ToolDefinition>
  */
 function fallbackSkillTools(skillId: string): readonly string[] {
   if (skillId.startsWith('facts/')) {
-    return ['find_similar_facts', 'lookup_place', 'ask_choice', 'saveExtractedFacts', 'deleteUserFacts', 'webSearch'];
+    return ['find_similar_facts', 'lookup_place', 'ask_choice', 'saveExtractedFacts', 'deleteUserFacts'];
   }
   if (skillId === 'conversation/correction') {
     return ['find_similar_facts', 'lookup_place', 'ask_choice', 'saveExtractedFacts', 'deleteUserFacts'];
   }
   if (skillId === 'conversation/question') return ['find_similar_facts', 'lookup_place', 'ask_choice', 'webSearch'];
   if (skillId === 'conversation/about-mera') return ['find_similar_facts', 'lookup_place', 'ask_choice', 'explainMera'];
-  if (skillId === 'conversation/follow-story') return ['webSearch', 'applyProposal', 'cancelProposal', 'proposeTrack', 'searchNews'];
+  if (skillId === 'conversation/follow-story') return ['applyProposal', 'cancelProposal', 'proposeTrack'];
   return ['find_similar_facts', 'lookup_place', 'ask_choice'];
 }
 

@@ -16,7 +16,6 @@ tools:
   - "ask_choice"
   - "saveExtractedFacts"
   - "deleteUserFacts"
-  - "webSearch"
 ---
 
 Where the user is FROM. An expat is THREE facts, each offered as its own element: where they are

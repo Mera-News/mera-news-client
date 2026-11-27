@@ -1,5 +1,5 @@
 // Following a story on the cloud loop: proposeTrack stages a follow card and
-// ends the turn, searchNews is a lookup that buys a leg, the follow-story leg reads today's date,
+// ends the turn, a search the leg did not declare never runs, the follow-story leg reads today's date,
 // the surface the chat was opened from reaches the model, and "More options" is one forced leg.
 import { createAgentState, runAgentTurn, type AgentPersona, type AgentState } from '@/lib/mera-harness/core/core';
 import { toolsForLeg } from '@/lib/mera-harness/core/tool-contracts';
@@ -32,6 +32,7 @@ function harness(script: AgentModelResult[], tools: Partial<AgentDeps['tools']> 
   const port = {
     proposeTrack: jest.fn(async () => ({ staged: true, proposalId: 'track-1', chooseOne: true, options: OPTIONS.options })),
     searchNews: jest.fn(async (a: { query: string }) => ({ query: a.query, results: [{ title: 'Assam floods displace thousands' }] })),
+    webSearch: jest.fn(async () => ({ searched: true, results: [{ title: 'Assam web headline', url: 'https://example.org', snippet: '' }] })),
   };
   let i = 0;
   const deps: AgentDeps = {
@@ -58,9 +59,9 @@ const text = (req: AgentModelRequest) => req.messages.map((m) => m.content).join
 const route = (content = 'The Assam floods.') => res({ content, toolCalls: [tc('load_skill', { id: 'conversation/follow-story' })] });
 
 describe('proposeTrack', () => {
-  it('is offered on the follow-story leg with searchNews, and nowhere else', () => {
-    const follow = toolsForLeg({ skillLoaded: 'conversation/follow-story', skillTools: ['proposeTrack', 'searchNews', 'webSearch'], tracks: true, searchNews: true, webSearch: true });
-    expect(follow.map((t) => t.function.name)).toEqual(['webSearch', 'proposeTrack', 'searchNews']);
+  it('is offered on the follow-story leg, with no search beside it, and nowhere else', () => {
+    const follow = toolsForLeg({ skillLoaded: 'conversation/follow-story', tracks: true, searchNews: true, webSearch: true });
+    expect(follow.map((t) => t.function.name)).toEqual(['proposeTrack']);
     const question = toolsForLeg({ skillLoaded: 'conversation/question', skillTools: ['ask_choice', 'webSearch'], tracks: true, searchNews: true, webSearch: true });
     expect(question.map((t) => t.function.name)).not.toContain('proposeTrack');
     const noPort = toolsForLeg({ skillLoaded: 'conversation/follow-story', skillTools: ['proposeTrack', 'searchNews'] });
@@ -73,7 +74,11 @@ describe('proposeTrack', () => {
     const out = await runAgentTurn({ state, userMessage: 'I want to follow the floods in assam', deps: h.deps });
 
     expect(h.port.proposeTrack).toHaveBeenCalledWith(OPTIONS);
-    expect(names(h.requests[1])).toContain('proposeTrack');
+    expect(h.requests).toHaveLength(2);
+    expect(names(h.requests[1])).toEqual(['proposeTrack']);
+    expect(h.requests[1].toolChoice).toBe('auto');
+    expect(h.port.searchNews).not.toHaveBeenCalled();
+    expect(h.port.webSearch).not.toHaveBeenCalled();
     expect(out.terminalReason).toBe('awaiting-user');
     expect(out.reply).toBe('Pick the stories to follow below.');
     expect(out.stagedSomething).toBe(true);
@@ -100,18 +105,57 @@ describe('proposeTrack', () => {
   });
 });
 
-describe('searchNews', () => {
-  it('runs on the device, buys a leg and records the query as the subject', async () => {
+describe('a search the leg did not declare', () => {
+  it.each(['searchNews', 'webSearch'] as const)('%s on a follow leg never runs: the next leg is the card, forced', async (tool) => {
+    const args = tool === 'searchNews' ? { query: 'Assam floods' } : { queries: ['Assam floods'] };
     const h = harness([
       route(),
-      res({ toolCalls: [tc('searchNews', { query: 'Assam floods' })] }),
+      res({ toolCalls: [tc(tool, args)] }),
       res({ content: 'Pick the stories to follow below.', toolCalls: [tc('proposeTrack', OPTIONS)] }),
     ]);
+    const out = await runAgentTurn({ state: createAgentState(PERSONA), userMessage: 'the floods in assam', deps: h.deps });
+    expect(h.port.searchNews).not.toHaveBeenCalled();
+    expect(h.port.webSearch).not.toHaveBeenCalled();
+    expect(out.legs[1].toolResults[0].result).toMatchObject({ refused: true, error: 'No search on this step. Call proposeTrack now.' });
+    expect(h.requests).toHaveLength(3);
+    expect(names(h.requests[2])).toEqual(['proposeTrack']);
+    expect(h.requests[2].toolChoice).toBe('required');
+    expect(text(h.requests[2])).not.toContain('Assam floods displace thousands');
+    expect(out.stagedSomething).toBe(true);
+  });
+
+  it('with a card waiting, a refused search forces no second card', async () => {
+    const h = harness([route(), res({ toolCalls: [tc('searchNews', { query: 'Assam floods' })] }), res({ content: 'Tick the ones you want on the card above, then tap Follow.' })]);
     const state = createAgentState(PERSONA);
-    await runAgentTurn({ state, userMessage: 'the floods in assam', deps: h.deps });
-    expect(h.port.searchNews).toHaveBeenCalledWith({ query: 'Assam floods' });
-    expect(text(h.requests[2])).toContain('Assam floods displace thousands');
-    expect(state.turn.lastSubjects).toEqual(expect.arrayContaining(['Assam floods']));
+    state.pendingProposal = { proposalId: 'track-0', summary: 'Assam floods relief', chooseOne: true, appliable: false, multiSelect: true } as never;
+    await runAgentTurn({ state, userMessage: 'follow the floods in assam', deps: h.deps });
+    expect(h.port.searchNews).not.toHaveBeenCalled();
+    expect(h.requests[2].toolChoice).toBe('auto');
+    expect(h.port.proposeTrack).not.toHaveBeenCalled();
+  });
+
+  it('on a facts leg it is answered and the web is not searched', async () => {
+    const h = harness([
+      res({ content: 'Noted.', toolCalls: [tc('load_skill', { id: 'facts/interest' })] }),
+      res({ toolCalls: [tc('webSearch', { queries: ['what is padel'] })] }),
+      res({ content: 'Anything else?' }),
+    ]);
+    const out = await runAgentTurn({ state: createAgentState(PERSONA), userMessage: 'I play padel', deps: h.deps });
+    expect(names(h.requests[1])).not.toContain('webSearch');
+    expect(h.port.webSearch).not.toHaveBeenCalled();
+    expect(out.legs[1].toolResults[0].result).toMatchObject({ refused: true, searched: false });
+  });
+});
+
+describe('the sentence beside a follow card', () => {
+  it('is the app\'s line when the card leg wrote none', async () => {
+    const h = harness([route(), res({ toolCalls: [tc('proposeTrack', OPTIONS)] })]);
+    const out = await runAgentTurn({
+      state: createAgentState(PERSONA), userMessage: 'follow the floods in assam', deps: h.deps,
+      fallbacks: { leak: 'L', process: 'P', noAnswer: 'N', followCard: 'FOLLOW LINE' },
+    });
+    expect(out.reply).toBe('FOLLOW LINE');
+    expect(out.acknowledgement).toBe('');
   });
 });
 
@@ -177,8 +221,7 @@ describe('More options', () => {
     expect(out.closingLegFired).toBe(false);
   });
 
-  it('a leg that only looks the story up gets one more forced leg for the card (u6b2 more-options r0-r2)', async () => {
-    // Replayed: the More options leg called searchNews (and webSearch) instead of proposeTrack.
+  it('a leg that only tries to look the story up is refused and gets one more forced leg for the card', async () => {
     const h = harness([
       res({ content: '\n', toolCalls: [tc('searchNews', { query: 'Assam floods relief' })] }),
       res({ toolCalls: [tc('proposeTrack', OPTIONS)] }),
@@ -187,7 +230,7 @@ describe('More options', () => {
     expect(h.requests).toHaveLength(2);
     expect(names(h.requests[1])).toEqual(['proposeTrack']);
     expect(h.requests[1].toolChoice).toBe('required');
-    expect(text(h.requests[1])).toContain('Assam floods displace thousands');
+    expect(h.port.searchNews).not.toHaveBeenCalled();
     expect(h.port.proposeTrack).toHaveBeenCalledWith(OPTIONS);
     expect(out.stagedSomething).toBe(true);
   });

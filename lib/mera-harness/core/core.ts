@@ -688,9 +688,8 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
       resumedSkill = true;
       skillsLoaded.push(FOLLOW_STORY_SKILL);
     }
-    // Two at most: a lookup leg (the skill says to search first, and the model
-    // does, whatever the leg declares) and the card. Measured u6b2: 4 of 6
-    // misses were a leg that only called searchNews.
+    // Two at most: a leg that only tried to search is refused, and the card
+    // comes on the one more forced leg.
     maxLegsThisTurn = 2;
   }
   /** The note a More options leg ends on: the options on the card, escaped
@@ -1145,6 +1144,29 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
     const inputTokens =
       estimateTokens(systemPrompt) + messages.reduce((n, m) => n + estimateTokens(m.content), 0);
 
+    const legTools: unknown[] = moreOptionsMode
+      ? (deps.tools.proposeTrack ? [PROPOSE_TRACK_TOOL] : [])
+      : followLegsLeft > 0
+        ? [PROPOSE_TRACK_TOOL]
+      : closingLegNow || answerLegNow ? [] : toolsForLeg({
+      skillLoaded,
+      forcingProposal: forcingProposalNow,
+      wideRouteLeg: !enforceRoute,
+      // One question per turn: a later segment never gets ask_choice once an
+      // earlier one is waiting on the user.
+      allowChoice: askingSkill === null,
+      webSearch: typeof deps.tools.webSearch === 'function',
+      explainMera: typeof deps.tools.explainMera === 'function',
+      skillTools: skillLoaded === null ? null : skillTools(skillLoaded),
+      cards: cardsOffered,
+      tracks: typeof deps.tools.proposeTrack === 'function',
+      searchNews: typeof deps.tools.searchNews === 'function',
+      pendingCard: cardThisTurn === null && pendingCard ? { appliable: pendingCard.appliable } : null,
+      cardOnRouteLeg: cardIsNewest && index === 0 && !resumedSkill,
+    }) as unknown[];
+    // A search runs only on a leg that declared it.
+    const declared = new Set(legTools.map((t) => (t as { function?: { name?: string } }).function?.name));
+
     // THROWS PROPAGATE. The runner throws from its own callModel for run-ending
     // conditions (a 402 spend limit is the live one), and recording those as leg
     // data instead of letting them abort writes a file of empty rows that reads
@@ -1165,26 +1187,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
       // re-load at leg 3 after the other tools had already run. Withholding the
       // tool is stronger than answering it, because a tool the model cannot
       // see is one it cannot spend a leg on.
-      tools: moreOptionsMode
-        ? (deps.tools.proposeTrack ? [PROPOSE_TRACK_TOOL] : [])
-        : followLegsLeft > 0
-          ? [PROPOSE_TRACK_TOOL]
-        : closingLegNow || answerLegNow ? [] : toolsForLeg({
-        skillLoaded,
-        forcingProposal: forcingProposalNow,
-        wideRouteLeg: !enforceRoute,
-        // One question per turn: a later segment never gets ask_choice once an
-        // earlier one is waiting on the user.
-        allowChoice: askingSkill === null,
-        webSearch: typeof deps.tools.webSearch === 'function',
-        explainMera: typeof deps.tools.explainMera === 'function',
-        skillTools: skillLoaded === null ? null : skillTools(skillLoaded),
-        cards: cardsOffered,
-        tracks: typeof deps.tools.proposeTrack === 'function',
-        searchNews: typeof deps.tools.searchNews === 'function',
-        pendingCard: cardThisTurn === null && pendingCard ? { appliable: pendingCard.appliable } : null,
-        cardOnRouteLeg: cardIsNewest && index === 0 && !resumedSkill,
-      }) as unknown[],
+      tools: legTools,
       // More options was asked for by a tap: a card is the answer, and staging
       // it changes nothing until the user ticks and taps Follow.
       // The first follow leg stays on auto: the sentence beside the card is
@@ -1283,6 +1286,39 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
 
       const callKey = `${call.name}:${call.argumentsRaw}`;
       const isRepeat = continuationsSeen.has(callKey);
+
+      // A SEARCH THE LEG DID NOT DECLARE IS ANSWERED, NEVER RUN. The handover
+      // keeps its own searchNews answer below.
+      if (
+        (call.name === 'webSearch' || call.name === 'searchNews')
+        && typeof deps.tools[call.name] === 'function'
+        && !declared.has(call.name)
+        && !(handover && call.name === 'searchNews')
+      ) {
+        const onFollow = skillLoaded === FOLLOW_STORY_SKILL;
+        const out = {
+          error: onFollow ? 'No search on this step. Call proposeTrack now.' : 'No search on this step. Carry on from what the user said.',
+          refused: true,
+          ...(call.name === 'webSearch' ? { searched: false } : {}),
+        };
+        leg.toolResults.push({ name: call.name, result: out });
+        toolResultsThisTurn.push({ name: call.name, result: out });
+        if (!isRepeat) {
+          sawContinuationTool = true;
+          continuationsSeen.add(callKey);
+        }
+        // On the follow skill the next leg is the card, forced: a leg that only
+        // tried to search has no card, and a second try with a new query would
+        // walk to the leg cap.
+        if (
+          onFollow && !moreOptionsMode && followLegsLeft === 0 && cardThisTurn === null
+          && pendingCard === null && typeof deps.tools.proposeTrack === 'function'
+        ) {
+          followLegsLeft = 2;
+          maxLegsThisTurn = Math.max(maxLegsThisTurn, nextLegIndex + 1 - formatRetries);
+        }
+        continue;
+      }
 
       if (call.name === 'load_skill') {
         const id = typeof args.id === 'string' ? args.id : '';
@@ -1383,8 +1419,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
       }
 
       if (call.name === 'webSearch') {
-        // The device searches. No port method means the setting is
-        // off; the tool was not declared, so a call is answered, never run.
+        // The device searches. No port method means the setting is off.
         const queries = Array.isArray(args.queries)
           ? (args.queries as unknown[]).filter((q): q is string => typeof q === 'string' && q.trim().length > 0).slice(0, 4)
           : [];
@@ -1404,8 +1439,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
       }
 
       if (call.name === 'searchNews') {
-        // Mera's own index, from the device. No port method: not declared, so
-        // a call is answered, never run.
+        // Mera's own index, from the device.
         const query = typeof args.query === 'string' ? args.query.trim().slice(0, 200) : '';
         if (query) subjectsThisTurn.push(query);
         const out = handover
@@ -2093,7 +2127,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
         if (typeof out.error !== 'string') {
           proposedSomething = true;
           cardThisTurn = 'staged';
-          followCardStaged = handover !== null;
+          followCardStaged = !moreOptionsMode;
           for (const o of Array.isArray(card.options) ? (card.options as Record<string, unknown>[]) : []) {
             if (typeof o?.label === 'string') subjectsThisTurn.push(o.label);
           }
@@ -2728,7 +2762,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<AgentTur
   }
 
   // A required slot beats prose emphasis: a card leg writes its sentence on about
-  // one turn in fifty, so the line beside the handover's card is the app's.
+  // one turn in fifty, so the line beside a follow card is the app's when the leg wrote none.
   if (followCardStaged && !cleanProse(reply).trim()) reply = params.fallbacks?.followCard ?? REPLY_FOLLOW_CARD_FALLBACK;
 
   // ---- NO FOLLOW CARD CAME: the reader's words go back as a fact card -------

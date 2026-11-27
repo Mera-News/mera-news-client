@@ -87,13 +87,21 @@ describe('persona turn: searchNews from the Mera button', () => {
   it('a held searchNews is a live row with deviceWork, and clears after', async () => {
     const news = hold('SearchNews', { searchNews: [] });
     server.use(...mockGateway((c) => {
-      if (c.index === 0) return reply('One moment.', toolCall('load_skill', { id: 'conversation/follow-story' }));
-      if (c.index === 1) return reply('', toolCall('searchNews', { query: 'Sporting CP' }));
+      // An interest with no stake: the loop itself looks the subject up before the follow card.
+      if (c.index === 0) return reply('One moment.', toolCall('load_skill', { id: 'facts/interest' }));
+      if (c.index === 1) {
+        return reply('', toolCall('saveExtractedFacts', {
+          extracted_user_information: [{
+            statement: 'Follows Sporting CP', questionnaire_attribute: 'topics: general interests',
+            has_stake: false, story_subject: 'Sporting CP',
+          }],
+        }));
+      }
       return 'Nothing new on that yet.';
     }));
     const { engine } = await attachCloud(personaAgent());
 
-    engine.send('follow Sporting CP');
+    engine.send('I am into Sporting CP');
     await until(news.reached, 30_000, 'searchNews on the wire');
 
     expect(phase().liveTool).toEqual({ kind: 'working', toolName: 'searchNews', args: { query: 'Sporting CP' } });

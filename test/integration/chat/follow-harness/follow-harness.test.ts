@@ -170,7 +170,7 @@ describe('the Mera button persona chat can follow a story', () => {
     expect(store().proposal?.actions[0]).toMatchObject({ type: 'track_story', subject: { surface: 'tracked-stories-chat' } });
   });
 
-  it('looks stories up in Mera\'s own index', async () => {
+  it('does not query Mera\'s own index on a follow turn, whatever the model calls', async () => {
     let queried = false;
     server.use(
       mockGql('SearchNews', () => { queried = true; return { searchNews: [] }; }),
@@ -183,7 +183,7 @@ describe('the Mera button persona chat can follow a story', () => {
     const { engine } = await attachCloud(personaAgent());
     engine.send('follow the dutch cabinet talks');
     await turnDone();
-    expect(queried).toBe(true);
+    expect(queried).toBe(false);
   });
 });
 
