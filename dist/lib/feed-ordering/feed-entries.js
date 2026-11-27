@@ -433,6 +433,9 @@ function layoutFeed(input) {
   const algo = input.algo ?? {};
   const highSinks = algo.highSinks ?? false;
   const tierOf = it => seenTierOfEntry(it, cardStates, openedArticleIds);
+  // The fold's "seen" is opened or tapped (owner). A card only scrolled past keeps its place:
+  // dwell marks most of a feed `skipped`, and folding those emptied the Feed.
+  const seenForFold = it => tierOf(it) === 2 || cardStates[it.id]?.state === 'viewed';
   // Unclosed so every row comes back: the closed pin is applied here, with the
   // frozen folded set beside it.
   const {
@@ -451,11 +454,11 @@ function layoutFeed(input) {
     const tier = tierOf(it);
     const b = baseBand(it, ctx);
     const foldBand = algo.mediumStaysAbove || b <= 1 ? b : effectiveBand(it, tier, nowMs, ctx, highSinks);
-    if (pinned.has(it.id) || !(algo.seenBelowFold && tier > 0) && (0, _priorityOrder.isAboveFold)(foldBand)) above.push(it);else below.push(it);
+    if (pinned.has(it.id) || !(algo.seenBelowFold && seenForFold(it)) && (0, _priorityOrder.isAboveFold)(foldBand)) above.push(it);else below.push(it);
   }
   // Seen rows trail the unseen ones in `below`: the sort orders tier first.
-  const firstSeen = below.findIndex(it => tierOf(it) > 0);
-  const belowSeen = below.filter(it => tierOf(it) > 0).length;
+  const firstSeen = below.findIndex(seenForFold);
+  const belowSeen = below.filter(seenForFold).length;
   const base = {
     above,
     below,

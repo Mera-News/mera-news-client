@@ -10,6 +10,7 @@ var _factRowsSelector = require("./fact-rows-selector");
 var _feedListSelector = require("./feed-list-selector");
 var _storyGrouping = require("../algorithms/story-grouping");
 var _grayBandPairs = require("../algorithms/gray-band-pairs");
+var _feedEntries = require("../feed-ordering/feed-entries");
 // feed-diagnostics — an ON-DEMAND explanation of "why is my For you feed
 // showing N cards". Answers the question the raw counts cannot: the header says
 // 79 relevant articles and the feed shows 3, and almost all of that gap is
@@ -259,12 +260,35 @@ function computeFeedFunnel(input) {
   } = (0, _grayBandPairs.grayBandSweep)(dedupItems);
   const memberSumMatchesVisible = memberSum === visibleCount;
   const visibilityAttributionSums = dropped.excluded + dropped.notComplete + dropped.belowRelevanceGate + dropped.outsideWindow + dropped.unknownGate + visibleCount === input.suggestions.length;
+  let layout = null;
+  if (input.algo) {
+    const data = input.order.map(id => input.itemsById[id]).filter(it => !!it);
+    const l = (0, _feedEntries.layoutFeed)({
+      data,
+      cardStates: input.cardStates,
+      openedArticleIds: input.openedArticleIds,
+      nowMs,
+      pin: _feedEntries.EMPTY_PIN,
+      tail: [],
+      show: 'all',
+      ready: true,
+      ctx: input.userCtx,
+      algo: input.algo
+    });
+    layout = {
+      above: l.above.length,
+      below: l.below.length,
+      belowSeen: l.belowSeen,
+      terminal: l.terminal
+    };
+  }
   return {
     generatedAtMs: nowMs,
     hydrated: {
       order: input.orderHydrated,
       opened: input.openedHydrated
     },
+    layout,
     gates: {
       renderGate: (0, _factRowsSelector.effectiveRenderGate)(),
       mixedVintage: {
