@@ -144,6 +144,8 @@ export interface SuggestionGroupingRow {
   scoredWithV3?: boolean | null;
   /** Server story id (schema v56); null = no dedup edge. */
   storyKey?: string | null;
+  /** Publication phone reading score (schema v59); null or absent = unscored. */
+  readingScore?: number | null;
   /** `score_failed_at` (schema v57): a scoring attempt finished with no score. */
   scoreFailedAt?: number | null;
 }
@@ -164,6 +166,7 @@ export function toGroupingRow(row: ArticleSuggestionModel): SuggestionGroupingRo
     // Normalised like the `loadSuggestions` mapper: SQLite returns 0/1.
     scoredWithV3: row.scoredWithV3 === true || (row.scoredWithV3 as unknown) === 1,
     storyKey: row.storyKey ?? null,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : null,
     scoreFailedAt: typeof row.scoreFailedAt === 'number' ? row.scoreFailedAt : null,
   };
 }
@@ -342,6 +345,7 @@ export function toForYouSuggestion(
     rawScore: row.rawScore,
     eventType: row.eventType,
     storyKey: row.storyKey ?? null,
+    readingScore: typeof row.readingScore === 'number' ? row.readingScore : null,
     // Same parse shape as `buildStageCandidateInput` above, so story-grouping's
     // entity edge and the scorer see byte-identical entity lists.
     entities: parseJsonArray<string>(row.entitiesJson).filter(

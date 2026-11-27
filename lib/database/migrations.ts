@@ -1610,5 +1610,17 @@ export default schemaMigrations({
         }),
       ],
     },
+    {
+      // article_suggestions.reading_score: the publication's phone reading score
+      // (0 to 100) at hydration. Optional; existing rows read NULL. Roll-forward
+      // only, like v56 to v58; addColumns, never a recreate.
+      toVersion: 59,
+      steps: [
+        addColumns({
+          table: 'article_suggestions',
+          columns: [{ name: 'reading_score', type: 'number', isOptional: true }],
+        }),
+      ],
+    },
   ],
 });

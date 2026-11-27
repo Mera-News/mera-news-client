@@ -57,6 +57,7 @@ export default class ArticleSuggestion extends Model {
   @field('matched_topics_json') matchedTopicsJson!: string | null;
   // Server story id; equal non-null keys are the same story (schema v56).
   @field('story_key') storyKey!: string | null;
+  @field('reading_score') readingScore!: number | null;
   // Deterministic engine raw score (pre-judge) — the fail-open source of truth.
   @field('computed_score') computedScore!: number | null;
   // Final post-judge raw score (for within-section ordering / audit).

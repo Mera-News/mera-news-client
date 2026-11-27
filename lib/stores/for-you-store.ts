@@ -103,6 +103,8 @@ export type ForYouSuggestion = {
     eventType: string | null;
     /** Server story id (schema v56): equal non-null keys are one story. Absent/null means no dedup edge. */
     storyKey?: string | null;
+    /** Publication phone reading score (schema v59); null or absent = unscored. */
+    readingScore?: number | null;
     /** Server-tagged named entities (≤8, persisted as `entities_json`). Feeds
      *  story-grouping's entity-overlap DISPLAY edge, which is the only signal
      *  that collapses translated/rewritten coverage of one story whose titles
