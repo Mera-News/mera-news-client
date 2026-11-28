@@ -3,6 +3,7 @@
 import * as factService from '@/lib/database/services/fact-service';
 import { createTopics, getActive, getByFact } from '@/lib/database/services/topic-service';
 import { buildRetrievalProfile } from '@/lib/news-harness/scoring-engine/retrieval-profile';
+import * as executor from '@/lib/database/services/persona-action-executor';
 import { executeProposalActions } from '@/lib/chat-tools/proposal-handlers';
 import { resetChatModules, setProcessingMode } from '@/test/integration/chat/_helpers';
 
@@ -65,5 +66,32 @@ describe('remove_topics', () => {
     expect((await getByFact(fact.id)).filter((r) => r.status === 'retired').map((r) => r.text).sort()).toEqual(['Alpha', 'beta']);
     expect((await getByFact(other.id))[0].status).toBe('active');
     expect((await factService.getFacts()).find((f) => f.id === fact.id)?.metadata).toEqual({ topics: ['gamma'] });
+  });
+
+  it('keeps a text listed, and its row active, when the rails refuse its retire', async () => {
+    const fact = await factService.addFact('s', { topics: ['keep', 'drop'] });
+    const w = { weight: 0.5, status: 'active' as const, provenance: 'llm' as const };
+    await createTopics([
+      { factId: fact.id, text: 'keep', ...w },
+      { factId: fact.id, text: 'drop', ...w },
+    ]);
+    const keepId = (await getByFact(fact.id)).find((r) => r.text === 'keep')!.id;
+    const real = executor.applyPersonaAction;
+    jest.spyOn(executor, 'applyPersonaAction').mockImplementation(async (a, source) =>
+      'topicId' in a && a.topicId === keepId
+        ? { applied: false, summary: 'refused' }
+        : real(a, source),
+    );
+
+    const result = await executeProposalActions([
+      { type: 'remove_topics', fact_id: fact.id, topics: ['keep', 'drop'] },
+    ]);
+
+    expect(result.errors).toEqual(['remove_topics: refused']);
+    expect((await getByFact(fact.id)).map((r) => [r.text, r.status]).sort()).toEqual([
+      ['drop', 'retired'],
+      ['keep', 'active'],
+    ]);
+    expect((await factService.getFacts())[0].metadata).toEqual({ topics: ['keep'] });
   });
 });

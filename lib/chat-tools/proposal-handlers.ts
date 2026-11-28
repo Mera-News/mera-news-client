@@ -126,7 +126,7 @@ export async function executeProposalActions(
       });
 
   // Route a rails-backed action through the executor and fold its result in.
-  const runRails = async (personaAction: PersonaAction, label: string): Promise<void> => {
+  const runRails = async (personaAction: PersonaAction, label: string): Promise<boolean> => {
     const r = await applyPersonaAction(personaAction, 'user');
     if (r.applied) {
       applied++;
@@ -137,6 +137,7 @@ export async function executeProposalActions(
       // surface as an error line (e.g. "Nudge budget exhausted").
       errors.push(`${label}: ${r.summary}`);
     }
+    return r.applied;
   };
 
   // One pass to resolve current facts for id validation + topic rewrites.
@@ -219,8 +220,11 @@ export async function executeProposalActions(
             (t) => t.status === 'active' && t.factId === action.fact_id && remove.has(t.normalizedText),
           );
           const before = applied;
+          // A text whose retire the rails refused stays listed: its row still fetches.
           for (const row of rows) {
-            await runRails({ action_type: ACTION_NAMES.RETIRE_TOPIC, topicId: row.id }, 'remove_topics');
+            if (!(await runRails({ action_type: ACTION_NAMES.RETIRE_TOPIC, topicId: row.id }, 'remove_topics'))) {
+              remove.delete(row.normalizedText);
+            }
           }
           applied = before + 1; // once per action, however many rows retired
           const next = (fact.metadata?.topics ?? []).filter((t) => !remove.has(normalizeTopicText(t)));
