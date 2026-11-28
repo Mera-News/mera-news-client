@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.RUBRIC_FIX_RESCORE_PRIOR_ID = exports.RUBRIC_FIX_ID = exports.RESCORE_REASON_FIRST_ID = exports.RESCORE_REASON_FIRST_FRESH_ID = exports.RESCORE_DEMOTE_ONLY_ID = exports.REASON_V3_RULES = exports.REASON_V3_ID = exports.REASON_V1_ID = exports.REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_ID = exports.PRE_GEO_CONTROL_ID = exports.NULL_CONTROL_ID = void 0;
+exports.RESCORE_REASON_FIRST_ID = exports.RESCORE_DEMOTE_ONLY_ID = exports.REASON_V3_RULES = exports.REASON_V3_ID = exports.REASON_V1_ID = exports.REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_ID = exports.PRE_GEO_CONTROL_ID = exports.NULL_CONTROL_ID = void 0;
 var _prompts = require("./prompts");
 var _promptVariants = require("./prompt-variants");
 var _slots = require("../../harnesses/slots.generated");
@@ -32,10 +32,7 @@ const REASON_RESCORE_ID = exports.REASON_RESCORE_ID = 'reason-rescore';
 const REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_PRIOR_ID = 'reason-rescore-prior';
 const RESCORE_DEMOTE_ONLY_ID = exports.RESCORE_DEMOTE_ONLY_ID = 'rescore-demote-only';
 const NULL_CONTROL_ID = exports.NULL_CONTROL_ID = 'null-control';
-const RUBRIC_FIX_ID = exports.RUBRIC_FIX_ID = 'rubric-fix';
-const RUBRIC_FIX_RESCORE_PRIOR_ID = exports.RUBRIC_FIX_RESCORE_PRIOR_ID = 'rubric-fix-rescore-prior';
 const RESCORE_REASON_FIRST_ID = exports.RESCORE_REASON_FIRST_ID = 'rescore-reason-first';
-const RESCORE_REASON_FIRST_FRESH_ID = exports.RESCORE_REASON_FIRST_FRESH_ID = 'rescore-reason-first-fresh';
 
 /**
  * The control: the reason prompt exactly as it shipped before promotion.
@@ -226,49 +223,19 @@ Output: single plain string, no prefixes, no markdown.`;
 });
 
 /**
- * The rubric rewrites, on the STANDARD route only (relevance and reason); the
- * headline prompts keep the shipped base because no runner exercises them and
- * the headline relevance prompt has no room under the wire margin.
- *
- * In place, on a copy of the base: `family` stops at the family's region, a
- * routine forecast is no family stake while an official warning or a cold wave
- * named for the place still is, an immigration rule binds an expat only when it
- * covers their nationality or status, and the reader's own product category is
- * a minor domain stake. The note may state no distance, nearness, warning or
- * number its article does not, and names the fact instead of "your interest".
- */
-(0, _promptVariants.registerPromptVariant)({
-  id: RUBRIC_FIX_ID,
-  description: 'The shipped scoring base with the family radius, routine weather, immigration and ' + 'own-product-category rules rewritten in place, and the note rules widened to the article. ' + 'Standard route only.',
-  systemPrompts: {
-    relevance: _slots.CLOUD_BASE_SLOTS['scoring/cloud-relevance-system-prompt-rubric-fix'],
-    reason: _slots.CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rubric-fix']
-  }
-});
-
-/**
- * `rubric-fix` with pass 2 judging its one article again, as `reason-rescore-prior`
- * does: it answers `{"k","s","reason"}` and sees the pass-1 score relabelled.
- * The eval keeps the lower of the two scores (the scorer applies the min).
- */
-(0, _promptVariants.registerPromptVariant)({
-  id: RUBRIC_FIX_RESCORE_PRIOR_ID,
-  description: 'rubric-fix with the rescore-prior pass 2 on the standard route: one object holds the tag, ' + 'the score and the note, the pass-1 score shown relabelled.',
-  systemPrompts: {
-    relevance: _slots.CLOUD_BASE_SLOTS['scoring/cloud-relevance-system-prompt-rubric-fix'],
-    reason: _slots.CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-rubric-fix']
-  },
-  reasonPriorScoreLine: 'relabel'
-});
-
-/**
  * `reason-rescore-prior` with the object written sentence first: `{"reason","k","s"}`.
  *
- * Measured on the evidence rows: pass 2 answered `{"k":"family","s":0.42}` beside a sentence saying
- * routine weather carries no stake, so one object does not by itself make the tag and the sentence
- * agree. The model writes in field order; asked for the sentence first, the tag and the score come
- * after it has said what the story changes. Same rubric, same prior line, same decoder (it reads by
- * key). Standard route only: the headline rescore twin is already over the wire margin.
+ * Pass 2 had answered `{"k":"family","s":0.42}` beside a sentence saying routine weather carries no
+ * stake. Asked for the sentence first, the tag and the score follow what it said. Same rubric, same
+ * prior line, same decoder (it reads by key). Standard route only: the headline rescore twin is
+ * already over the wire margin.
+ *
+ * MEASURED, with the caller keeping the lower of the two scores (goldset-348 x3, evidence rows x5):
+ * it hid foreign AI rulings and an other-city outage with true notes, where the prior-line rescore
+ * had rewritten them into invented ties to the reader's country, but routine family-place forecasts
+ * stayed `family` at 0.41-0.58 and must-show recall fell 0.658 to 0.613 against a floor of 0.009,
+ * so it does not ship. The same prompt without the prior line fell further, to 0.559. Kept
+ * registered as the base for an arm that reads a verdict slot instead of lowering by score.
  */
 (0, _promptVariants.registerPromptVariant)({
   id: RESCORE_REASON_FIRST_ID,
@@ -277,24 +244,6 @@ Output: single plain string, no prefixes, no markdown.`;
     reason: _slots.CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-reason-first']
   },
   reasonPriorScoreLine: 'relabel'
-});
-
-/**
- * `rescore-reason-first` without the first-pass score in the user message (`'omit'`).
- *
- * Measured on the evidence rows: shown the first-pass score, pass 2 kept a foreign AI ruling at the
- * inflated score and rewrote the note to agree with it, inventing a tie to the reader's country,
- * where the shipped note had said plainly that the ruling does not bind them. Without the number,
- * pass 2 judges the article fresh; the caller's lower-of-the-two policy still keeps it from raising
- * a score.
- */
-(0, _promptVariants.registerPromptVariant)({
-  id: RESCORE_REASON_FIRST_FRESH_ID,
-  description: 'rescore-reason-first with the pass-1 score left out of the user message, so pass 2 cannot ' + 'anchor on it. Standard route only.',
-  systemPrompts: {
-    reason: _slots.CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-reason-first']
-  },
-  reasonPriorScoreLine: 'omit'
 });
 
 // LOCAL IS STILL UNTOUCHED, through the promotion as well as the arms.
