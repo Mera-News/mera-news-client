@@ -194,3 +194,48 @@ describe('measured sizes after the promotion', () => {
     ).toBe(1123);
   });
 });
+
+describe('the rubric-fix arms', () => {
+  const fix = resolvePromptVariant('rubric-fix');
+  const fixPrior = resolvePromptVariant('rubric-fix-rescore-prior');
+  /** UTF-8 bytes at which an encrypted sharedSystem reaches 0.9 of the gateway's 65536 cap. */
+  const WIRE_MARGIN_BYTES = Math.floor((0.9 * 65536) / 2) - 72;
+
+  it('changes the standard route only: the headline prompts stay shipped', () => {
+    for (const arm of [fix, fixPrior]) {
+      expect(relevanceSystemPromptFor(CFG, 'standard', arm.id)).not.toBe(CFG.relevanceSystemPrompt);
+      expect(reasonSystemPromptFor(CFG, 'standard', arm.id)).not.toBe(CFG.reasonSystemPrompt);
+      expect(relevanceSystemPromptFor(CFG, 'headline', arm.id)).toBe(CFG.headlineRelevanceSystemPrompt);
+      expect(reasonSystemPromptFor(CFG, 'headline', arm.id)).toBe(CFG.headlineReasonSystemPrompt);
+    }
+    expect(relevanceSystemPromptFor(CFG, 'standard', fix.id)).toBe(relevanceSystemPromptFor(CFG, 'standard', fixPrior.id));
+  });
+
+  it('carries the rewritten rules, with the old sentences gone', () => {
+    const relevance = relevanceSystemPromptFor(CFG, 'standard', fix.id);
+    expect(relevance).toContain("never their country as a whole");
+    expect(relevance).toContain("a routine forecast or ordinary daily conditions with no warning");
+    expect(relevance).toContain("when they cover the user's own nationality or status");
+    expect(relevance).toContain("the user's OWN product category");
+    expect(relevance).not.toContain('whatever groups they name');
+    expect(relevance).not.toContain('one the user lives in or has family in');
+    const reason = reasonSystemPromptFor(CFG, 'standard', fix.id);
+    expect(reason).toContain('a forecast is not an alert');
+    expect(reason).not.toContain('your Formula 1 interest');
+    expect(reason).not.toContain('your logistics interest');
+  });
+
+  it('rubric-fix-rescore-prior asks pass 2 for one object and shows it the pass-1 score', () => {
+    expect(reasonSystemPromptFor(CFG, 'standard', fixPrior.id)).toContain('{"k":"…","s":0.00,"reason":"…"}');
+    expect(fixPrior.reasonPriorScoreLine).toBe('relabel');
+    expect(fix.reasonPriorScoreLine).toBeUndefined();
+  });
+
+  it('fits under the wire margin, so it could ship as it was measured', () => {
+    for (const arm of [fix, fixPrior]) {
+      for (const p of [relevanceSystemPromptFor(CFG, 'standard', arm.id), reasonSystemPromptFor(CFG, 'standard', arm.id)]) {
+        expect(Buffer.byteLength(p, 'utf8')).toBeLessThanOrEqual(WIRE_MARGIN_BYTES);
+      }
+    }
+  });
+});

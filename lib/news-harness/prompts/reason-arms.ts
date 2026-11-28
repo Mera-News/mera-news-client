@@ -29,6 +29,7 @@ import {
   CLOUD_HEADLINE_REASON_SYSTEM_PROMPT_RESCORE,
 } from './prompts';
 import { registerPromptVariant } from './prompt-variants';
+import { CLOUD_BASE_SLOTS } from '../../harnesses/slots.generated';
 
 const REASON_V1_ID = 'reason-v1';
 const REASON_V3_ID = 'reason-v3';
@@ -37,6 +38,8 @@ const REASON_RESCORE_ID = 'reason-rescore';
 const REASON_RESCORE_PRIOR_ID = 'reason-rescore-prior';
 const RESCORE_DEMOTE_ONLY_ID = 'rescore-demote-only';
 const NULL_CONTROL_ID = 'null-control';
+const RUBRIC_FIX_ID = 'rubric-fix';
+const RUBRIC_FIX_RESCORE_PRIOR_ID = 'rubric-fix-rescore-prior';
 
 /**
  * The control: the reason prompt exactly as it shipped before promotion.
@@ -267,6 +270,47 @@ registerPromptVariant({
     + 'against. Never give it a prompt of its own.',
 });
 
+/**
+ * The rubric rewrites, on the STANDARD route only (relevance and reason); the
+ * headline prompts keep the shipped base because no runner exercises them and
+ * the headline relevance prompt has no room under the wire margin.
+ *
+ * In place, on a copy of the base: `family` stops at the family's region, a
+ * routine forecast is no family stake while an official warning or a cold wave
+ * named for the place still is, an immigration rule binds an expat only when it
+ * covers their nationality or status, and the reader's own product category is
+ * a minor domain stake. The note may state no distance, nearness, warning or
+ * number its article does not, and names the fact instead of "your interest".
+ */
+registerPromptVariant({
+  id: RUBRIC_FIX_ID,
+  description:
+    'The shipped scoring base with the family radius, routine weather, immigration and '
+    + 'own-product-category rules rewritten in place, and the note rules widened to the article. '
+    + 'Standard route only.',
+  systemPrompts: {
+    relevance: CLOUD_BASE_SLOTS['scoring/cloud-relevance-system-prompt-rubric-fix'],
+    reason: CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rubric-fix'],
+  },
+});
+
+/**
+ * `rubric-fix` with pass 2 judging its one article again, as `reason-rescore-prior`
+ * does: it answers `{"k","s","reason"}` and sees the pass-1 score relabelled.
+ * The eval keeps the lower of the two scores (the scorer applies the min).
+ */
+registerPromptVariant({
+  id: RUBRIC_FIX_RESCORE_PRIOR_ID,
+  description:
+    'rubric-fix with the rescore-prior pass 2 on the standard route: one object holds the tag, '
+    + 'the score and the note, the pass-1 score shown relabelled.',
+  systemPrompts: {
+    relevance: CLOUD_BASE_SLOTS['scoring/cloud-relevance-system-prompt-rubric-fix'],
+    reason: CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-rubric-fix'],
+  },
+  reasonPriorScoreLine: 'relabel',
+});
+
 // LOCAL IS STILL UNTOUCHED, through the promotion as well as the arms.
 // `LOCAL_REASON_SYSTEM_PROMPT` is built on a different base and states its voice
 // rule inline rather than sharing the cloud constant, so neither the promoted
@@ -283,4 +327,6 @@ export {
   REASON_RESCORE_PRIOR_ID,
   RESCORE_DEMOTE_ONLY_ID,
   NULL_CONTROL_ID,
+  RUBRIC_FIX_ID,
+  RUBRIC_FIX_RESCORE_PRIOR_ID,
 };
