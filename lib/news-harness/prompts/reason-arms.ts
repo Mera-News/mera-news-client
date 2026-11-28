@@ -40,6 +40,7 @@ const RESCORE_DEMOTE_ONLY_ID = 'rescore-demote-only';
 const NULL_CONTROL_ID = 'null-control';
 const RUBRIC_FIX_ID = 'rubric-fix';
 const RUBRIC_FIX_RESCORE_PRIOR_ID = 'rubric-fix-rescore-prior';
+const RESCORE_REASON_FIRST_ID = 'rescore-reason-first';
 
 /**
  * The control: the reason prompt exactly as it shipped before promotion.
@@ -311,6 +312,26 @@ registerPromptVariant({
   reasonPriorScoreLine: 'relabel',
 });
 
+/**
+ * `reason-rescore-prior` with the object written sentence first: `{"reason","k","s"}`.
+ *
+ * Measured on the evidence rows: pass 2 answered `{"k":"family","s":0.42}` beside a sentence saying
+ * routine weather carries no stake, so one object does not by itself make the tag and the sentence
+ * agree. The model writes in field order; asked for the sentence first, the tag and the score come
+ * after it has said what the story changes. Same rubric, same prior line, same decoder (it reads by
+ * key). Standard route only: the headline rescore twin is already over the wire margin.
+ */
+registerPromptVariant({
+  id: RESCORE_REASON_FIRST_ID,
+  description:
+    'reason-rescore-prior with pass 2 answering {"reason","k","s"} in that order, so the tag and '
+    + 'score follow the sentence. Prior line relabelled. Standard route only.',
+  systemPrompts: {
+    reason: CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-reason-first'],
+  },
+  reasonPriorScoreLine: 'relabel',
+});
+
 // LOCAL IS STILL UNTOUCHED, through the promotion as well as the arms.
 // `LOCAL_REASON_SYSTEM_PROMPT` is built on a different base and states its voice
 // rule inline rather than sharing the cloud constant, so neither the promoted
@@ -329,4 +350,5 @@ export {
   NULL_CONTROL_ID,
   RUBRIC_FIX_ID,
   RUBRIC_FIX_RESCORE_PRIOR_ID,
+  RESCORE_REASON_FIRST_ID,
 };

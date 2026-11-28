@@ -41,6 +41,14 @@ describe('the object contract', () => {
     expect(rescore).toEqual({ k: 'home', s: 0.62, score: 0.62 });
   });
 
+  it('reads the object by key, so the sentence-first order decodes the same', () => {
+    const { reason, rescore } = decode(
+      `{"reason":${JSON.stringify(REASON)},"k":"home","s":0.62}`,
+    );
+    expect(reason).toBe(REASON);
+    expect(rescore).toEqual({ k: 'home', s: 0.62, score: 0.62 });
+  });
+
   it('clamps `s` into the band its own `k` declares, in both directions', () => {
     // `none` is [0.05, 0.24]; the model says `none` and then scores it 0.71.
     expect(decode('{"k":"none","s":0.71,"reason":"x y z"}').rescore?.score).toBe(0.24);

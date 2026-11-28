@@ -239,3 +239,28 @@ describe('the rubric-fix arms', () => {
     }
   });
 });
+
+describe('the rescore-reason-first arm', () => {
+  const arm = resolvePromptVariant('rescore-reason-first');
+  const prior = resolvePromptVariant('reason-rescore-prior');
+  const WIRE_MARGIN_BYTES = Math.floor((0.9 * 65536) / 2) - 72;
+
+  it('asks for the sentence before the tag and the score, and never for the old order', () => {
+    const p = reasonSystemPromptFor(CFG, 'standard', arm.id);
+    expect(p).toContain('{"reason":"…","k":"…","s":0.00}');
+    expect(p).toContain('{"reason":"Evacuation ordered in Benimaclet, where you live.","k":"home","s":0.93}');
+    expect(p).not.toContain('{"k":"…","s":0.00,"reason":"…"}');
+    expect(p).not.toContain('Output: single plain string');
+  });
+
+  it('differs from reason-rescore-prior only in pass 2, and keeps its prior line', () => {
+    expect(arm.reasonPriorScoreLine).toBe(prior.reasonPriorScoreLine);
+    expect(relevanceSystemPromptFor(CFG, 'standard', arm.id)).toBe(CFG.relevanceSystemPrompt);
+    expect(reasonSystemPromptFor(CFG, 'standard', arm.id)).not.toBe(reasonSystemPromptFor(CFG, 'standard', prior.id));
+    expect(reasonSystemPromptFor(CFG, 'headline', arm.id)).toBe(CFG.headlineReasonSystemPrompt);
+  });
+
+  it('fits under the wire margin', () => {
+    expect(Buffer.byteLength(reasonSystemPromptFor(CFG, 'standard', arm.id), 'utf8')).toBeLessThanOrEqual(WIRE_MARGIN_BYTES);
+  });
+});
