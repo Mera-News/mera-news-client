@@ -55,6 +55,7 @@ import {
   batchMarkReasonSkipped,
   batchMarkAsScoredByIds,
   batchMarkScoreFailed,
+  takeRejectedCopies,
 } from '@/lib/database/services/article-suggestion-scoring-writes';
 // Imported from the harness DIRECTLY (not via the mera-protocol shim): this is
 // the one definition of "headline-sourced", shared with the prompt/chunk-size
@@ -2860,7 +2861,14 @@ async function requeueWaitingOrFail(
       // stops spinning, run the batch-scoped discard, refresh, then treat as
       // terminal.
       if (b.reasonCandidateIds && b.reasonCandidateIds.length > 0) {
-        await batchMarkReasonSkipped(b.reasonCandidateIds).catch(
+        // A row whose story copy was rejected leaves the Feed with its real score kept, rather
+        // than showing with no note beside the sibling card that has one.
+        const rejected = takeRejectedCopies(b.reasonCandidateIds);
+        const rejectedSet = new Set(rejected);
+        await Promise.all([
+          batchMarkReasonSkipped(b.reasonCandidateIds.filter((id) => !rejectedSet.has(id))),
+          batchMarkGateSkipped(rejected),
+        ]).catch(
           (err: unknown) => {
             logger.warn(
               `${TAG} batch ${batch.batchId} batchMarkReasonSkipped failed: ${String(err)}`,

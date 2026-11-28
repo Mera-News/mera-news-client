@@ -141,6 +141,19 @@ function sharesAToken(a: Set<string>, b: Set<string>): boolean {
   return false;
 }
 
+/**
+ * Every number written in `text`, as plain digit strings: a thousands separator
+ * is read away ("1,200" is "1200"), a decimal splits into its digit runs ("6.8"
+ * gives "6" and "8"), leading zeros drop. Both sides go through the same reading,
+ * so only consistency matters.
+ */
+function numbersIn(text: string): Set<string> {
+  const out = new Set<string>();
+  const joined = text.replace(/(\d)[,.](?=\d{3}(?!\d))/g, '$1');
+  for (const run of joined.match(/\d+/g) ?? []) out.add(String(Number(run)));
+  return out;
+}
+
 /** The article side of the check. Every field is optional — callers pass what
  *  the row happens to carry, and absence never causes a rejection. */
 export interface ReasonGroundingArticle {
@@ -164,24 +177,36 @@ export interface ReasonGroundingArticle {
  *   - the article contributes no tokens at all (no title, no description, no
  *     tags): with nothing to compare against, a rejection would be a coin flip.
  *
- * Returns FALSE only when both sides have content and they share nothing.
+ * Returns FALSE when both sides have content and they share nothing, or, with
+ * `numbers`, when the reason states a number the article text does not. That
+ * second test is for a note COPIED from a sibling: a copy from another day's
+ * report of the same story shares every word with the new article and carries
+ * the old day's figure. A note written for this article is not held to it,
+ * because a note names the reader's fact and a fact can hold a number the
+ * article lacks ("Formula 1"), which would reject the note on every retry.
  */
 export function isReasonGrounded(
   reason: string | null | undefined,
   article: ReasonGroundingArticle,
+  opts: { numbers?: boolean } = {},
 ): boolean {
   const reasonTokens = groundingTokens(reason);
   if (reasonTokens.size === 0) return true;
 
-  const articleTokens = groundingTokens(
-    [
-      article.title ?? '',
-      article.description ?? '',
-      (article.entities ?? []).join(' '),
-      (article.geoTags ?? []).join(' '),
-    ].join(' '),
-  );
+  const articleText = [
+    article.title ?? '',
+    article.description ?? '',
+    (article.entities ?? []).join(' '),
+    (article.geoTags ?? []).join(' '),
+  ].join(' ');
+  const articleTokens = groundingTokens(articleText);
   if (articleTokens.size === 0) return true;
 
+  if (opts.numbers) {
+    const articleNumbers = numbersIn(articleText);
+    for (const n of numbersIn(reason ?? '')) {
+      if (!articleNumbers.has(n)) return false;
+    }
+  }
   return sharesAToken(reasonTokens, articleTokens);
 }

@@ -11,6 +11,7 @@ import {
   batchResetToUnscored,
   saveReason,
   saveScoringResult,
+  takeRejectedCopies,
 } from '@/lib/database/services/article-suggestion-scoring-writes';
 import { deleteSuggestionsByServerIds } from '@/lib/database/services/article-suggestion-lifecycle';
 import { FOREIGN, GROUNDED, HOUR, T0, article, freezeClock, row, seed, toComplete, toExcluded, toReasonPending, withVintage } from './support';
@@ -148,6 +149,23 @@ describe('the grounded-reason rule', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ source: 'propagation' }));
   });
 
+  it('batchPropagateScores rejects a copied note whose figure the recipient article does not state', async () => {
+    await seed([article('a1', { title_en: 'Cold wave grips Bhopal, mercury below 7 degrees', description_en: 'The cold wave alert stays.' })]);
+
+    await batchPropagateScores([{ id: 'a1', relevance: 0.6, reason: 'Cold wave alert covers Bhopal, with temperatures dropping to 9 degrees.' }]);
+
+    expect(await snapshot('a1')).toMatchObject({ relevance: 0.6, reason: '', status: 'reason_pending' });
+  });
+
+  it('saveReason keeps a note written for the row even when it names a figure from the reader\'s fact', async () => {
+    await seed([article('a1', { title_en: 'Cold wave grips Bhopal, mercury below 7 degrees', description_en: 'The cold wave alert stays.' })]);
+    await toReasonPending('a1', 0.6);
+
+    await saveReason('a1', 'The Bhopal cold wave reaches your parents, both over 60.');
+
+    expect((await snapshot('a1')).status).toBe('complete');
+  });
+
   it('does not judge a row whose article text never arrived', async () => {
     await seed([article('a1', { title_en: null as never, description_en: null })]);
 
@@ -187,11 +205,66 @@ describe('saveReason', () => {
 
   it('keeps the row reason_pending for an empty note', async () => {
     await seed([article('a1')]);
-    await toComplete('a1');
+    await toReasonPending('a1');
 
     await saveReason('a1', '');
 
     expect(await snapshot('a1')).toMatchObject({ status: 'reason_pending', reason: '' });
+  });
+
+  it('never swaps a note the reader can already see', async () => {
+    // A story copy filled the row while its own notes job was out; the job's answer lands later.
+    await seed([article('a1')]);
+    await toComplete('a1', 0.6, GROUNDED);
+
+    await saveReason('a1', 'The harbour report changes your commute.');
+    await saveReason('a1', '');
+
+    expect(await snapshot('a1')).toMatchObject({ status: 'complete', reason: GROUNDED, relevance: 0.6 });
+  });
+});
+
+describe('a row already showing its note', () => {
+  it('saveScoringResult leaves its score and note as they are', async () => {
+    await seed([article('a1')]);
+    await toComplete('a1', 0.6, GROUNDED);
+
+    await saveScoringResult('a1', { relevance: 0.8, reason: '', reasonSkipped: false });
+
+    expect(await snapshot('a1')).toMatchObject({ status: 'complete', reason: GROUNDED, relevance: 0.6 });
+  });
+
+  it('saveScoringResult still scores a complete row that has no note', async () => {
+    await seed([article('a1')]);
+    await saveScoringResult('a1', { relevance: 0.6, reason: '', reasonSkipped: true });
+
+    await saveScoringResult('a1', { relevance: 0.8, reason: GROUNDED, reasonSkipped: false });
+
+    expect(await snapshot('a1')).toMatchObject({ status: 'complete', reason: GROUNDED, relevance: 0.8 });
+  });
+});
+
+describe('rejected story copies', () => {
+  it('records a copied note the grounding check rejected, once, and only when a note is owed', async () => {
+    await seed([article('a1'), article('a2'), article('a3')]);
+
+    await batchPropagateScores([
+      { id: 'a1', relevance: 0.6, reason: FOREIGN },
+      { id: 'a2', relevance: 0.6, reason: GROUNDED },
+      { id: 'a3', relevance: 0.2, reason: FOREIGN },
+    ]);
+
+    expect(takeRejectedCopies(['a1', 'a2', 'a3'])).toEqual(['a1']);
+    expect(takeRejectedCopies(['a1'])).toEqual([]);
+  });
+
+  it('forgets a rejected copy once its own note lands', async () => {
+    await seed([article('a1')]);
+    await batchPropagateScores([{ id: 'a1', relevance: 0.6, reason: FOREIGN }]);
+
+    await saveReason('a1', GROUNDED);
+
+    expect(takeRejectedCopies(['a1'])).toEqual([]);
   });
 });
 
@@ -433,8 +506,9 @@ describe('the scorer vintage is a property of each row', () => {
 
   it('a score written by this scorer re-stamps only its own row', async () => {
     await seed([article('v3'), article('other')]);
-    await withVintage('v3', 0.7, true);
-    await withVintage('other', 0.7, true);
+    // Still owed a note, so the score can be written again (a row showing its note never is).
+    await withVintage('v3', 0.7, true, '');
+    await withVintage('other', 0.7, true, '');
 
     await saveScoringResult('v3', { relevance: 0.7, reason: GROUNDED, reasonSkipped: false });
 

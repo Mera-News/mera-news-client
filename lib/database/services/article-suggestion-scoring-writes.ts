@@ -9,6 +9,26 @@ import { groundedReasonFor, isTerminalStatus } from './article-suggestion-mapper
 
 const articleSuggestionsCol = database.get<ArticleSuggestionModel>('article_suggestions');
 
+/** A row the reader can already see with its note. No later write replaces that note or the
+ *  score it explains in this session: a story copy can fill a row while its own notes job is
+ *  still out, and that job's answer must not swap the sentence on screen. */
+function showsNote(row: ArticleSuggestionModel): boolean {
+  return row.status === ArticleSuggestionStatus.Complete && (row.reason ?? '').trim().length > 0;
+}
+
+// Rows whose copied story note the grounding check rejected, still owed their own note. If that
+// note fails for good the row leaves the Feed (`reason_skipped`) instead of showing with no note.
+// shortcut: process memory, not persisted; after a relaunch such a row is re-elected for its own
+// note by the stateless story-note sweep and, if that fails, ends noteless like any other row.
+const rejectedCopies = new Set<string>();
+
+/** The given ids that hold a rejected story copy, removed from the record as they are returned. */
+export function takeRejectedCopies(ids: readonly string[]): string[] {
+  const taken = ids.filter((id) => rejectedCopies.has(id));
+  for (const id of taken) rejectedCopies.delete(id);
+  return taken;
+}
+
 /**
  * Is relevance v3 the scorer producing scores RIGHT NOW? Stamped onto each row
  * at write time so the render gate can later be chosen per row rather than from
@@ -56,7 +76,8 @@ export async function saveScoringResult(
   // caller already declared none was owed (`reasonSkipped`).
   const grounded = groundedReasonFor(row, reason, 'score');
   await database.write(async () => {
-    if (isTerminalStatus(row.status)) return;
+    if (isTerminalStatus(row.status) || showsNote(row)) return;
+    if (grounded.length > 0) rejectedCopies.delete(row.id);
     await row.update((r) => {
       r.relevance = relevance;
       // Stamp the scorer VINTAGE alongside the score, UNCONDITIONALLY (unlike
@@ -405,7 +426,10 @@ export async function batchPropagateScores(
             r.status = ArticleSuggestionStatus.ReasonPending;
           }
         });
-        if (grounded.length === 0 && entry.relevance >= REASON_RELEVANCE_THRESHOLD) leftPending.push(row.id);
+        if (grounded.length === 0 && entry.relevance >= REASON_RELEVANCE_THRESHOLD) {
+          leftPending.push(row.id);
+          if (propagatedReason.length > 0) rejectedCopies.add(row.id);
+        }
         return update;
       }),
     );
@@ -428,7 +452,8 @@ export async function saveReason(
   // exists precisely to fill a missing note, so a wrong one is no progress.
   const grounded = groundedReasonFor(row, reason, 'reason-sweep');
   await database.write(async () => {
-    if (isTerminalStatus(row.status)) return;
+    if (isTerminalStatus(row.status) || showsNote(row)) return;
+    if (grounded.length > 0) rejectedCopies.delete(row.id);
     await row.update((r) => {
       r.reason = grounded;
       r.status =

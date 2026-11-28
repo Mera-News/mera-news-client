@@ -213,12 +213,12 @@ export function groundedReasonFor(
   const entities = parseJsonArray<string>(row.entitiesJson).filter(
     (e): e is string => typeof e === 'string' && e.length > 0,
   );
-  const grounded = isReasonGrounded(reason, {
-    title: row.titleEn,
-    description: row.descriptionEn,
-    entities,
-    geoTags,
-  });
+  const grounded = isReasonGrounded(
+    reason,
+    { title: row.titleEn, description: row.descriptionEn, entities, geoTags },
+    // A copied note must also carry no figure its new article lacks.
+    { numbers: source === 'propagation' },
+  );
   if (grounded) return reason;
   logger.warn('[article-suggestion-service] dropped an ungrounded reason', {
     source,

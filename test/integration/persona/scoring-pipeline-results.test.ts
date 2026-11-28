@@ -6,7 +6,7 @@
 // The foreground poller is off (see scoring-pipeline.test.ts): `handlePush(requestId)` collects
 // exactly one batch, `later()` makes a limiter slot free for the notes submit it may chain.
 
-import { saveScoringResult } from '@/lib/database/services/article-suggestion-scoring-writes';
+import { batchPropagateScores, saveScoringResult } from '@/lib/database/services/article-suggestion-scoring-writes';
 import database from '@/lib/database';
 import { addSuppression } from '@/lib/database/services/suppression-service';
 import * as scoringService from '@/lib/mera-protocol/scoring-service';
@@ -543,6 +543,28 @@ describe('reasons completion', () => {
     }
 
     expect((await rows()).a0).toMatchObject({ reason: 'Why story a0 matters here.', status: 'complete' });
+  });
+
+  it('a row whose copied note was rejected leaves the Feed when its own note fails for good', async () => {
+    // a0 is owed its own note; a1 rides along owed one too. a0 also took a story copy that was
+    // about another article, which the grounding check refused.
+    const reasonsBatch = await toWaitingReasons({ scores: { a0: 0.9, a1: 0.9 } }, ['a0', 'a1']);
+    await batchPropagateScores([{ id: 'a0', relevance: 0.8, reason: 'Elephants migrate south for winter.' }]);
+    server.use(http.get('*/v1/inference/jobs/:id/results', () => new HttpResponse('Unknown requestId', { status: 404 })));
+
+    // attempt 1: requeued and resubmitted; attempt 2: failed for good
+    later();
+    await drive(pipeline.handlePush(reasonsBatch.requestId, 'foreground'));
+    await tickUntil(async () => (await batches())[0]?.phase === 'waiting-reasons' && (await batches())[0].attempt === 1);
+    holdKick();
+    later(20_000);
+    await drive(pipeline.handlePush((await batches())[0].requestId, 'foreground'));
+
+    const r = await rows();
+    // The real score is kept; `reason_skipped` keeps it off the Feed.
+    expect(r.a0).toMatchObject({ status: 'reason_skipped', relevance: 0.8, reason: '' });
+    // A row with no rejected copy ends as it always has: complete, no note.
+    expect(r.a1).toMatchObject({ status: 'complete', relevance: 0.8, reason: '' });
   });
 
   it('marks the batch done (scores kept) when the reasons submit fails', async () => {

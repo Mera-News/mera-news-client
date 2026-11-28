@@ -211,3 +211,56 @@ describe('isReasonGrounded — the propagation case', () => {
     ).toBe(true);
   });
 });
+
+describe('isReasonGrounded — a copied note with a number the article does not state', () => {
+  // A repeat of a daily story inherits the earlier day's note: it shares every word with the new
+  // article and states the old day's figure.
+  const COPY = { numbers: true };
+  const COLD_WAVE = {
+    title: 'Cold wave grips Madhya Pradesh, Bhopal records below 7°C',
+    description: 'The mercury fell to 6.8 degrees in Bhopal as the cold wave alert stays in place.',
+  };
+
+  it('rejects a note whose figure the article never states', () => {
+    expect(
+      isReasonGrounded(
+        'Cold wave alert in Madhya Pradesh covers Bhopal, where your parents live, with temperatures dropping to 9°C.',
+        COLD_WAVE,
+        COPY,
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps a note whose figures are all in the article, decimals included', () => {
+    expect(
+      isReasonGrounded('Bhopal fell to 6.8 degrees, below 7°C, where your parents live.', COLD_WAVE, COPY),
+    ).toBe(true);
+  });
+
+  it('reads a thousands separator as the same number', () => {
+    expect(
+      isReasonGrounded('Over 1,200 flights were cancelled at Schiphol, your home airport.', {
+        title: 'Schiphol cancels 1200 flights in snowstorm',
+      }, COPY),
+    ).toBe(true);
+  });
+
+  it('keeps a note with no figures on an article that has some', () => {
+    expect(isReasonGrounded('The cold wave alert covers Bhopal, where your parents live.', COLD_WAVE, COPY)).toBe(true);
+  });
+
+  it('counts a figure in a tagged entity as article text', () => {
+    expect(
+      isReasonGrounded('The G7 summit sets rules your product follows.', {
+        title: 'Leaders meet on AI rules',
+        entities: ['G7'],
+      }, COPY),
+    ).toBe(true);
+  });
+
+  it('does not hold a note written for this article to it: the reader\'s fact may carry a number', () => {
+    expect(
+      isReasonGrounded('Cold wave in Bhopal, where your parents live, ties to your Formula 1 trip.', COLD_WAVE),
+    ).toBe(true);
+  });
+});
