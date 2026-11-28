@@ -55,7 +55,6 @@ import {
   batchMarkReasonSkipped,
   batchMarkAsScoredByIds,
   batchMarkScoreFailed,
-  takeRejectedCopies,
 } from '@/lib/database/services/article-suggestion-scoring-writes';
 // Imported from the harness DIRECTLY (not via the mera-protocol shim): this is
 // the one definition of "headline-sourced", shared with the prompt/chunk-size
@@ -65,6 +64,7 @@ import { decodeV3NoteResults } from '@/lib/news-harness/article-pipeline/scoring
 // The one definition of "this headline scored too low to exist" — expressed over
 // relevanceBandRank so the cull can never disagree with the band a card prints.
 import { isCulledHeadlineRelevance } from '@/lib/feed-ordering/importance-filter';
+import { isNoteHeld, releaseNoteHold } from '@/lib/feed-ordering/note-hold';
 import {
   bucketScore,
   bucketScores,
@@ -2863,8 +2863,9 @@ async function requeueWaitingOrFail(
       if (b.reasonCandidateIds && b.reasonCandidateIds.length > 0) {
         // A row whose story copy was rejected leaves the Feed with its real score kept, rather
         // than showing with no note beside the sibling card that has one.
-        const rejected = takeRejectedCopies(b.reasonCandidateIds);
+        const rejected = b.reasonCandidateIds.filter(isNoteHeld);
         const rejectedSet = new Set(rejected);
+        releaseNoteHold(rejected);
         await Promise.all([
           batchMarkReasonSkipped(b.reasonCandidateIds.filter((id) => !rejectedSet.has(id))),
           batchMarkGateSkipped(rejected),

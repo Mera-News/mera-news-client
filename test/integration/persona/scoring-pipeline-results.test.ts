@@ -7,6 +7,7 @@
 // exactly one batch, `later()` makes a limiter slot free for the notes submit it may chain.
 
 import { batchPropagateScores, saveScoringResult } from '@/lib/database/services/article-suggestion-scoring-writes';
+import { isNoteHeld } from '@/lib/feed-ordering/note-hold';
 import database from '@/lib/database';
 import { addSuppression } from '@/lib/database/services/suppression-service';
 import * as scoringService from '@/lib/mera-protocol/scoring-service';
@@ -565,6 +566,7 @@ describe('reasons completion', () => {
     expect(r.a0).toMatchObject({ status: 'reason_skipped', relevance: 0.8, reason: '' });
     // A row with no rejected copy ends as it always has: complete, no note.
     expect(r.a1).toMatchObject({ status: 'complete', relevance: 0.8, reason: '' });
+    expect(isNoteHeld('a0')).toBe(false);
   });
 
   it('marks the batch done (scores kept) when the reasons submit fails', async () => {

@@ -11,8 +11,8 @@ import {
   batchResetToUnscored,
   saveReason,
   saveScoringResult,
-  takeRejectedCopies,
 } from '@/lib/database/services/article-suggestion-scoring-writes';
+import { clearNoteHolds, isNoteHeld } from '@/lib/feed-ordering/note-hold';
 import { deleteSuggestionsByServerIds } from '@/lib/database/services/article-suggestion-lifecycle';
 import { FOREIGN, GROUNDED, HOUR, T0, article, freezeClock, row, seed, toComplete, toExcluded, toReasonPending, withVintage } from './support';
 
@@ -245,7 +245,9 @@ describe('a row already showing its note', () => {
 });
 
 describe('rejected story copies', () => {
-  it('records a copied note the grounding check rejected, once, and only when a note is owed', async () => {
+  afterEach(() => clearNoteHolds());
+
+  it('holds a copied note the grounding check rejected off the Feed, only when a note is owed', async () => {
     await seed([article('a1'), article('a2'), article('a3')]);
 
     await batchPropagateScores([
@@ -254,17 +256,16 @@ describe('rejected story copies', () => {
       { id: 'a3', relevance: 0.2, reason: FOREIGN },
     ]);
 
-    expect(takeRejectedCopies(['a1', 'a2', 'a3'])).toEqual(['a1']);
-    expect(takeRejectedCopies(['a1'])).toEqual([]);
+    expect(['a1', 'a2', 'a3'].filter(isNoteHeld)).toEqual(['a1']);
   });
 
-  it('forgets a rejected copy once its own note lands', async () => {
+  it('releases the hold once its own note lands', async () => {
     await seed([article('a1')]);
     await batchPropagateScores([{ id: 'a1', relevance: 0.6, reason: FOREIGN }]);
 
     await saveReason('a1', GROUNDED);
 
-    expect(takeRejectedCopies(['a1'])).toEqual([]);
+    expect(isNoteHeld('a1')).toBe(false);
   });
 });
 

@@ -6,6 +6,7 @@ import { ArticleSuggestionStatus } from '../article-suggestion-status';
 import type ArticleSuggestionModel from '../models/ArticleSuggestion';
 import { REASON_RELEVANCE_THRESHOLD } from '@/lib/services/inference-results';
 import { groundedReasonFor, isTerminalStatus } from './article-suggestion-mappers';
+import { holdForOwnNote, releaseNoteHold } from '@/lib/feed-ordering/note-hold';
 
 const articleSuggestionsCol = database.get<ArticleSuggestionModel>('article_suggestions');
 
@@ -14,19 +15,6 @@ const articleSuggestionsCol = database.get<ArticleSuggestionModel>('article_sugg
  *  still out, and that job's answer must not swap the sentence on screen. */
 function showsNote(row: ArticleSuggestionModel): boolean {
   return row.status === ArticleSuggestionStatus.Complete && (row.reason ?? '').trim().length > 0;
-}
-
-// Rows whose copied story note the grounding check rejected, still owed their own note. If that
-// note fails for good the row leaves the Feed (`reason_skipped`) instead of showing with no note.
-// shortcut: process memory, not persisted; after a relaunch such a row is re-elected for its own
-// note by the stateless story-note sweep and, if that fails, ends noteless like any other row.
-const rejectedCopies = new Set<string>();
-
-/** The given ids that hold a rejected story copy, removed from the record as they are returned. */
-export function takeRejectedCopies(ids: readonly string[]): string[] {
-  const taken = ids.filter((id) => rejectedCopies.has(id));
-  for (const id of taken) rejectedCopies.delete(id);
-  return taken;
 }
 
 /**
@@ -77,7 +65,7 @@ export async function saveScoringResult(
   const grounded = groundedReasonFor(row, reason, 'score');
   await database.write(async () => {
     if (isTerminalStatus(row.status) || showsNote(row)) return;
-    if (grounded.length > 0) rejectedCopies.delete(row.id);
+    if (grounded.length > 0) releaseNoteHold([row.id]);
     await row.update((r) => {
       r.relevance = relevance;
       // Stamp the scorer VINTAGE alongside the score, UNCONDITIONALLY (unlike
@@ -392,13 +380,24 @@ export async function batchPropagateScores(
   ).filter((r): r is ArticleSuggestionModel => r != null);
   if (rows.length === 0) return [];
   const leftPending: string[] = [];
+  // `?? ''` is defensive only — the type says string, but this value comes
+  // from a donor ROW, and a partially-written row can carry null.
+  const propagatedOf = (row: ArticleSuggestionModel) => (entryById.get(row.id)!.reason ?? '').trim();
+  const live = rows.filter((row) => !isTerminalStatus(row.status));
+  const groundedById = new Map(live.map((row) => [row.id, groundedReasonFor(row, propagatedOf(row), 'propagation')]));
+  // A rejected copy waits off the Feed for its own note. Held BEFORE the write that leaves it
+  // pending: the Feed rebuilds on that write and reads the hold then.
+  holdForOwnNote(
+    live
+      .filter((row) => propagatedOf(row).length > 0 && groundedById.get(row.id)!.length === 0)
+      .filter((row) => entryById.get(row.id)!.relevance >= REASON_RELEVANCE_THRESHOLD)
+      .map((row) => row.id),
+  );
+  releaseNoteHold(live.filter((row) => groundedById.get(row.id)!.length > 0).map((row) => row.id));
   await database.write(async () => {
     await database.batch(
-      rows.filter((row) => !isTerminalStatus(row.status)).map((row) => {
+      live.map((row) => {
         const entry = entryById.get(row.id)!;
-        // `?? ''` is defensive only — the type says string, but this value comes
-        // from a donor ROW, and a partially-written row can carry null.
-        const propagatedReason = (entry.reason ?? '').trim();
         // The donor's sentence is checked against THIS row's article, not the
         // donor's. That is the whole point: story grouping is union-find, so a
         // transitive merge (A–B by cluster id, B–C by title overlap) can hand C
@@ -407,7 +406,7 @@ export async function batchPropagateScores(
         // or policy is simply false on C's card, and this is where that is
         // caught. A rejected donor leaves the row exactly where a reason-less
         // donor leaves it: `reason_pending`, owed its own call.
-        const grounded = groundedReasonFor(row, propagatedReason, 'propagation');
+        const grounded = groundedById.get(row.id)!;
         const update = row.prepareUpdate((r) => {
           r.relevance = entry.relevance;
           // The gate is chosen by the scorer that produced the SCORE, and this
@@ -426,10 +425,7 @@ export async function batchPropagateScores(
             r.status = ArticleSuggestionStatus.ReasonPending;
           }
         });
-        if (grounded.length === 0 && entry.relevance >= REASON_RELEVANCE_THRESHOLD) {
-          leftPending.push(row.id);
-          if (propagatedReason.length > 0) rejectedCopies.add(row.id);
-        }
+        if (grounded.length === 0 && entry.relevance >= REASON_RELEVANCE_THRESHOLD) leftPending.push(row.id);
         return update;
       }),
     );
@@ -453,7 +449,7 @@ export async function saveReason(
   const grounded = groundedReasonFor(row, reason, 'reason-sweep');
   await database.write(async () => {
     if (isTerminalStatus(row.status) || showsNote(row)) return;
-    if (grounded.length > 0) rejectedCopies.delete(row.id);
+    if (grounded.length > 0) releaseNoteHold([row.id]);
     await row.update((r) => {
       r.reason = grounded;
       r.status =
