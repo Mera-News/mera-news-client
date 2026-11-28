@@ -178,6 +178,8 @@ async function rebuildOrphanedFollows(): Promise<void> {
     );
     let rebuilt = 0;
     for (const topic of topics) {
+      // A follow tap mints the topic, then writes its story a moment later: leave it alone meanwhile.
+      if (topic.createdAt.getTime() > Date.now() - 10 * 60_000) continue;
       if (boundIds.has(topic.id) || activeTexts.has(normalizeTopicText(topic.text))) continue;
       await trackStory({
         articleId: '',

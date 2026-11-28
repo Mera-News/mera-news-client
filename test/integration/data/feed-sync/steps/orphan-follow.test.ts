@@ -42,6 +42,16 @@ const subject: FeedbackSubject = {
 const topics = () => database.get('topics').query().fetch() as Promise<any[]>;
 const stories = () => database.get('tracked_stories').query().fetch() as Promise<any[]>;
 
+/** Move the topic's created time back, as time passing would. */
+async function age(topicId: string, minutes: number) {
+  const topic = await database.get('topics').find(topicId);
+  await database.write(async () => {
+    await topic.update((t: any) => {
+      t.createdAt = new Date(Date.now() - minutes * 60_000);
+    });
+  });
+}
+
 async function mintWithFailingStoryWrite(text: string) {
   spyOnExport(trackedStoryService, 'trackStory').mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce(new Error('x'));
   await expect(trackStoryWithProposal(subject, { label: text, searchText: text })).rejects.toThrow('x');
@@ -59,6 +69,7 @@ async function storeMatch(id: string, topicId: string) {
 describe('orphaned follow', () => {
   it('is rebuilt by the next reconcile and grown from matched rows', async () => {
     const topicId = await mintWithFailingStoryWrite('gaza ceasefire');
+    await age(topicId, 11);
     await storeMatch('m1', topicId);
 
     await reconcileTrackedStories();
@@ -69,8 +80,20 @@ describe('orphaned follow', () => {
     expect(story.unseenCount).toBe(0);
   });
 
+  it('is left alone while its follow may still be writing the story, and rebuilt after 10 minutes', async () => {
+    const topicId = await mintWithFailingStoryWrite('gaza ceasefire');
+
+    await reconcileTrackedStories();
+    expect(await stories()).toHaveLength(0);
+
+    await age(topicId, 11);
+    await reconcileTrackedStories();
+    expect(await stories()).toHaveLength(1);
+  });
+
   it('is not rebuilt on a paired phone', async () => {
-    await mintWithFailingStoryWrite('gaza ceasefire');
+    const topicId = await mintWithFailingStoryWrite('gaza ceasefire');
+    await age(topicId, 11);
     testHost.podCommand = async () => undefined;
 
     await reconcileTrackedStories();
@@ -80,6 +103,7 @@ describe('orphaned follow', () => {
 
   it('is not rebuilt when its topic is bound to an ended story', async () => {
     const topicId = await mintWithFailingStoryWrite('gaza ceasefire');
+    await age(topicId, 11);
     const row = await trackedStoryService.trackStory({
       articleId: '', title: 'x', originSurface: 'x', topicId, topicText: 'gaza ceasefire', llmHeadline: 'x', initialSnapshot: null,
     });
