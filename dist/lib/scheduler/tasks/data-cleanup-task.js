@@ -1,6 +1,7 @@
 "use strict";
 
 var _articleSuggestionLifecycle = require("../../database/services/article-suggestion-lifecycle");
+var _topicSignalService = require("../../database/services/topic-signal-service");
 var _storyImpressionService = require("../../database/services/story-impression-service");
 var _notificationService = require("../../database/services/notification-service");
 var _factCheckRecordService = require("../../database/services/fact-check-record-service");
@@ -42,6 +43,9 @@ _AppScheduler.AppScheduler.register({
   exclusive: true,
   handler: async (_input, ctx) => {
     await (0, _schedulerPersistence.pruneOldJobs)();
+
+    // Before the sweep deletes them: rows that reached the Feed mark their topics as live.
+    await (0, _topicSignalService.stampTopicSignalsFromFeed)();
     const deletedCount = await (0, _articleSuggestionLifecycle.deleteOldSuggestions)(Date.now() - SUGGESTION_TTL_MS);
     if (deletedCount > 0) {
       ctx.log(`pruned ${deletedCount} suggestions (unread High and Emergency rows are kept up to 7 days)`);

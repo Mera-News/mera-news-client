@@ -8,6 +8,8 @@ var _watermelondb = require("@nozbe/watermelondb");
 var _database = _interopRequireDefault(require("../../database"));
 var _trackedStoryService = require("../../database/services/tracked-story-service");
 var _trackActions = require("../../tracking/track-actions");
+var _topicService = require("../../database/services/topic-service");
+var _platform = require("../../platform");
 var _logger = _interopRequireDefault(require("../../logger"));
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Tracked-Story Reconcile — piggybacks on every feed sync to grow followed
@@ -139,10 +141,51 @@ async function reconcileByTopic(serverMatches) {
 }
 
 /**
+ * A followed topic whose story row is missing (the write failed after the mint) gets its row
+ * back. Skipped on a paired phone, which gets its stories from the server. Logs a count only.
+ * The watermark seeds to now, so existing coverage is not counted as new; the reconcile grows it.
+ */
+async function rebuildOrphanedFollows() {
+  try {
+    if ((0, _platform.platform)('lib/scheduler/feed-sync/tracked-story-reconcile').podCommand) return;
+    const [topics, stories] = await Promise.all([_database.default.get('topics').query(_watermelondb.Q.where('provenance', 'tracked'), _watermelondb.Q.where('status', 'active'), _watermelondb.Q.where('pending_delete_at', null), _watermelondb.Q.where('weight', _watermelondb.Q.gt(0))).fetch(), _database.default.get('tracked_stories').query().fetch()]);
+    const boundIds = new Set(stories.map(s => s.topicId));
+    const activeTexts = new Set(stories.filter(s => s.status === 'active' && s.topicText).map(s => (0, _topicService.normalizeTopicText)(s.topicText)));
+    let rebuilt = 0;
+    for (const topic of topics) {
+      // A follow tap mints the topic, then writes its story a moment later: leave it alone meanwhile.
+      if (topic.createdAt.getTime() > Date.now() - 10 * 60_000) continue;
+      if (boundIds.has(topic.id) || activeTexts.has((0, _topicService.normalizeTopicText)(topic.text))) continue;
+      await (0, _trackedStoryService.trackStory)({
+        articleId: '',
+        title: topic.text,
+        originSurface: 'rebuilt',
+        topicId: topic.id,
+        topicText: topic.text,
+        llmHeadline: topic.text,
+        initialSnapshot: null
+      });
+      rebuilt++;
+    }
+    if (rebuilt > 0) _logger.default.info('[tracked-story-reconcile] rebuilt followed stories', {
+      rebuilt
+    });
+  } catch (err) {
+    _logger.default.captureException(err, {
+      tags: {
+        component: 'tracked-story-reconcile',
+        method: 'rebuildOrphanedFollows'
+      }
+    });
+  }
+}
+
+/**
  * Reconciles every actively-tracked story against the article_suggestions rows
  * currently on-device. A followed story is a topic, so growth matches by
  * `topic_id`.
  */
 async function reconcileTrackedStories(serverMatches) {
+  await rebuildOrphanedFollows();
   await reconcileByTopic(serverMatches);
 }

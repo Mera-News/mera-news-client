@@ -21,6 +21,7 @@ var _actionNames = require("../../news-harness/persona-management/action-names")
 var _factHygiene = require("../../news-harness/persona-management/fact-hygiene");
 var _factService = require("./fact-service");
 var _topicService = require("./topic-service");
+var _topicSignalService = require("./topic-signal-service");
 var _settingService = require("./setting-service");
 var _personaActionExecutor = require("./persona-action-executor");
 var sanityService = _interopRequireWildcard(require("./topic-sanity-service"));
@@ -256,7 +257,10 @@ async function runHygieneSweep(opts) {
       };
     }
   }
-  const [facts, sectionSnapshots, topics] = await Promise.all([(0, _factService.getFacts)(), (0, _factService.getFactSectionSnapshots)(), (0, _topicService.getAllTopicSnapshots)()]);
+
+  // Before the topics are read, so stale_topic sees every row now on the Feed.
+  await (0, _topicSignalService.stampTopicSignalsFromFeed)(now);
+  const [facts, sectionSnapshots, topics, signalSinceMs] = await Promise.all([(0, _factService.getFacts)(), (0, _factService.getFactSectionSnapshots)(), (0, _topicService.getAllTopicSnapshots)(), (0, _topicSignalService.readTopicSignalSince)()]);
 
   // Kick the LLM sanity audit off BEFORE the size/age gates. Those gates exist
   // for the four *cleanup* kinds ("too little to clean", "let the profile
@@ -316,7 +320,8 @@ async function runHygieneSweep(opts) {
     topics,
     now,
     rejectedFingerprints: rejected,
-    incoherentFacts: sanity.incoherentFacts
+    incoherentFacts: sanity.incoherentFacts,
+    signalSinceMs
   };
   const proposals = (0, _factHygiene.analyzeHygiene)(input);
   await publishWithCap(await withDailyOffers(proposals));

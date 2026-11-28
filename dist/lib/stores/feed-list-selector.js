@@ -186,27 +186,65 @@ function buildFeedList(suggestions, excludedIds, nowMs = Date.now(), userCtx = n
   //    showable. The Feed widens it to scored rows still awaiting their note.
   //    A muted publication's rows never enter (Mute means skip; the scoring
   //    screen excludes new ones, this catches rows scored before the mute).
-  const visible = suggestions.filter(s => (opts.onlyDiscarded ? (0, _pendingVisibility.isDiscardedVisible)(s, cutoffMs) || (0, _factRowsSelector.isVisible)(s, cutoffMs, opts.read) || (0, _pendingVisibility.isReasonPendingVisible)(s, cutoffMs) || (0, _pendingVisibility.isUnscoredVisible)(s, cutoffMs) : (0, _factRowsSelector.isVisible)(s, cutoffMs, opts.read) || includePending && (0, _pendingVisibility.isReasonPendingVisible)(s, cutoffMs) || includeUnscored && (0, _pendingVisibility.isUnscoredVisible)(s, cutoffMs)) && !(0, _publicationTags.isMutedPublication)(s.publication_name, userCtx));
-  if (visible.length === 0) return [];
+  const visible = [];
+  const discarded = [];
+  for (const s of suggestions) {
+    if ((0, _publicationTags.isMutedPublication)(s.publication_name, userCtx)) continue;
+    const shown = (0, _factRowsSelector.isVisible)(s, cutoffMs, opts.read) || (includePending || opts.onlyDiscarded) && (0, _pendingVisibility.isReasonPendingVisible)(s, cutoffMs) || (includeUnscored || opts.onlyDiscarded) && (0, _pendingVisibility.isUnscoredVisible)(s, cutoffMs);
+    if (shown) visible.push(s);else if ((0, _pendingVisibility.isDiscardedVisible)(s, cutoffMs)) discarded.push(s);
+  }
 
-  // 2. Story-group the visible pool (display thresholds incl. the weighted edge).
-  const groups = (0, _storyGrouping.buildStoryGroups)(visible.map(_storyGrouping.groupableOf), _storyGrouping.DISPLAY_GROUPING_OPTIONS);
+  // 2. Story-group the visible pool (display thresholds incl. the weighted
+  //    edge), then attach each discarded copy to at most one of those stories
+  //    (`attachToGroups`): a copy joins the card the reader can open it from,
+  //    and never folds two cards into one.
+  const shownGroups = visible.length > 0 ? (0, _storyGrouping.buildStoryGroups)(visible.map(_storyGrouping.groupableOf), _storyGrouping.DISPLAY_GROUPING_OPTIONS) : [];
+  const {
+    attachments,
+    unattached
+  } = (0, _storyGrouping.attachToGroups)(shownGroups, discarded.map(_storyGrouping.groupableOf), _storyGrouping.DISPLAY_GROUPING_OPTIONS);
 
-  // 3. One representative per group; drop reps already excluded (opened ∪
-  //    viewed) — the list never re-serves a read/seen story. Freeze the
-  //    composite score at build time.
+  // "Discarded by Mera" is every discarded copy no card holds, grouped among
+  // themselves, so a below-gate row is behind a card or listed here, never both.
+  if (opts.onlyDiscarded) {
+    if (unattached.length === 0) return [];
+    const list = [];
+    for (const g of (0, _storyGrouping.buildStoryGroups)(unattached, _storyGrouping.DISPLAY_GROUPING_OPTIONS)) {
+      const rep = (0, _storyGrouping.pickRepresentative)(g, baseRepCompare).s;
+      if ((0, _factRowsSelector.isSuggestionOpened)(rep, excludedIds)) continue;
+      list.push({
+        id: rep.articleId,
+        suggestion: rep,
+        memberCount: g.length,
+        attachedCount: 0,
+        memberIds: g.map(m => m.s.articleId),
+        breaking: g.some(m => (0, _factRowsSelector.isBreaking)(m.s)),
+        score: Math.max(...g.map(m => feedScore(m.s, nowMs)))
+      });
+    }
+    list.sort(feedCompare);
+    return list;
+  }
+  if (shownGroups.length === 0) return [];
+
+  // 3. One representative per group, from its SHOWN members only; drop reps
+  //    already excluded (opened ∪ viewed) — the list never re-serves a
+  //    read/seen story. Freeze the composite score at build time. An attached
+  //    copy is counted and listed, never fronts, and never moves the story.
   const list = [];
-  for (const g of groups) {
-    if (opts.onlyDiscarded && !g.every(m => (0, _pendingVisibility.isDiscardedVisible)(m.s, cutoffMs))) continue;
+  shownGroups.forEach((g, gi) => {
+    const attached = attachments[gi];
     const rep = (0, _storyGrouping.pickRepresentative)(g, repCompareForGroups).s;
-    if ((0, _factRowsSelector.isSuggestionOpened)(rep, excludedIds)) continue;
+    if ((0, _factRowsSelector.isSuggestionOpened)(rep, excludedIds)) return;
     list.push({
       id: rep.articleId,
       suggestion: rep,
-      memberCount: g.length,
+      memberCount: g.length + attached.length,
+      attachedCount: attached.length,
       // articleId, not `_id` — the tombstone/rep-switch keys downstream are
       // compared against future `FeedListItem.id`s, which are article ids.
-      memberIds: g.map(m => m.s.articleId),
+      // Shown members first, so identity matching tries them before a copy.
+      memberIds: [...g, ...attached].map(m => m.s.articleId),
       // Group-maxed for the same reason `score` below is: "breaking" is a
       // property of the STORY, not of whichever member we elected to front it.
       // This became load-bearing when the representative flipped to oldest-first
@@ -224,7 +262,7 @@ function buildFeedList(suggestions, excludedIds, nowMs = Date.now(), userCtx = n
       // chose to display is a presentation choice and must not move it.
       score: Math.max(...g.map(m => feedScore(m.s, nowMs)))
     });
-  }
+  });
 
   // 4. Deterministic list order.
   list.sort(feedCompare);

@@ -43,6 +43,7 @@ var _articleSuggestionScoringWrites = require("../database/services/article-sugg
 var _scoring = require("../news-harness/article-pipeline/scoring");
 var _scoringDecode = require("../news-harness/article-pipeline/scoring-decode");
 var _importanceFilter = require("../feed-ordering/importance-filter");
+var _noteHold = require("../feed-ordering/note-hold");
 var _scoringService = require("../mera-protocol/scoring-service");
 var _stageScoring = require("../mera-protocol/stage-scoring");
 var _config = require("../news-harness/core/config");
@@ -2543,7 +2544,12 @@ async function requeueWaitingOrFail(batch, reason, context) {
       // stops spinning, run the batch-scoped discard, refresh, then treat as
       // terminal.
       if (b.reasonCandidateIds && b.reasonCandidateIds.length > 0) {
-        await (0, _articleSuggestionScoringWrites.batchMarkReasonSkipped)(b.reasonCandidateIds).catch(err => {
+        // A row whose story copy was rejected leaves the Feed with its real score kept, rather
+        // than showing with no note beside the sibling card that has one.
+        const rejected = b.reasonCandidateIds.filter(_noteHold.isNoteHeld);
+        const rejectedSet = new Set(rejected);
+        (0, _noteHold.releaseNoteHold)(rejected);
+        await Promise.all([(0, _articleSuggestionScoringWrites.batchMarkReasonSkipped)(b.reasonCandidateIds.filter(id => !rejectedSet.has(id))), (0, _articleSuggestionScoringWrites.batchMarkGateSkipped)(rejected)]).catch(err => {
           _logger.default.warn(`${TAG} batch ${batch.batchId} batchMarkReasonSkipped failed: ${String(err)}`);
         });
       }

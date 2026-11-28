@@ -23,6 +23,7 @@ exports.getSuggestionFeedbackContext = getSuggestionFeedbackContext;
 exports.getUnscoredGroupingRows = getUnscoredGroupingRows;
 exports.getUnscoredSuggestionsWithFacts = getUnscoredSuggestionsWithFacts;
 exports.loadSuggestions = loadSuggestions;
+exports.resolveFactsByNormalizedTopicTexts = resolveFactsByNormalizedTopicTexts;
 exports.resolveFactsByTopicIds = resolveFactsByTopicIds;
 var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
@@ -72,6 +73,24 @@ async function resolveFactsByTopicIds(topicIds) {
   const rows = await topicsCol.query(_watermelondb.Q.where('id', _watermelondb.Q.oneOf(topicIds))).fetch();
   for (const t of rows) {
     if (t.factId) result.set(t.id, t.factId);
+  }
+  return result;
+}
+
+/**
+ * normalized topic text → distinct fact ids owning an active, live, positive-weight topic with
+ * that text. Retrieval merges same-text topics and keeps the heaviest, so a row can be matched
+ * under a topic that owns no fact while a fact topic with the same words exists.
+ */
+async function resolveFactsByNormalizedTopicTexts(texts) {
+  const result = new Map();
+  if (texts.length === 0) return result;
+  const rows = await topicsCol.query(_watermelondb.Q.where('normalized_text', _watermelondb.Q.oneOf(texts)), _watermelondb.Q.where('status', 'active'), _watermelondb.Q.where('pending_delete_at', null), _watermelondb.Q.where('fact_id', _watermelondb.Q.notEq(null)), _watermelondb.Q.where('weight', _watermelondb.Q.gt(0))).fetch();
+  for (const t of rows) {
+    if (!t.factId) continue;
+    const ids = result.get(t.normalizedText) ?? [];
+    if (!ids.includes(t.factId)) ids.push(t.factId);
+    result.set(t.normalizedText, ids);
   }
   return result;
 }

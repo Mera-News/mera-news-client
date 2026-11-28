@@ -26,6 +26,7 @@ exports.setLlmHeadline = setLlmHeadline;
 exports.sortTrackedStories = sortTrackedStories;
 exports.stampChecked = stampChecked;
 exports.trackStory = trackStory;
+exports.untrackAndRetireTopic = untrackAndRetireTopic;
 exports.untrackStory = untrackStory;
 var _watermelondb = require("@nozbe/watermelondb");
 var _rxjs = require("rxjs");
@@ -227,6 +228,32 @@ async function untrackStory(id) {
     return true;
   } catch (err) {
     _logger.default.warn('[tracked-story] untrackStory failed', {
+      id,
+      error: String(err)
+    });
+    return false;
+  }
+}
+
+/**
+ * Unfollow in ONE write: retire the story's topic and destroy its row. Two writes
+ * left an orphan (an active topic with no story row) whenever the second failed.
+ * False when the batch failed; the caller then falls back to the two-step path.
+ */
+async function untrackAndRetireTopic(id, topicId) {
+  try {
+    const topic = await _index.default.get('topics').find(topicId);
+    const record = (await collection.query(_watermelondb.Q.where('id', id)).fetch()).find(r => r.id === id);
+    await _index.default.write(async () => {
+      const ops = [topic.prepareUpdate(t => {
+        t.status = 'retired';
+        t.updatedAt = new Date();
+      }), ...(record ? [record.prepareDestroyPermanently()] : [])];
+      await _index.default.batch(ops);
+    });
+    return true;
+  } catch (err) {
+    _logger.default.warn('[tracked-story] untrackAndRetireTopic failed', {
       id,
       error: String(err)
     });

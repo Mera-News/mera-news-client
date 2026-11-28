@@ -10,6 +10,7 @@ exports.isReasonPendingVisible = isReasonPendingVisible;
 exports.isUnscoredVisible = isUnscoredVisible;
 var _articleSuggestionStatus = require("../database/article-suggestion-status");
 var _factRowsSelector = require("../stores/fact-rows-selector");
+var _noteHold = require("./note-hold");
 // pending-visibility — the Feed-only widening of the visibility gate.
 //
 // `isVisible` (lib/stores/fact-rows-selector.ts) admits a row only once its
@@ -30,9 +31,10 @@ var _factRowsSelector = require("../stores/fact-rows-selector");
 
 /** A scored row whose note is still pending, inside the render gate and the
  *  publication window. The same gate and window `isVisible` applies, minus its
- *  `complete` requirement. */
+ *  `complete` requirement. A row held for its own note (note-hold.ts: its
+ *  copied note was rejected) waits off the Feed instead. */
 function isReasonPendingVisible(s, cutoffMs) {
-  return s.status === _articleSuggestionStatus.ArticleSuggestionStatus.ReasonPending && (0, _factRowsSelector.passesRenderGate)(s) && (0, _factRowsSelector.isWithinWindow)(s, cutoffMs);
+  return s.status === _articleSuggestionStatus.ArticleSuggestionStatus.ReasonPending && (0, _factRowsSelector.passesRenderGate)(s) && (0, _factRowsSelector.isWithinWindow)(s, cutoffMs) && !(0, _noteHold.isNoteHeld)(s._id);
 }
 
 /** Mera has not read this row yet. The ONE predicate for the not-read tail,
@@ -56,7 +58,11 @@ function isReadBelowGate(s) {
 }
 
 /** A row Mera discarded, inside the publication window: the Show filter's
- *  "Discarded by Mera" pool (`buildFeedList`'s `onlyDiscarded`). */
+ *  "Discarded by Mera" pool (`buildFeedList`'s `onlyDiscarded`). Read below
+ *  its gate, or `reason_skipped` at any relevance (its note failed for good,
+ *  so it can never show as a pick). Not `isReadBelowGate` itself: that one
+ *  also picks the note box's "discarded" caption, and a failed note is not a
+ *  low score. */
 function isDiscardedVisible(s, cutoffMs) {
-  return isReadBelowGate(s) && (0, _factRowsSelector.isWithinWindow)(s, cutoffMs);
+  return (isReadBelowGate(s) || s.status === _articleSuggestionStatus.ArticleSuggestionStatus.ReasonSkipped) && (0, _factRowsSelector.isWithinWindow)(s, cutoffMs);
 }

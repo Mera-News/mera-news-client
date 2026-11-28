@@ -176,6 +176,10 @@ source) {
     description: row.descriptionEn,
     entities,
     geoTags
+  },
+  // A copied note must also carry no figure its new article lacks.
+  {
+    numbers: source === 'propagation'
   });
   if (grounded) return reason;
   _logger.default.warn('[article-suggestion-service] dropped an ungrounded reason', {

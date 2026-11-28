@@ -18,10 +18,18 @@ var _index = _interopRequireDefault(require("../index"));
 var _articleSuggestionStatus = require("../article-suggestion-status");
 var _inferenceResults = require("../../services/inference-results");
 var _articleSuggestionMappers = require("./article-suggestion-mappers");
+var _noteHold = require("../../feed-ordering/note-hold");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 // Article Suggestion Service: scoring writes.
 
 const articleSuggestionsCol = _index.default.get('article_suggestions');
+
+/** A row the reader can already see with its note. No later write replaces that note or the
+ *  score it explains in this session: a story copy can fill a row while its own notes job is
+ *  still out, and that job's answer must not swap the sentence on screen. */
+function showsNote(row) {
+  return row.status === _articleSuggestionStatus.ArticleSuggestionStatus.Complete && (row.reason ?? '').trim().length > 0;
+}
 
 /**
  * Is relevance v3 the scorer producing scores RIGHT NOW? Stamped onto each row
@@ -64,7 +72,8 @@ async function saveScoringResult(localSuggestionId, params) {
   // caller already declared none was owed (`reasonSkipped`).
   const grounded = (0, _articleSuggestionMappers.groundedReasonFor)(row, reason, 'score');
   await _index.default.write(async () => {
-    if ((0, _articleSuggestionMappers.isTerminalStatus)(row.status)) return;
+    if ((0, _articleSuggestionMappers.isTerminalStatus)(row.status) || showsNote(row)) return;
+    if (grounded.length > 0) (0, _noteHold.releaseNoteHold)([row.id]);
     await row.update(r => {
       r.relevance = relevance;
       // Stamp the scorer VINTAGE alongside the score, UNCONDITIONALLY (unlike
@@ -300,12 +309,18 @@ async function batchPropagateScores(entries) {
   const rows = (await Promise.all(entries.map(e => articleSuggestionsCol.find(e.id).catch(() => null)))).filter(r => r != null);
   if (rows.length === 0) return [];
   const leftPending = [];
+  // `?? ''` is defensive only — the type says string, but this value comes
+  // from a donor ROW, and a partially-written row can carry null.
+  const propagatedOf = row => (entryById.get(row.id).reason ?? '').trim();
+  const live = rows.filter(row => !(0, _articleSuggestionMappers.isTerminalStatus)(row.status));
+  const groundedById = new Map(live.map(row => [row.id, (0, _articleSuggestionMappers.groundedReasonFor)(row, propagatedOf(row), 'propagation')]));
+  // A rejected copy waits off the Feed for its own note. Held BEFORE the write that leaves it
+  // pending: the Feed rebuilds on that write and reads the hold then.
+  (0, _noteHold.holdForOwnNote)(live.filter(row => propagatedOf(row).length > 0 && groundedById.get(row.id).length === 0).filter(row => entryById.get(row.id).relevance >= _inferenceResults.REASON_RELEVANCE_THRESHOLD).map(row => row.id));
+  (0, _noteHold.releaseNoteHold)(live.filter(row => groundedById.get(row.id).length > 0).map(row => row.id));
   await _index.default.write(async () => {
-    await _index.default.batch(rows.filter(row => !(0, _articleSuggestionMappers.isTerminalStatus)(row.status)).map(row => {
+    await _index.default.batch(live.map(row => {
       const entry = entryById.get(row.id);
-      // `?? ''` is defensive only — the type says string, but this value comes
-      // from a donor ROW, and a partially-written row can carry null.
-      const propagatedReason = (entry.reason ?? '').trim();
       // The donor's sentence is checked against THIS row's article, not the
       // donor's. That is the whole point: story grouping is union-find, so a
       // transitive merge (A–B by cluster id, B–C by title overlap) can hand C
@@ -314,7 +329,7 @@ async function batchPropagateScores(entries) {
       // or policy is simply false on C's card, and this is where that is
       // caught. A rejected donor leaves the row exactly where a reason-less
       // donor leaves it: `reason_pending`, owed its own call.
-      const grounded = (0, _articleSuggestionMappers.groundedReasonFor)(row, propagatedReason, 'propagation');
+      const grounded = groundedById.get(row.id);
       const update = row.prepareUpdate(r => {
         r.relevance = entry.relevance;
         // The gate is chosen by the scorer that produced the SCORE, and this
@@ -352,7 +367,8 @@ async function saveReason(localSuggestionId, reason) {
   // exists precisely to fill a missing note, so a wrong one is no progress.
   const grounded = (0, _articleSuggestionMappers.groundedReasonFor)(row, reason, 'reason-sweep');
   await _index.default.write(async () => {
-    if ((0, _articleSuggestionMappers.isTerminalStatus)(row.status)) return;
+    if ((0, _articleSuggestionMappers.isTerminalStatus)(row.status) || showsNote(row)) return;
+    if (grounded.length > 0) (0, _noteHold.releaseNoteHold)([row.id]);
     await row.update(r => {
       r.reason = grounded;
       r.status = grounded.length > 0 ? _articleSuggestionStatus.ArticleSuggestionStatus.Complete : _articleSuggestionStatus.ArticleSuggestionStatus.ReasonPending;

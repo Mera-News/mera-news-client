@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.WEIGHTED_JACCARD_DISPLAY_THRESHOLD = exports.TITLE_JACCARD_PROPAGATION_THRESHOLD = exports.TITLE_JACCARD_DISPLAY_THRESHOLD = exports.SCORE_PROPAGATION_LOOKBACK_MS = exports.ENTITY_JACCARD_DISPLAY_THRESHOLD = exports.ENTITY_ANCHOR_DF_FLOOR = exports.DISPLAY_GROUPING_OPTIONS = exports.CLUSTER_CORE_CONFIDENCE_THRESHOLD = void 0;
+exports.attachToGroups = attachToGroups;
 exports.buildStoryGroups = buildStoryGroups;
 exports.entityAnchorDfMax = entityAnchorDfMax;
 exports.groupableOf = groupableOf;
@@ -56,6 +57,9 @@ exports.weightedTitleJaccard = weightedTitleJaccard;
  *      hacking story appeared as three cards — Honolulu Star-Advertiser, Der
  *      Bund in German, The Straits Times — in three different server clusters
  *      at title Jaccard ≈ 0.2). Also absent from score-propagation.
+ * `attachToGroups` then hangs extra rows (the Feed's below-gate copies) on the
+ * groups already built, each on at most one, by the same edges ranked by
+ * strength, and never joins two groups.
  * Union-find over signals (1)+(2) collapsed the dump into 163 multi-article
  * groups → 256 fewer cards (18.2%); adding (3) at the display layer collapses a
  * further 13 same-story pairs the raw title bar missed.
@@ -362,6 +366,21 @@ function normalizeEntities(entities) {
   return out;
 }
 
+/** The feed regroups the same rows on every change, and a row keeps its
+ *  `entities` array, so the normalized set is cached by array identity.
+ *  Sets here are read-only. */
+const entitySetCache = new WeakMap();
+const EMPTY_ENTITIES = new Set();
+function cachedEntities(entities) {
+  if (!entities) return EMPTY_ENTITIES;
+  let set = entitySetCache.get(entities);
+  if (!set) {
+    set = normalizeEntities(entities);
+    entitySetCache.set(entities, set);
+  }
+  return set;
+}
+
 /**
  * Event-type equality guard for the entity edge. TWO NULLS ARE NOT EQUAL: an
  * untagged pair carries no evidence, and treating "both untagged" as agreement
@@ -383,6 +402,37 @@ function sharedCount(small, large) {
     if (large.has(v)) shared += 1;
   }
   return shared;
+}
+
+/** The weighted title edge (3): enough IDF weight AND at least
+ *  `WEIGHTED_JACCARD_MIN_ANCHORS` shared tokens with df at or under the cap.
+ *  The anchor stops a high weighted score from riding on one distinctive token. */
+function weightedEdgeHolds(setI, setJ, dfByToken, n, threshold) {
+  let rareAnchors = 0;
+  for (const token of setI) {
+    if (setJ.has(token) && (dfByToken.get(token) ?? 0) <= WEIGHTED_JACCARD_ANCHOR_DF_MAX) {
+      rareAnchors += 1;
+    }
+  }
+  return rareAnchors >= WEIGHTED_JACCARD_MIN_ANCHORS && weightedTitleJaccard(setI, setJ, dfByToken, n) >= threshold;
+}
+
+/** The entity edge (4), minus its rare-entity anchor, which the caller's
+ *  enumeration already guarantees. */
+function entityEdgeHolds(entI, entJ, tokI, tokJ, eventI, eventJ, threshold) {
+  if (!sameEventType(eventI, eventJ)) return false;
+  const [entSmall, entLarge] = entI.size <= entJ.size ? [entI, entJ] : [entJ, entI];
+  if (sharedCount(entSmall, entLarge) < ENTITY_MIN_SHARED) return false;
+  // Set Jaccard: `titleJaccard` is the generic |∩|/|∪| over two string sets.
+  if (titleJaccard(entI, entJ) < threshold) return false;
+  const [tokSmall, tokLarge] = tokI.size <= tokJ.size ? [tokI, tokJ] : [tokJ, tokI];
+  return sharedCount(tokSmall, tokLarge) >= ENTITY_MIN_SHARED_TITLE_TOKENS;
+}
+
+/** Whether two titles share enough non-hot tokens to be compared at all:
+ *  2, or 1 when either title has 3 tokens or fewer. */
+function minSharedFor(a, b) {
+  return a.size <= 3 || b.size <= 3 ? 1 : 2;
 }
 
 // --- Union-find (array parent + path compression) -------------------------
@@ -627,9 +677,7 @@ function buildStoryGroups(items, opts) {
       // Candidate threshold: ≥ 2 shared tokens, relaxed to ≥ 1 when either
       // title is very short (≤ 3 tokens) — short headlines can't reach 2
       // shared tokens yet still legitimately match.
-      const shortTitle = setI.size <= 3 || tokenSets[j].size <= 3;
-      const minShared = shortTitle ? 1 : 2;
-      if (shared < minShared) {
+      if (shared < minSharedFor(setI, tokenSets[j])) {
         continue;
       }
       if (find(parent, i) === find(parent, j)) {
@@ -641,19 +689,9 @@ function buildStoryGroups(items, opts) {
         continue;
       }
       // Optional IDF-weighted edge: merge when the rare shared tokens carry
-      // enough weight AND the pair clears the rare-token anchor (≥ 2 shared
-      // tokens with df ≤ cap). The anchor stops a high weighted score from
-      // riding on a single distinctive token.
-      if (weightedEnabled) {
-        let rareAnchors = 0;
-        for (const token of setI) {
-          if (setJ.has(token) && (dfByToken.get(token) ?? 0) <= WEIGHTED_JACCARD_ANCHOR_DF_MAX) {
-            rareAnchors += 1;
-          }
-        }
-        if (rareAnchors >= WEIGHTED_JACCARD_MIN_ANCHORS && weightedTitleJaccard(setI, setJ, dfByToken, n) >= opts.weightedJaccardThreshold) {
-          union(parent, i, j);
-        }
+      // enough weight AND the pair clears the rare-token anchor.
+      if (weightedEnabled && weightedEdgeHolds(setI, setJ, dfByToken, n, opts.weightedJaccardThreshold)) {
+        union(parent, i, j);
       }
     }
   }
@@ -684,7 +722,7 @@ function buildStoryGroups(items, opts) {
     const entitySets = new Array(n);
     const entityPostings = new Map();
     for (let i = 0; i < n; i += 1) {
-      const set = normalizeEntities(items[i].entities);
+      const set = cachedEntities(items[i].entities);
       entitySets[i] = set;
       for (const entity of set) {
         let list = entityPostings.get(entity);
@@ -709,27 +747,9 @@ function buildStoryGroups(items, opts) {
           if (find(parent, i) === find(parent, j)) {
             continue; // Already merged via another edge/entity.
           }
-          if (!sameEventType(items[i].eventType, items[j].eventType)) {
-            continue;
+          if (entityEdgeHolds(entitySets[i], entitySets[j], tokenSets[i], tokenSets[j], items[i].eventType, items[j].eventType, opts.entityJaccardThreshold)) {
+            union(parent, i, j);
           }
-          const entI = entitySets[i];
-          const entJ = entitySets[j];
-          const [entSmall, entLarge] = entI.size <= entJ.size ? [entI, entJ] : [entJ, entI];
-          if (sharedCount(entSmall, entLarge) < ENTITY_MIN_SHARED) {
-            continue;
-          }
-          // Set Jaccard — `titleJaccard` is the generic |∩|/|∪| over two
-          // string sets, reused here rather than duplicated.
-          if (titleJaccard(entI, entJ) < opts.entityJaccardThreshold) {
-            continue;
-          }
-          const tokI = tokenSets[i];
-          const tokJ = tokenSets[j];
-          const [tokSmall, tokLarge] = tokI.size <= tokJ.size ? [tokI, tokJ] : [tokJ, tokI];
-          if (sharedCount(tokSmall, tokLarge) < ENTITY_MIN_SHARED_TITLE_TOKENS) {
-            continue;
-          }
-          union(parent, i, j);
         }
       }
     }
@@ -749,6 +769,133 @@ function buildStoryGroups(items, opts) {
     group.push(items[i]);
   }
   return Array.from(groupsByRoot.values());
+}
+
+/** Edge strength when attaching a copy, strongest first. */
+const TIER_STORY_KEY = 0;
+const TIER_STABLE_CLUSTER = 1;
+const TIER_CLUSTER = 2;
+const TIER_TITLE = 3;
+const TIER_WEIGHTED = 4;
+/** The strongest tier the id edges (story key, stable cluster, cluster) reach. */
+const LAST_ID_TIER = TIER_CLUSTER;
+/** A key held by two groups (never, while groups come from `buildStoryGroups`). */
+const AMBIGUOUS = -1;
+/**
+ * Attach each `extra` item to AT MOST ONE of `groups`, never joining two
+ * groups. The groups themselves are left as they are.
+ *
+ * Why not group everything together: a copy that matches two stories would
+ * union them, so one below-gate row could fold two cards into one. Here an
+ * extra item looks only at edges to group members (never to another extra
+ * item), takes the group its STRONGEST edge reaches (story key, then stable
+ * cluster, cluster, title, weighted title: the edges and bars of
+ * `buildStoryGroups`), and when that strongest edge reaches two groups it
+ * attaches to none. Token document frequency is counted over groups and
+ * extras together.
+ *
+ * No entity edge, whatever `opts` says: it cost the Feed about 1.7 ms of a
+ * 7 ms list build over a 1,773-row pool (owner: too slow for a weak phone). A
+ * copy linked to its story only by entities, which is mostly cross-language
+ * coverage, attaches nowhere and lists under Discarded instead.
+ */
+function attachToGroups(groups, extra, opts) {
+  const attachments = groups.map(() => []);
+  if (groups.length === 0 || extra.length === 0) return {
+    attachments,
+    unattached: [...extra]
+  };
+  const shown = [];
+  const groupOf = [];
+  groups.forEach((g, gi) => {
+    for (const m of g) {
+      shown.push(m);
+      groupOf.push(gi);
+    }
+  });
+  const n = shown.length + extra.length;
+
+  // Id edges: key -> the one group holding it.
+  const addKey = (map, key, g) => {
+    const prev = map.get(key);
+    if (prev === undefined) map.set(key, g);else if (prev !== g) map.set(key, AMBIGUOUS);
+  };
+  const stableEdge = m => !!m?.stableClusterId && (opts.ungateStableClusterEdge === true || m.confidence >= opts.clusterConfidenceThreshold);
+  const clusterEdge = m => !!m?.clusterId && m.confidence >= opts.clusterConfidenceThreshold;
+  const byStoryKey = new Map();
+  const byStable = new Map();
+  const byCluster = new Map();
+  shown.forEach((m, i) => {
+    if (m.storyKey) addKey(byStoryKey, m.storyKey, groupOf[i]);
+    for (const c of m.clusters ?? []) {
+      if (stableEdge(c)) addKey(byStable, c.stableClusterId, groupOf[i]);
+      if (clusterEdge(c)) addKey(byCluster, c.clusterId, groupOf[i]);
+    }
+  });
+
+  // Title edges: postings over group members, df over members and extras.
+  const tokenSets = shown.map(m => cachedTitleTokens(m.title));
+  const postings = new Map();
+  tokenSets.forEach((set, i) => {
+    for (const token of set) {
+      let list = postings.get(token);
+      if (!list) postings.set(token, list = []);
+      list.push(i);
+    }
+  });
+  const extraTokens = extra.map(x => cachedTitleTokens(x.title));
+  const weightedEnabled = opts.weightedJaccardThreshold !== undefined;
+  const dfByToken = new Map();
+  if (weightedEnabled) {
+    for (const [token, list] of postings) dfByToken.set(token, list.length);
+    for (const set of extraTokens) {
+      for (const token of set) dfByToken.set(token, (dfByToken.get(token) ?? 0) + 1);
+    }
+  }
+  const unattached = [];
+  const shared = new Map();
+  extra.forEach((x, xi) => {
+    let bestTier = Number.POSITIVE_INFINITY;
+    let bestGroups = new Set();
+    const hit = (g, tier) => {
+      if (g === undefined) return;
+      if (tier < bestTier) {
+        bestTier = tier;
+        bestGroups = new Set();
+      }
+      if (tier === bestTier) bestGroups.add(g);
+    };
+    if (x.storyKey) hit(byStoryKey.get(x.storyKey), TIER_STORY_KEY);
+    for (const c of x.clusters ?? []) {
+      if (stableEdge(c)) hit(byStable.get(c.stableClusterId), TIER_STABLE_CLUSTER);
+      if (clusterEdge(c)) hit(byCluster.get(c.clusterId), TIER_CLUSTER);
+    }
+    const setX = extraTokens[xi];
+    if (bestTier > LAST_ID_TIER && setX.size > 0) {
+      shared.clear();
+      for (const token of setX) {
+        const list = postings.get(token);
+        if (!list || list.length > HOT_TOKEN_POSTING_LIMIT) continue;
+        for (const j of list) shared.set(j, (shared.get(j) ?? 0) + 1);
+      }
+      for (const [j, count] of shared) {
+        const setJ = tokenSets[j];
+        if (count < minSharedFor(setX, setJ)) continue;
+        if (titleJaccard(setX, setJ) >= opts.titleJaccardThreshold) hit(groupOf[j], TIER_TITLE);else if (weightedEnabled && weightedEdgeHolds(setX, setJ, dfByToken, n, opts.weightedJaccardThreshold)) {
+          hit(groupOf[j], TIER_WEIGHTED);
+        }
+      }
+    }
+    if (bestGroups.size === 1 && !bestGroups.has(AMBIGUOUS)) {
+      attachments[bestGroups.values().next().value].push(x);
+    } else {
+      unattached.push(x);
+    }
+  });
+  return {
+    attachments,
+    unattached
+  };
 }
 
 /**

@@ -11,6 +11,7 @@ var _cloudOnlyNotice = require("../llm/cloud-only-notice");
 var _feedback = require("../platform/feedback");
 var _topicService = require("../database/services/topic-service");
 var _personaActionExecutor = require("../database/services/persona-action-executor");
+var _config = require("../news-harness/core/config");
 var _actionNames = require("../news-harness/persona-management/action-names");
 var _trackActions = require("../tracking/track-actions");
 var _logger = _interopRequireDefault(require("../logger"));
@@ -93,6 +94,7 @@ async function executeProposalActions(allActions, options = {}) {
       // surface as an error line (e.g. "Nudge budget exhausted").
       errors.push(`${label}: ${r.summary}`);
     }
+    return r.applied;
   };
 
   // One pass to resolve current facts for id validation + topic rewrites.
@@ -159,14 +161,14 @@ async function executeProposalActions(allActions, options = {}) {
               errors.push(`add_topics: fact ${action.fact_id} not found`);
               break;
             }
-            const current = fact.metadata?.topics ?? [];
-            const merged = Array.from(new Set([...current, ...action.topics]));
-            await (0, _factService.updateFact)(action.fact_id, {
-              metadata: {
-                ...(fact.metadata ?? {}),
-                topics: merged
-              }
-            });
+            // createTopics also pairs fact.metadata.topics and dedupes on (normalized text, fact).
+            await (0, _topicService.createTopics)(action.topics.filter(text => text.trim()).map(text => ({
+              factId: action.fact_id,
+              text,
+              weight: _config.DEFAULT_HARNESS_CONFIG.topicGen.llmTopicWeight,
+              status: 'active',
+              provenance: 'user'
+            })));
             applied++;
             break;
           }
@@ -177,15 +179,27 @@ async function executeProposalActions(allActions, options = {}) {
               errors.push(`remove_topics: fact ${action.fact_id} not found`);
               break;
             }
-            const remove = new Set(action.topics);
-            const next = (fact.metadata?.topics ?? []).filter(t => !remove.has(t));
+            const remove = new Set(action.topics.map(_topicService.normalizeTopicText));
+            // Only this fact's rows: followed and chat-feedback topics carry no factId.
+            const rows = (await (0, _topicService.getByFact)(action.fact_id)).filter(t => t.status === 'active' && t.factId === action.fact_id && remove.has(t.normalizedText));
+            const before = applied;
+            // A text whose retire the rails refused stays listed: its row still fetches.
+            for (const row of rows) {
+              if (!(await runRails({
+                action_type: _actionNames.ACTION_NAMES.RETIRE_TOPIC,
+                topicId: row.id
+              }, 'remove_topics'))) {
+                remove.delete(row.normalizedText);
+              }
+            }
+            applied = before + 1; // once per action, however many rows retired
+            const next = (fact.metadata?.topics ?? []).filter(t => !remove.has((0, _topicService.normalizeTopicText)(t)));
             await (0, _factService.updateFact)(action.fact_id, {
               metadata: {
                 ...(fact.metadata ?? {}),
                 topics: next
               }
             });
-            applied++;
             break;
           }
         case 'submit_feature_request':

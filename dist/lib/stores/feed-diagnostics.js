@@ -51,6 +51,49 @@ const SAMPLE_TITLE_MAX = exports.SAMPLE_TITLE_MAX = 120;
 /** Bounded per-article detail. SHARE PAYLOAD ONLY — never Sentry-bound, see
  *  the note on `feedFunnelScalars`. */
 
+const TOPIC_GROUP = {
+  llm: 'factMade',
+  combo: 'factMade',
+  migration: 'factMade',
+  tracked: 'followed',
+  user: 'readerAdded',
+  feedback: 'readerAdded'
+};
+function topicCounts(input) {
+  const byGroup = {
+    factMade: 0,
+    followed: 0,
+    readerAdded: 0,
+    other: 0
+  };
+  const byProvenance = {};
+  let zeroWeight = 0;
+  let trackedOrphans = 0;
+  if (!input) return {
+    available: false,
+    byGroup,
+    byProvenance,
+    zeroWeight,
+    trackedOrphans
+  };
+  const followed = new Set(input.trackedTopicIds);
+  for (const t of input.rows) {
+    if (t.provenance === 'tracked' && !followed.has(t.id)) trackedOrphans++;
+    if (t.weight <= 0) {
+      zeroWeight++;
+      continue;
+    }
+    byProvenance[t.provenance] = (byProvenance[t.provenance] ?? 0) + 1;
+    byGroup[TOPIC_GROUP[t.provenance] ?? 'other']++;
+  }
+  return {
+    available: true,
+    byGroup,
+    byProvenance,
+    zeroWeight,
+    trackedOrphans
+  };
+}
 function parseMs(iso) {
   if (!iso) return 0;
   const t = Date.parse(iso);
@@ -72,6 +115,7 @@ function makeSample(s, reason, nowMs, memberCount = null, matchedKey = null) {
     relevance: s.relevance ?? 0,
     ageHours: ageHours(s, nowMs),
     memberCount,
+    groupId: null,
     note: note.length > SAMPLE_TITLE_MAX ? `${note.slice(0, SAMPLE_TITLE_MAX)}…` : note,
     reason,
     matchedKey
@@ -118,11 +162,18 @@ function computeFeedFunnel(input) {
   // report could previously show one.
   const visibleSamples = [];
   let visibleCount = 0;
+  const storyKeys = {
+    keylessRows: 0,
+    keylessVisible: 0
+  };
   for (const s of input.suggestions) {
     const st = String(s.status);
     if (st === 'unscored') status.unscored++;else if (st === 'reason_pending') status.reasonPending++;else if (st === 'complete') status.complete++;else if (st === 'excluded') status.excluded++;else status.other++;
+    const keyless = !s.storyKey;
+    if (keyless) storyKeys.keylessRows++;
     if ((0, _factRowsSelector.isVisible)(s, cutoffMs)) {
       visibleCount++;
+      if (keyless) storyKeys.keylessVisible++;
       visibleSamples.push(makeSample(s, 'visible', nowMs));
       continue;
     }
@@ -142,13 +193,24 @@ function computeFeedFunnel(input) {
   // exclusion set it emits exactly one item per group, so `candidates.length`
   // IS the group count and Σ memberCount must equal visibleCount.
   const candidates = (0, _feedListSelector.buildFeedList)(input.suggestions, new Set(), nowMs, input.userCtx);
+  const candidateOf = new Map();
+  for (const c of candidates) for (const m of c.memberIds) candidateOf.set(m, c);
+  for (const v of visibleSamples) {
+    const c = candidateOf.get(v.articleId);
+    if (c) {
+      v.groupId = c.id;
+      v.memberCount = c.memberCount;
+    }
+  }
   let memberSum = 0;
+  let attachedCopies = 0;
   let largestSize = 0;
   let breakingCount = 0;
   let topScore = null;
   let lowestScore = null;
   for (const c of candidates) {
-    memberSum += c.memberCount;
+    memberSum += c.memberCount - (c.attachedCount ?? 0);
+    attachedCopies += c.attachedCount ?? 0;
     if (c.memberCount > largestSize) largestSize = c.memberCount;
     if (c.breaking) breakingCount++;
     if (topScore === null || c.score > topScore) topScore = c.score;
@@ -300,6 +362,7 @@ function computeFeedFunnel(input) {
       renderWindowMs: _factRowsSelector.FEED_WINDOW_MS,
       renderCutoffMs: cutoffMs
     },
+    storyKeys,
     totals: {
       rows: input.suggestions.length,
       status
@@ -316,6 +379,7 @@ function computeFeedFunnel(input) {
       count: candidates.length,
       largestSize,
       memberSum,
+      attachedCopies,
       memberSumMatchesVisible,
       collapseRatio: candidates.length > 0 ? Math.round(visibleCount / candidates.length * 100) / 100 : 0
     },
@@ -369,6 +433,7 @@ function computeFeedFunnel(input) {
       available: shared != null
     },
     dedup,
+    topics: topicCounts(input.topics),
     hydrateProvenance: input.hydrateStats,
     launchWipeSuspected: !!input.hydrateStats?.emptyPoolGuardTripped,
     sumsCheck: {
@@ -413,6 +478,7 @@ function feedFunnelScalars(r) {
     groups: r.groups.count,
     collapseRatio: r.groups.collapseRatio,
     largestGroup: r.groups.largestSize,
+    attachedCopies: r.groups.attachedCopies,
     candidates: r.candidates.count,
     orderLength: r.orderStage.length,
     rendered: r.orderStage.renderedCount,

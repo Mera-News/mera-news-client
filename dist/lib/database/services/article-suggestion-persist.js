@@ -9,6 +9,7 @@ var _watermelondb = require("@nozbe/watermelondb");
 var _index = _interopRequireDefault(require("../index"));
 var _articleSuggestionStatus = require("../article-suggestion-status");
 var _factService = require("./fact-service");
+var _normalizeKey = require("../../algorithms/normalize-key");
 var _logger = _interopRequireDefault(require("../../logger"));
 var _articleSuggestionMappers = require("./article-suggestion-mappers");
 var _articleSuggestionReads = require("./article-suggestion-reads");
@@ -131,9 +132,12 @@ async function persistAndLinkV2Suggestions(fetched, articleToTopicTexts, persona
   // --- Fact resolution: persona path uses topics.fact_id; fallback uses texts.
   let factsByTopicText = null;
   let factByTopicId = null;
+  let factsByNormalizedText = new Map();
   if (personaMeta) {
     const allTopicIds = Array.from(new Set(toInsert.flatMap(a => (personaMeta.matchedTopics.get(a._id) ?? []).map(m => m.topicId).filter(id => !!id))));
     factByTopicId = await (0, _articleSuggestionReads.resolveFactsByTopicIds)(allTopicIds);
+    const normalizedTexts = Array.from(new Set(toInsert.flatMap(a => (personaMeta.matchedTopics.get(a._id) ?? []).filter(m => m.topicId).map(m => (0, _normalizeKey.normalizeKey)(m.text)).filter(t => t.length > 0))));
+    factsByNormalizedText = await (0, _articleSuggestionReads.resolveFactsByNormalizedTopicTexts)(normalizedTexts);
   } else {
     const allTopicTexts = Array.from(new Set(toInsert.flatMap(a => articleToTopicTexts.get(a._id) ?? [])));
     factsByTopicText = await resolveFactsByTopicTexts(allTopicTexts);
@@ -235,6 +239,8 @@ async function persistAndLinkV2Suggestions(fetched, articleToTopicTexts, persona
           if (!m.topicId) continue; // synthetic headline entry → no fact
           const factId = factByTopicId.get(m.topicId);
           if (factId) linkedFactIds.add(factId);
+          // A same-text fact topic the retrieval merge hid behind this one.
+          for (const id of factsByNormalizedText.get((0, _normalizeKey.normalizeKey)(m.text)) ?? []) linkedFactIds.add(id);
         }
       } else if (factsByTopicText) {
         for (const topicText of topicTexts) {

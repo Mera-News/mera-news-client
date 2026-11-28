@@ -93,7 +93,8 @@ function foldNotReadTail(session, candidates, cap = TAIL_RENDER_CAP, mayShow = m
     } else if ((0, _pendingVisibility.isNotRead)(it.suggestion) && mayShow(it.suggestion)) {
       fresh.push(it);
     }
-    if ((0, _pendingVisibility.isNotRead)(it.suggestion)) notReadArticles += it.memberCount;
+    // Attached copies were read (below the gate), so they are not waiting.
+    if ((0, _pendingVisibility.isNotRead)(it.suggestion)) notReadArticles += it.memberCount - (it.attachedCount ?? 0);
   }
   if (fresh.length > 0 && session.ids.length < cap) {
     fresh.sort(newestFirst);
