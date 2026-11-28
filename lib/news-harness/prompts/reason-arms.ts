@@ -41,6 +41,7 @@ const NULL_CONTROL_ID = 'null-control';
 const RUBRIC_FIX_ID = 'rubric-fix';
 const RUBRIC_FIX_RESCORE_PRIOR_ID = 'rubric-fix-rescore-prior';
 const RESCORE_REASON_FIRST_ID = 'rescore-reason-first';
+const RESCORE_REASON_FIRST_FRESH_ID = 'rescore-reason-first-fresh';
 
 /**
  * The control: the reason prompt exactly as it shipped before promotion.
@@ -332,6 +333,26 @@ registerPromptVariant({
   reasonPriorScoreLine: 'relabel',
 });
 
+/**
+ * `rescore-reason-first` without the first-pass score in the user message (`'omit'`).
+ *
+ * Measured on the evidence rows: shown the first-pass score, pass 2 kept a foreign AI ruling at the
+ * inflated score and rewrote the note to agree with it, inventing a tie to the reader's country,
+ * where the shipped note had said plainly that the ruling does not bind them. Without the number,
+ * pass 2 judges the article fresh; the caller's lower-of-the-two policy still keeps it from raising
+ * a score.
+ */
+registerPromptVariant({
+  id: RESCORE_REASON_FIRST_FRESH_ID,
+  description:
+    'rescore-reason-first with the pass-1 score left out of the user message, so pass 2 cannot '
+    + 'anchor on it. Standard route only.',
+  systemPrompts: {
+    reason: CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-rescore-reason-first'],
+  },
+  reasonPriorScoreLine: 'omit',
+});
+
 // LOCAL IS STILL UNTOUCHED, through the promotion as well as the arms.
 // `LOCAL_REASON_SYSTEM_PROMPT` is built on a different base and states its voice
 // rule inline rather than sharing the cloud constant, so neither the promoted
@@ -351,4 +372,5 @@ export {
   RUBRIC_FIX_ID,
   RUBRIC_FIX_RESCORE_PRIOR_ID,
   RESCORE_REASON_FIRST_ID,
+  RESCORE_REASON_FIRST_FRESH_ID,
 };

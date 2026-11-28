@@ -264,3 +264,13 @@ describe('the rescore-reason-first arm', () => {
     expect(Buffer.byteLength(reasonSystemPromptFor(CFG, 'standard', arm.id), 'utf8')).toBeLessThanOrEqual(WIRE_MARGIN_BYTES);
   });
 });
+
+describe('the rescore-reason-first-fresh arm', () => {
+  it('sends the same pass-2 prompt as rescore-reason-first and leaves the first-pass score out', () => {
+    const fresh = resolvePromptVariant('rescore-reason-first-fresh');
+    const first = resolvePromptVariant('rescore-reason-first');
+    expect(reasonSystemPromptFor(CFG, 'standard', fresh.id)).toBe(reasonSystemPromptFor(CFG, 'standard', first.id));
+    expect(fresh.reasonPriorScoreLine).toBe('omit');
+    expect(first.reasonPriorScoreLine).toBe('relabel');
+  });
+});
