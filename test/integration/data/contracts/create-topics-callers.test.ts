@@ -30,10 +30,12 @@ const CALL_SITES: Record<string, number> = {
   // facts screen — which is correct: they are that fact's topics. Reviewed
   // and intended, which is the decision this table exists to force.
   'lib/database/services/topic-generation-status-service.ts': 1,
+  // add_topics proposal. Passes the fact's id, so the topics reach the facts screen: reviewed and intended.
+  'lib/chat-tools/proposal-handlers.ts': 1,
   'lib/inference/handlers/tracked-story-migrate-handler.ts': 1,
   'lib/tracking/track-actions.ts': 1,
 };
-const EXPECTED_TOTAL = 6;
+const EXPECTED_TOTAL = 7;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
