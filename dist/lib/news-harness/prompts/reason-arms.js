@@ -3,7 +3,9 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.RESCORE_REASON_FIRST_ID = exports.RESCORE_DEMOTE_ONLY_ID = exports.REASON_V3_RULES = exports.REASON_V3_ID = exports.REASON_V1_ID = exports.REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_ID = exports.PRE_GEO_CONTROL_ID = exports.NULL_CONTROL_ID = void 0;
+exports.VERDICT_SLOT_ID = exports.RESCORE_REASON_FIRST_ID = exports.RESCORE_DEMOTE_ONLY_ID = exports.REASON_V3_RULES = exports.REASON_V3_ID = exports.REASON_V1_ID = exports.REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_ID = exports.PRE_GEO_CONTROL_ID = exports.NULL_CONTROL_ID = void 0;
+exports.applyVerdictSlot = applyVerdictSlot;
+exports.readVerdictSlot = readVerdictSlot;
 var _prompts = require("./prompts");
 var _promptVariants = require("./prompt-variants");
 var _slots = require("../../harnesses/slots.generated");
@@ -33,6 +35,7 @@ const REASON_RESCORE_PRIOR_ID = exports.REASON_RESCORE_PRIOR_ID = 'reason-rescor
 const RESCORE_DEMOTE_ONLY_ID = exports.RESCORE_DEMOTE_ONLY_ID = 'rescore-demote-only';
 const NULL_CONTROL_ID = exports.NULL_CONTROL_ID = 'null-control';
 const RESCORE_REASON_FIRST_ID = exports.RESCORE_REASON_FIRST_ID = 'rescore-reason-first';
+const VERDICT_SLOT_ID = exports.VERDICT_SLOT_ID = 'verdict-slot';
 
 /**
  * The control: the reason prompt exactly as it shipped before promotion.
@@ -245,6 +248,71 @@ Output: single plain string, no prefixes, no markdown.`;
   },
   reasonPriorScoreLine: 'relabel'
 });
+
+/**
+ * Sentence-first pass 2 with two yes/no slots that code reads: `changes` (does this article change
+ * anything for this reader) and `family_place` (is it about a family member's city or region).
+ * The first-pass score is left out of the user message.
+ *
+ * The model only answers the two questions; {@link applyVerdictSlot} applies the policy. A "no"
+ * hides the row, except a routine item from a family member's place, which is kept at the lowest
+ * tier. Two slots rather than a third `changes` value, so the exception is a question of place the
+ * model can check, not a judgement it has to fold into its verdict. The tag and score it also
+ * returns are never read by the policy.
+ *
+ * MEASURED (goldset-348 x3 and evidence rows from a real feed x5, against baseline and a null twin in
+ * the same run): no slot was missing or malformed, and no shown note denied its stake (0 of 69
+ * evidence rows rated, two blind raters; baseline 33 of 147). Evidence tier accuracy rose 0.387 to
+ * 0.562 (floor 0.030). But it answers "no" too often: must-show recall fell 0.631 to 0.450 against
+ * a floor of 0.018, losing a cyclist hurt in the reader's own district and a housing story the
+ * reader tracks, and it hid the AI-journalism rows a reader building a news app should see. So it
+ * does not ship.
+ */
+(0, _promptVariants.registerPromptVariant)({
+  id: VERDICT_SLOT_ID,
+  description: 'Sentence-first pass 2 answering {"reason","changes","family_place","k","s"}, prior line ' + 'omitted. Code reads the slots: changes "no" hides the row, unless family_place is "yes", ' + 'which keeps it at the lowest tier; a missing or malformed slot leaves pass 1 standing. ' + 'Standard route only. MEASURED AND REJECTED: no shown note denied its stake, but must-show ' + 'recall fell 0.631 to 0.450 (floor 0.018).',
+  systemPrompts: {
+    reason: _slots.CLOUD_BASE_SLOTS['scoring/cloud-reason-system-prompt-verdict-slot']
+  },
+  reasonPriorScoreLine: 'omit'
+});
+
+/** The two slots of a verdict-slot answer, or null when either is missing or not "yes"/"no". */
+function readVerdictSlot(output) {
+  // The object is the span from the first brace to the last, which also drops a code fence.
+  const start = output.indexOf('{');
+  const end = output.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  let obj;
+  try {
+    obj = JSON.parse(output.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (typeof obj !== 'object' || obj === null) return null;
+  const {
+    changes,
+    family_place: familyPlace
+  } = obj;
+  const yesNo = v => v === 'yes' ? true : v === 'no' ? false : null;
+  const c = yesNo(changes);
+  const f = yesNo(familyPlace);
+  return c === null || f === null ? null : {
+    changes: c,
+    familyPlace: f
+  };
+}
+
+/**
+ * The verdict-slot policy, RAW score in, RAW score out (bucket afterwards). `changes` "no" with
+ * `family_place` "no" drops the row just under the gate; with `family_place` "yes" it caps it at
+ * the lowest tier. Anything else, a missing or malformed slot included, leaves pass 1 standing.
+ */
+function applyVerdictSlot(pass1, output, config) {
+  const slot = readVerdictSlot(output);
+  if (!slot || slot.changes) return pass1;
+  return Math.min(pass1, slot.familyPlace ? config.lowPriorityScore : config.discardFloor - 0.01);
+}
 
 // LOCAL IS STILL UNTOUCHED, through the promotion as well as the arms.
 // `LOCAL_REASON_SYSTEM_PROMPT` is built on a different base and states its voice
