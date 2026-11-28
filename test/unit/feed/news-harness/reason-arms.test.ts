@@ -18,6 +18,7 @@ import {
   REASON_V3_ID,
 } from '@/lib/news-harness/index';
 import { relevanceSystemPromptFor, reasonSystemPromptFor } from '@/lib/news-harness/article-pipeline/scoring';
+import { VERDICT_SLOT_ID, applyVerdictSlot } from '@/lib/news-harness/prompts/reason-arms';
 import { DEFAULT_HARNESS_CONFIG } from '@/lib/news-harness/core/config';
 import { estimateTokens } from '@/lib/algorithms/estimate-tokens';
 import { undoUx1ReasonLabelRule } from './ux1-reason-label';
@@ -217,5 +218,50 @@ describe('the rescore-reason-first arm', () => {
 
   it('fits under the wire margin', () => {
     expect(Buffer.byteLength(reasonSystemPromptFor(CFG, 'standard', arm.id), 'utf8')).toBeLessThanOrEqual(WIRE_MARGIN_BYTES);
+  });
+});
+
+describe('the verdict-slot arm', () => {
+  const arm = resolvePromptVariant(VERDICT_SLOT_ID);
+  const WIRE_MARGIN_BYTES = Math.floor((0.9 * 65536) / 2) - 72;
+
+  it('asks for the sentence first, then both slots, then the tag and score', () => {
+    const p = reasonSystemPromptFor(CFG, 'standard', arm.id);
+    expect(p).toContain('{"reason":"…","changes":"yes","family_place":"no","k":"…","s":0.00}');
+    expect(p).not.toContain('{"reason":"…","k":"…","s":0.00}');
+    expect(p).not.toContain('Output: single plain string');
+    expect(p.trimEnd().split('\n').pop()).toMatch(/^Output: exactly ONE JSON object/);
+  });
+
+  it('changes pass 2 only, and leaves the first-pass score out', () => {
+    expect(arm.reasonPriorScoreLine).toBe('omit');
+    expect(arm.rescorePolicy).toBeUndefined();
+    expect(relevanceSystemPromptFor(CFG, 'standard', arm.id)).toBe(CFG.relevanceSystemPrompt);
+    expect(reasonSystemPromptFor(CFG, 'headline', arm.id)).toBe(CFG.headlineReasonSystemPrompt);
+  });
+
+  it('fits under the wire margin', () => {
+    expect(Buffer.byteLength(reasonSystemPromptFor(CFG, 'standard', arm.id), 'utf8')).toBeLessThanOrEqual(WIRE_MARGIN_BYTES);
+  });
+
+  describe('the policy code applies', () => {
+    const ans = (changes: unknown, family: unknown) => JSON.stringify({ reason: 'x', changes, family_place: family, k: 'home', s: 0.7 });
+
+    it.each([
+      ['a change keeps pass 1', ans('yes', 'no'), 0.65, 0.65],
+      ['a change in a family place keeps pass 1', ans('yes', 'yes'), 0.85, 0.85],
+      ['no change hides the row', ans('no', 'no'), 0.65, 0.39],
+      ['no change in a family place is kept at the lowest tier', ans('no', 'yes'), 0.65, 0.4],
+      ['a row already under the gate is never raised', ans('no', 'yes'), 0.3, 0.3],
+      ['a missing changes slot leaves pass 1', JSON.stringify({ reason: 'x', family_place: 'no' }), 0.65, 0.65],
+      ['a missing family slot leaves pass 1', JSON.stringify({ reason: 'x', changes: 'no' }), 0.65, 0.65],
+      ['a value other than yes or no leaves pass 1', ans('maybe', 'no'), 0.65, 0.65],
+      ['a boolean leaves pass 1', ans(false, false), 0.65, 0.65],
+      ['plain text leaves pass 1', 'Routine showers, no stake.', 0.65, 0.65],
+      ['a truncated object leaves pass 1', '{"reason":"x","changes":"no"', 0.65, 0.65],
+      ['a fenced object is read', '```json\n' + ans('no', 'no') + '\n```', 0.65, 0.39],
+    ])('%s', (_name, output, pass1, expected) => {
+      expect(applyVerdictSlot(pass1, output, CFG)).toBeCloseTo(expected, 10);
+    });
   });
 });
