@@ -6,7 +6,7 @@
 //     of the SAME normalized topic texts (via the fact-stats cross-fact detector)
 //   • too_broad_fact  — a fact fanning out to too many active topics, or whose
 //     statement is a single generic word → downweight it
-//   • stale_topic     — a low-weight active topic idle past the stale window
+//   • stale_topic     — a fact-made topic with nothing on the Feed past the stale window
 //   • stale_fact      — a fact whose owned topics are ALL retired/suppressed
 //   • location_conflict — two or more of the user's OWN place facts name
 //     places that share nothing (moved from Amsterdam to Berlin, and an older
@@ -44,11 +44,9 @@ export const HYGIENE_THRESHOLDS = {
   tooBroadMinEffectiveWeight: 0,
   /** Weight delta applied to a too-broad fact on accept (downweight). */
   tooBroadDownweightDelta: -0.3,
-  /** A topic idle for longer than this (ms) is a stale-topic candidate. 45d. */
+  /** A fact-made topic with no row on the Feed for longer than this (ms) is a
+   *  stale-topic candidate. 45d. */
   staleTopicIdleMs: 45 * 24 * 60 * 60 * 1000,
-  /** …AND its weight is in [0, this) — low-value positive topics only. Negative
-   *  topics are intentional signals and are left alone. */
-  staleTopicMaxWeight: 0.3,
   /** Token Jaccard at/above which two fact statements are near-duplicates. */
   duplicateStatementJaccard: 0.8,
   /** Facts sharing at least this many normalized topic texts → duplicate. */
@@ -91,8 +89,18 @@ export interface HygieneTopicInput {
   normalizedText: string;
   weight: number;
   status: 'active' | 'suppressed' | 'retired';
+  /** Last time one of its rows reached the Feed (topic-signal-service). */
   lastSignalAtMs: number | null;
+  /** Who made it. Only fact-made topics (FACT_MADE_PROVENANCES) can go stale. */
+  provenance?: string;
+  createdAtMs?: number;
 }
+
+/** Topics a model made from a fact. A followed story, a topic the reader added
+ *  and a chat topic are the reader's own and are never proposed for removal. */
+export const FACT_MADE_PROVENANCES: ReadonlySet<string> = new Set(['llm', 'combo', 'migration']);
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** One fact's incoherent topics, as judged by the (impure) LLM sanity sweep.
  *  The judging happens in the RN adapter; this module only shapes the proposal,
@@ -115,6 +123,10 @@ export interface HygieneAnalyzeInput {
   /** Verdicts from the LLM topic-sanity sweep, already filtered by the adapter
    *  (tracked/user provenance and story-bound topics are never included). */
   incoherentFacts?: HygieneIncoherentFactInput[];
+  /** When Feed signals started being stamped. Idle time never counts from
+   *  before it, so a topic is never said to be quiet for weeks nobody watched.
+   *  Absent: no stale_topic proposals. */
+  signalSinceMs?: number | null;
   thresholds?: HygieneThresholds;
 }
 
@@ -159,6 +171,8 @@ export type HygieneOp =
 export interface HygieneSubject {
   facts: string[];
   topics: string[];
+  /** stale_topic: whole weeks since one of the topic's rows reached the Feed. */
+  idleWeeks?: number;
 }
 
 export interface HygieneProposal {
@@ -323,20 +337,29 @@ export function analyzeHygiene(input: HygieneAnalyzeInput): HygieneProposal[] {
     });
   }
 
-  // 4. stale_topic (idle + low positive weight) -----------------------------
-  for (const t of input.topics) {
-    if (t.status !== 'active') continue;
-    if (t.factId && factsBeingDeleted.has(t.factId)) continue;
-    if (t.lastSignalAtMs == null) continue; // never signaled ⇒ maybe brand new
-    if (input.now - t.lastSignalAtMs <= th.staleTopicIdleMs) continue;
-    if (t.weight < 0 || t.weight >= th.staleTopicMaxWeight) continue;
+  // 4. stale_topic (a fact-made topic with nothing on the Feed) ------------
+  const signalSince = input.signalSinceMs;
+  const statementById = new Map(input.facts.map((f) => [f.id, f.statement]));
+  for (const t of signalSince == null ? [] : input.topics) {
+    if (t.status !== 'active' || !t.factId || t.weight <= 0) continue;
+    if (!t.provenance || !FACT_MADE_PROVENANCES.has(t.provenance)) continue;
+    if (factsBeingDeleted.has(t.factId)) continue;
+    // Never the fact's last active topic: the fact would stop bringing news.
+    if ((activeTopicsByFact.get(t.factId)?.length ?? 0) < 2) continue;
+    const idleMs = input.now - Math.max(t.lastSignalAtMs ?? 0, t.createdAtMs ?? 0, signalSince ?? 0);
+    if (idleMs <= th.staleTopicIdleMs) continue;
     const id = `stale_topic:${t.id}`;
     if (rejected.has(id)) continue;
+    const statement = statementById.get(t.factId);
     proposals.push({
       id,
       kind: 'stale_topic',
-      subject: { facts: [], topics: [shorten(t.text)] },
-      targetFactIds: t.factId ? [t.factId] : [],
+      subject: {
+        facts: statement ? [shorten(statement)] : [],
+        topics: [shorten(t.text)],
+        idleWeeks: Math.floor(idleMs / WEEK_MS),
+      },
+      targetFactIds: [t.factId],
       targetTopicIds: [t.id],
       ops: [
         {

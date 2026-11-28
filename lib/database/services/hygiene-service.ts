@@ -26,6 +26,7 @@ import {
 } from '../../news-harness/persona-management/fact-hygiene';
 import { getFacts, getFactSectionSnapshots, deleteFact } from './fact-service';
 import { getAllTopicSnapshots } from './topic-service';
+import { readTopicSignalSince, stampTopicSignalsFromFeed } from './topic-signal-service';
 import { getSetting, setSetting } from './setting-service';
 import { applyPersonaAction, type PersonaAction } from './persona-action-executor';
 import * as sanityService from './topic-sanity-service';
@@ -280,10 +281,13 @@ export async function runHygieneSweep(opts?: {
     }
   }
 
-  const [facts, sectionSnapshots, topics] = await Promise.all([
+  // Before the topics are read, so stale_topic sees every row now on the Feed.
+  await stampTopicSignalsFromFeed(now);
+  const [facts, sectionSnapshots, topics, signalSinceMs] = await Promise.all([
     getFacts(),
     getFactSectionSnapshots(),
     getAllTopicSnapshots(),
+    readTopicSignalSince(),
   ]);
 
   // Kick the LLM sanity audit off BEFORE the size/age gates. Those gates exist
@@ -342,6 +346,7 @@ export async function runHygieneSweep(opts?: {
     now,
     rejectedFingerprints: rejected,
     incoherentFacts: sanity.incoherentFacts,
+    signalSinceMs,
   };
   const proposals = analyzeHygiene(input);
 

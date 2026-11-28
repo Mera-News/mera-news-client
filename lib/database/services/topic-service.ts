@@ -356,6 +356,8 @@ export interface TopicHygieneSnapshot {
   weight: number;
   status: TopicStatus;
   lastSignalAtMs: number | null;
+  provenance: TopicProvenance;
+  createdAtMs: number;
 }
 
 /** All topic rows (any status) projected to the hygiene snapshot shape. */
@@ -369,7 +371,37 @@ export async function getAllTopicSnapshots(): Promise<TopicHygieneSnapshot[]> {
     weight: t.weight,
     status: t.status,
     lastSignalAtMs: t.lastSignalAt ?? null,
+    provenance: t.provenance,
+    createdAtMs: t.createdAt instanceof Date ? t.createdAt.getTime() : 0,
   }));
+}
+
+/**
+ * Move `last_signal_at` forward on live topics, keyed by normalized text: each
+ * text maps to the newest time one of its rows reached the Feed. Only ever
+ * forward, so a stamp from an older row never undoes a newer one. Returns how
+ * many rows changed.
+ */
+export async function stampTopicSignals(
+  latestByText: ReadonlyMap<string, number>,
+  provenances: ReadonlySet<string>,
+): Promise<number> {
+  if (latestByText.size === 0) return 0;
+  return database.write(async () => {
+    const rows = await topicsCollection
+      .query(Q.where('normalized_text', Q.oneOf([...latestByText.keys()])), Q.where('status', 'active'), NOT_STAGED)
+      .fetch();
+    const ops = rows.flatMap((t) => {
+      const at = latestByText.get(t.normalizedText);
+      if (at == null || !t.factId || !provenances.has(t.provenance)) return [];
+      if (t.lastSignalAt != null && t.lastSignalAt >= at) return [];
+      return [t.prepareUpdate((r) => {
+        r.lastSignalAt = at;
+      })];
+    });
+    if (ops.length > 0) await database.batch(ops);
+    return ops.length;
+  });
 }
 
 /** Count of all topic rows (any status) — the gate for the sectioned feed:

@@ -1,4 +1,5 @@
 import { deleteOldSuggestions } from '@/lib/database/services/article-suggestion-lifecycle';
+import { stampTopicSignalsFromFeed } from '@/lib/database/services/topic-signal-service';
 import { deleteOlderThan as deleteOldImpressions } from '@/lib/database/services/story-impression-service';
 import { deleteByTypes as deleteNotificationsOfTypes, deleteOlderThan as deleteOldNotifications } from '@/lib/database/services/notification-service';
 import { deleteExpiredFactChecks } from '@/lib/database/services/fact-check-record-service';
@@ -38,6 +39,8 @@ AppScheduler.register({
   handler: async (_input, ctx) => {
     await pruneOldJobs();
 
+    // Before the sweep deletes them: rows that reached the Feed mark their topics as live.
+    await stampTopicSignalsFromFeed();
     const deletedCount = await deleteOldSuggestions(Date.now() - SUGGESTION_TTL_MS);
     if (deletedCount > 0) {
       ctx.log(`pruned ${deletedCount} suggestions (unread High and Emergency rows are kept up to 7 days)`);

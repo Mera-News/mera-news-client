@@ -31,7 +31,9 @@ function topic(
     normalizedText: opts.normalizedText ?? text.toLowerCase().trim().replace(/\s+/g, ' '),
     weight: opts.weight ?? 0.5,
     status: opts.status ?? 'active',
-    lastSignalAtMs: opts.lastSignalAtMs ?? NOW,
+    lastSignalAtMs: 'lastSignalAtMs' in opts ? opts.lastSignalAtMs ?? null : NOW,
+    provenance: opts.provenance,
+    createdAtMs: opts.createdAtMs,
   };
 }
 
@@ -151,44 +153,59 @@ describe('too_broad_fact', () => {
 
 describe('stale_topic', () => {
   const idle = NOW - (HYGIENE_THRESHOLDS.staleTopicIdleMs + DAY);
+  const since = NOW - 200 * DAY;
+  const f = fact('f1', 'From India');
+  const factTopic = (id: string, opts: Partial<HygieneTopicInput> = {}) =>
+    topic(id, 'f1', `topic ${id}`, { provenance: 'llm', createdAtMs: since, lastSignalAtMs: idle, ...opts });
+  const stale = (topics: HygieneTopicInput[], extra: Partial<HygieneAnalyzeInput> = {}) =>
+    run({ facts: [f], topics, signalSinceMs: since, ...extra }).filter((p) => p.kind === 'stale_topic');
 
-  it('proposes retiring an idle low-weight active topic', () => {
-    const topics = [topic('t1', null, 'Winter Olympics', { weight: 0.1, lastSignalAtMs: idle })];
-    const proposals = run({ facts: [], topics });
-    const stale = proposals.filter((p) => p.kind === 'stale_topic');
-    expect(stale).toHaveLength(1);
-    expect(stale[0].invertible).toBe(true);
-    expect(stale[0].ops[0]).toEqual({
+  it('proposes retiring an idle fact-made topic, naming its fact and the idle weeks', () => {
+    const out = stale([factTopic('t1', { weight: 0.75 }), factTopic('t2', { lastSignalAtMs: NOW })]);
+    expect(out).toHaveLength(1);
+    expect(out[0].invertible).toBe(true);
+    expect(out[0].targetTopicIds).toEqual(['t1']);
+    expect(out[0].subject).toEqual({ facts: ['From India'], topics: ['topic t1'], idleWeeks: 6 });
+    expect(out[0].ops[0]).toEqual({
       type: 'persona_action',
       action: { action_type: ACTION_NAMES.RETIRE_TOPIC, topicId: 't1' },
     });
   });
 
-  it('does not fire when weight >= staleTopicMaxWeight', () => {
-    const topics = [topic('t1', null, 'x', { weight: 0.3, lastSignalAtMs: idle })];
-    expect(run({ facts: [], topics }).filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
+  it('counts a topic that never reached the Feed from when it was made', () => {
+    const out = stale([
+      factTopic('t1', { lastSignalAtMs: null, createdAtMs: NOW - 100 * DAY }),
+      factTopic('t2', { lastSignalAtMs: null, createdAtMs: NOW - 10 * DAY }),
+      factTopic('t3', { lastSignalAtMs: NOW }),
+    ]);
+    expect(out.map((p) => p.targetTopicIds[0])).toEqual(['t1']);
+    expect(out[0].subject.idleWeeks).toBe(14);
   });
 
-  it('leaves negative-weight topics alone', () => {
-    const topics = [topic('t1', null, 'x', { weight: -0.4, lastSignalAtMs: idle })];
-    expect(run({ facts: [], topics }).filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
+  it('never counts idle time from before the signal existed', () => {
+    const recentStart = NOW - 10 * DAY;
+    expect(stale([factTopic('t1', { lastSignalAtMs: null }), factTopic('t2')], { signalSinceMs: recentStart })).toHaveLength(0);
+    expect(run({ facts: [f], topics: [factTopic('t1', { lastSignalAtMs: null }), factTopic('t2')] })
+      .filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
   });
 
-  it('does not fire when recently signaled', () => {
-    const topics = [topic('t1', null, 'x', { weight: 0.1, lastSignalAtMs: NOW - DAY })];
-    expect(run({ facts: [], topics }).filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
+  it('never proposes a followed, reader-added or chat topic', () => {
+    for (const provenance of ['tracked', 'user', 'feedback', 'exploration', undefined]) {
+      expect(stale([factTopic('t1', { provenance }), factTopic('t2', { lastSignalAtMs: NOW })])).toHaveLength(0);
+    }
+    expect(stale([topic('t1', null, 'x', { provenance: 'llm', createdAtMs: since, lastSignalAtMs: idle })])).toHaveLength(0);
   });
 
-  it('does not fire when never signaled (null lastSignalAt)', () => {
-    const topics = [topic('t1', null, 'x', { weight: 0.1, lastSignalAtMs: null })];
-    expect(run({ facts: [], topics }).filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
+  it("never takes a fact's last active topic", () => {
+    expect(stale([factTopic('t1')])).toHaveLength(0);
+    expect(stale([factTopic('t1'), factTopic('t2', { status: 'retired', lastSignalAtMs: NOW })])).toHaveLength(0);
   });
 
-  it('does not fire for suppressed/retired topics', () => {
-    const topics = [
-      topic('t1', null, 'x', { weight: 0.1, lastSignalAtMs: idle, status: 'suppressed' }),
-    ];
-    expect(run({ facts: [], topics }).filter((p) => p.kind === 'stale_topic')).toHaveLength(0);
+  it('leaves negative-weight, recently signaled and inactive topics alone', () => {
+    const keep = factTopic('k', { lastSignalAtMs: NOW });
+    expect(stale([factTopic('t1', { weight: -0.4 }), keep])).toHaveLength(0);
+    expect(stale([factTopic('t1', { lastSignalAtMs: NOW - DAY }), keep])).toHaveLength(0);
+    expect(stale([factTopic('t1', { status: 'suppressed' }), keep])).toHaveLength(0);
   });
 });
 
@@ -258,8 +275,12 @@ describe('ordering', () => {
       fact('f3', 'News', 0.9),
     ];
     const idle = NOW - (HYGIENE_THRESHOLDS.staleTopicIdleMs + DAY);
-    const topics = [topic('t1', null, 'quiet', { weight: 0.1, lastSignalAtMs: idle })];
-    const proposals = run({ facts, topics });
+    const made = { provenance: 'llm', createdAtMs: NOW - 200 * DAY };
+    const topics = [
+      topic('t1', 'f1', 'quiet', { ...made, lastSignalAtMs: idle }),
+      topic('t2', 'f1', 'busy', { ...made, lastSignalAtMs: NOW }),
+    ];
+    const proposals = run({ facts, topics, signalSinceMs: NOW - 200 * DAY });
     const kinds = proposals.map((p) => p.kind);
     // duplicate_facts must precede too_broad_fact which must precede stale_topic.
     expect(kinds.indexOf('duplicate_facts')).toBeLessThan(kinds.indexOf('too_broad_fact'));
