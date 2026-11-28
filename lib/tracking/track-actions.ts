@@ -13,6 +13,7 @@
 import {
   trackStory,
   untrackStory,
+  untrackAndRetireTopic,
   isTracked,
   observeTrackedId,
   findActiveTrackedId,
@@ -152,7 +153,7 @@ async function trackStoryWithProposalLocal(
 
   // 2. Create the local story row: display LABEL as the headline, SEARCH text as
   //    the tracked topic, seeded with the tapped article snapshot.
-  await trackStory({
+  const story = {
     stableClusterId: subject.stableClusterId ?? null,
     articleId: subject.articleId,
     title: subject.title,
@@ -165,7 +166,15 @@ async function trackStoryWithProposalLocal(
       titleOriginal: row?.title_original || undefined,
       storyKey: row?.storyKey || undefined,
     },
-  });
+  };
+  try {
+    await trackStory(story);
+  } catch (err) {
+    // A topic with no story row is an orphan: retry once, and the feed-sync rebuild heals the rest.
+    if (!topicId) throw err;
+    logger.warn('[track-actions] story write failed, retrying', { error: String(err) });
+    await trackStory(story);
+  }
 
   // 3. Retain the seed article on device, the way a save does.
   //
@@ -304,6 +313,7 @@ export const disownStoryMember = command('disownStoryMember', disownStoryMemberL
 async function deleteTrackedStoryByIdLocal(id: string): Promise<boolean> {
   if (!id) return true;
   let memberIds: string[] = [];
+  let topicRetiredWithRow = false;
   try {
     const row = await getTrackedStoryById(id);
     // Read the members BEFORE the row goes: the release below asks whether any
@@ -311,13 +321,15 @@ async function deleteTrackedStoryByIdLocal(id: string): Promise<boolean> {
     // that no longer exists to know what to ask about.
     memberIds = (row?.memberSnapshots ?? []).map((s) => s.articleId);
     const topicId = row?.topicId ?? null;
-    if (topicId) await retire(topicId);
+    // One write for both, so a failure cannot leave the topic active with no story row.
+    if (topicId && (await untrackAndRetireTopic(id, topicId))) topicRetiredWithRow = true;
+    else if (topicId) await retire(topicId);
   } catch (err) {
     logger.captureException(err, {
       tags: { module: 'track-actions', method: 'deleteTrackedStoryById.retire' },
     });
   }
-  const deleted = await untrackStory(id);
+  const deleted = topicRetiredWithRow || (await untrackStory(id));
   if (!deleted) return false;
   // Release after the row is gone, and one at a time rather than in parallel:
   // each release re-checks every OTHER active story, so an article still

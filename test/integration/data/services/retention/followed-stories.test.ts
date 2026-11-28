@@ -833,7 +833,8 @@ describe('deleteTrackedStoryById', () => {
   it('reports false, keeps the story and releases nothing when the row delete fails', async () => {
     const s = await landSuggestion(freshId());
     const id = await follow(s.articleId);
-    spyOn(await story(id), 'destroyPermanently').mockRejectedValueOnce(new Error('disk full'));
+    spyOn(database, 'write').mockRejectedValueOnce(new Error('batch failed')); // the one-write path
+    spyOn(await story(id), 'destroyPermanently').mockRejectedValueOnce(new Error('disk full')); // the fallback
     const release = spyOn(savedService, 'releaseTrackedStoryRetention');
 
     await expect(deleteTrackedStoryById(id)).resolves.toBe(false);
@@ -846,7 +847,8 @@ describe('deleteTrackedStoryById', () => {
   // Owner ruling: a failed retire must not block the row delete.
   it('still deletes the row, and reports it to Sentry, when the topic retire throws', async () => {
     const id = await follow(freshId(), 'gaza ceasefire');
-    spyOn(topicService, 'retire').mockRejectedValueOnce(new Error('retire failed'));
+    spyOn(database, 'write').mockRejectedValueOnce(new Error('batch failed')); // the one-write path
+    spyOn(topicService, 'retire').mockRejectedValueOnce(new Error('retire failed')); // the fallback
 
     await expect(deleteTrackedStoryById(id)).resolves.toBe(true);
 

@@ -7,6 +7,7 @@
 import { Q } from '@nozbe/watermelondb';
 import { map } from 'rxjs';
 import database from '../index';
+import type TopicModel from '../models/Topic';
 import type TrackedStoryModel from '../models/TrackedStory';
 import type { TrackedStoryMemberSnapshot } from '../models/TrackedStory';
 import logger from '../../logger';
@@ -245,6 +246,32 @@ export async function untrackStory(id: string): Promise<boolean> {
     return true;
   } catch (err) {
     logger.warn('[tracked-story] untrackStory failed', { id, error: String(err) });
+    return false;
+  }
+}
+
+/**
+ * Unfollow in ONE write: retire the story's topic and destroy its row. Two writes
+ * left an orphan (an active topic with no story row) whenever the second failed.
+ * False when the batch failed; the caller then falls back to the two-step path.
+ */
+export async function untrackAndRetireTopic(id: string, topicId: string): Promise<boolean> {
+  try {
+    const topic = await database.get<TopicModel>('topics').find(topicId);
+    const record = (await collection.query(Q.where('id', id)).fetch()).find((r) => r.id === id);
+    await database.write(async () => {
+      const ops = [
+        topic.prepareUpdate((t) => {
+          t.status = 'retired';
+          t.updatedAt = new Date();
+        }),
+        ...(record ? [record.prepareDestroyPermanently()] : []),
+      ];
+      await database.batch(ops);
+    });
+    return true;
+  } catch (err) {
+    logger.warn('[tracked-story] untrackAndRetireTopic failed', { id, error: String(err) });
     return false;
   }
 }
