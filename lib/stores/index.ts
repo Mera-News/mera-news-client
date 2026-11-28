@@ -75,6 +75,7 @@ export const clearAllStores = async () => {
     require('../database/services/publication-pref-ui-actions').cancelPendingPurges();
     require('../database/services/topic-decline-service').cancelPendingDeletes();
     require('../sync/marks').defaultMarkBatch.takeBatch();
+    require('../feed-ordering/note-hold').clearNoteHolds();
 
     // Wipe all WatermelonDB data (drops and recreates all tables)
     await database.write(async () => {

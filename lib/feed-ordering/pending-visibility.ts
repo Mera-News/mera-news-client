@@ -19,15 +19,18 @@
 import { ArticleSuggestionStatus } from '@/lib/database/article-suggestion-status';
 import { isWithinWindow, passesRenderGate, relevancePassesGate } from '@/lib/stores/fact-rows-selector';
 import type { ForYouSuggestion } from '@/lib/stores/for-you-store';
+import { isNoteHeld } from './note-hold';
 
 /** A scored row whose note is still pending, inside the render gate and the
  *  publication window. The same gate and window `isVisible` applies, minus its
- *  `complete` requirement. */
+ *  `complete` requirement. A row held for its own note (note-hold.ts: its
+ *  copied note was rejected) waits off the Feed instead. */
 export function isReasonPendingVisible(s: ForYouSuggestion, cutoffMs: number): boolean {
   return (
     s.status === ArticleSuggestionStatus.ReasonPending &&
     passesRenderGate(s) &&
-    isWithinWindow(s, cutoffMs)
+    isWithinWindow(s, cutoffMs) &&
+    !isNoteHeld(s._id)
   );
 }
 
@@ -57,7 +60,14 @@ export function isReadBelowGate(
 }
 
 /** A row Mera discarded, inside the publication window: the Show filter's
- *  "Discarded by Mera" pool (`buildFeedList`'s `onlyDiscarded`). */
+ *  "Discarded by Mera" pool (`buildFeedList`'s `onlyDiscarded`). Read below
+ *  its gate, or `reason_skipped` at any relevance (its note failed for good,
+ *  so it can never show as a pick). Not `isReadBelowGate` itself: that one
+ *  also picks the note box's "discarded" caption, and a failed note is not a
+ *  low score. */
 export function isDiscardedVisible(s: ForYouSuggestion, cutoffMs: number): boolean {
-  return isReadBelowGate(s) && isWithinWindow(s, cutoffMs);
+  return (
+    (isReadBelowGate(s) || s.status === ArticleSuggestionStatus.ReasonSkipped) &&
+    isWithinWindow(s, cutoffMs)
+  );
 }

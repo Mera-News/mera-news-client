@@ -24,6 +24,7 @@ import { useRelatedSortStore } from '@/lib/stores/related-sort-store';
 import { useTutorialsStore } from '@/lib/stores/tutorials-store';
 import { OnboardingStage, ProcessingMode } from '@/lib/generated/graphql-types';
 import { flush, resetHydrationMemory } from './support';
+import { holdForOwnNote, isNoteHeld } from '@/lib/feed-ordering/note-hold';
 
 beforeEach(() => {
   resetHydrationMemory();
@@ -130,6 +131,12 @@ describe('clearAllStores: Zustand stores', () => {
 });
 
 describe('clearAllStores: module mirrors', () => {
+  it('forgets the rows held for their own note', async () => {
+    holdForOwnNote(['row-1']);
+    await clearAllStores();
+    expect(isNoteHeld('row-1')).toBe(false);
+  });
+
   it('forgets the publisher source-name map, so the next account never inherits it', async () => {
     rememberPublisherSourceNames('pub-1', ['BBC News', 'BBC']);
     expect(knownSourceNamesForPublisher('pub-1')).not.toBeNull();
