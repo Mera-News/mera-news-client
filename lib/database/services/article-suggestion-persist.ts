@@ -7,10 +7,11 @@ import type ArticleSuggestionModel from '../models/ArticleSuggestion';
 import type ArticleSuggestionFactModel from '../models/ArticleSuggestionFact';
 import type { ArticleClusterMemberships, ArticleWithClusters } from '../../generated/graphql-types';
 import { getFacts } from './fact-service';
+import { normalizeKey } from '@/lib/algorithms/normalize-key';
 import logger from '../../logger';
 import { toClusterMemberships, parseClusterMemberships, canonicalClusterMembershipsJson, parseDate, buildMatchedTopicsJson, isMatchedTopicsJsonEmpty, pickStableClusterId } from './article-suggestion-mappers';
 import type { MatchedTopicMeta } from './article-suggestion-mappers';
-import { resolveFactsByTopicIds } from './article-suggestion-reads';
+import { resolveFactsByTopicIds, resolveFactsByNormalizedTopicTexts } from './article-suggestion-reads';
 
 const articleSuggestionsCol = database.get<ArticleSuggestionModel>('article_suggestions');
 const articleSuggestionFactsCol = database.get<ArticleSuggestionFactModel>('article_suggestion_facts');
@@ -155,6 +156,7 @@ export async function persistAndLinkV2Suggestions(
   // --- Fact resolution: persona path uses topics.fact_id; fallback uses texts.
   let factsByTopicText: Map<string, string[]> | null = null;
   let factByTopicId: Map<string, string> | null = null;
+  let factsByNormalizedText: Map<string, string[]> = new Map();
   if (personaMeta) {
     const allTopicIds = Array.from(
       new Set(
@@ -166,6 +168,17 @@ export async function persistAndLinkV2Suggestions(
       ),
     );
     factByTopicId = await resolveFactsByTopicIds(allTopicIds);
+    const normalizedTexts = Array.from(
+      new Set(
+        toInsert.flatMap((a) =>
+          (personaMeta.matchedTopics.get(a._id) ?? [])
+            .filter((m) => m.topicId)
+            .map((m) => normalizeKey(m.text))
+            .filter((t) => t.length > 0),
+        ),
+      ),
+    );
+    factsByNormalizedText = await resolveFactsByNormalizedTopicTexts(normalizedTexts);
   } else {
     const allTopicTexts = Array.from(
       new Set(toInsert.flatMap((a) => articleToTopicTexts.get(a._id) ?? [])),
@@ -293,6 +306,8 @@ export async function persistAndLinkV2Suggestions(
           if (!m.topicId) continue; // synthetic headline entry → no fact
           const factId = factByTopicId.get(m.topicId);
           if (factId) linkedFactIds.add(factId);
+          // A same-text fact topic the retrieval merge hid behind this one.
+          for (const id of factsByNormalizedText.get(normalizeKey(m.text)) ?? []) linkedFactIds.add(id);
         }
       } else if (factsByTopicText) {
         for (const topicText of topicTexts) {

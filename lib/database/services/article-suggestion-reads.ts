@@ -59,6 +59,34 @@ export async function resolveFactsByTopicIds(
 }
 
 /**
+ * normalized topic text → distinct fact ids owning an active, live, positive-weight topic with
+ * that text. Retrieval merges same-text topics and keeps the heaviest, so a row can be matched
+ * under a topic that owns no fact while a fact topic with the same words exists.
+ */
+export async function resolveFactsByNormalizedTopicTexts(
+  texts: string[],
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (texts.length === 0) return result;
+  const rows = await topicsCol
+    .query(
+      Q.where('normalized_text', Q.oneOf(texts)),
+      Q.where('status', 'active'),
+      Q.where('pending_delete_at', null),
+      Q.where('fact_id', Q.notEq(null)),
+      Q.where('weight', Q.gt(0)),
+    )
+    .fetch();
+  for (const t of rows) {
+    if (!t.factId) continue;
+    const ids = result.get(t.normalizedText) ?? [];
+    if (!ids.includes(t.factId)) ids.push(t.factId);
+    result.set(t.normalizedText, ids);
+  }
+  return result;
+}
+
+/**
  * Returns the ids of every article_suggestion row on-device. Since the WMDB
  * row id equals the server `_id`, these ids are directly diffable against
  * the server's id set.
