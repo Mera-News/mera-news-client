@@ -101,6 +101,9 @@ export interface FeedFunnelSample {
   relevance: number;
   ageHours: number;
   memberCount: number | null;
+  /** `id` of the `buildFeedList` candidate whose `memberIds` hold this row;
+   *  null when none (every row not visible). Rows sharing it form one card. */
+  groupId: string | null;
   /** The AI-generated note as STORED on the row, truncated. This is the field
    *  the whole "is the note about this article?" question is asked of — a
    *  sample carrying a title and a note side by side lets a reader answer it by
@@ -219,6 +222,9 @@ export interface FeedFunnelReport {
     renderCutoffMs: number;
   };
 
+  /** Rows with a null or empty `storyKey`, over the whole pool and over the
+   *  visible rows: they can only group by cluster or title overlap. */
+  storyKeys: { keylessRows: number; keylessVisible: number };
   totals: {
     rows: number;
     status: {
@@ -430,6 +436,7 @@ function makeSample(
     relevance: s.relevance ?? 0,
     ageHours: ageHours(s, nowMs),
     memberCount,
+    groupId: null,
     note: note.length > SAMPLE_TITLE_MAX ? `${note.slice(0, SAMPLE_TITLE_MAX)}…` : note,
     reason,
     matchedKey,
@@ -465,6 +472,7 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
   // report could previously show one.
   const visibleSamples: FeedFunnelSample[] = [];
   let visibleCount = 0;
+  const storyKeys = { keylessRows: 0, keylessVisible: 0 };
 
   for (const s of input.suggestions) {
     const st = String(s.status);
@@ -474,8 +482,12 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
     else if (st === 'excluded') status.excluded++;
     else status.other++;
 
+    const keyless = !s.storyKey;
+    if (keyless) storyKeys.keylessRows++;
+
     if (isVisible(s, cutoffMs)) {
       visibleCount++;
+      if (keyless) storyKeys.keylessVisible++;
       visibleSamples.push(makeSample(s, 'visible', nowMs));
       continue;
     }
@@ -516,6 +528,15 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
   // exclusion set it emits exactly one item per group, so `candidates.length`
   // IS the group count and Σ memberCount must equal visibleCount.
   const candidates = buildFeedList(input.suggestions, new Set<string>(), nowMs, input.userCtx);
+  const candidateOf = new Map<string, FeedListItem>();
+  for (const c of candidates) for (const m of c.memberIds) candidateOf.set(m, c);
+  for (const v of visibleSamples) {
+    const c = candidateOf.get(v.articleId);
+    if (c) {
+      v.groupId = c.id;
+      v.memberCount = c.memberCount;
+    }
+  }
   let memberSum = 0;
   let largestSize = 0;
   let breakingCount = 0;
@@ -694,6 +715,7 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
       renderWindowMs: FEED_WINDOW_MS,
       renderCutoffMs: cutoffMs,
     },
+    storyKeys,
     totals: { rows: input.suggestions.length, status },
     failing,
     dropped,

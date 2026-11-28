@@ -68,6 +68,7 @@ function sugg(o: Partial<ForYouSuggestion> = {}): ForYouSuggestion {
     matchedTopics: o.matchedTopics ?? [],
     factIds: o.factIds ?? [],
     scoredAt: o.scoredAt ?? null,
+    storyKey: o.storyKey,
   };
 }
 
@@ -609,6 +610,7 @@ describe('computeFeedFunnel — samples', () => {
       relevance: 0.42,
       ageHours: 2,
       memberCount: null,
+      groupId: null,
       // The stored note travels with the sample, so a reader can check it
       // against the title without a second lookup.
       note: 'because',
@@ -810,5 +812,40 @@ describe('feedFunnelScalars', () => {
     expect(scalars.openedRows).toBe(-1);
     expect(scalars.openedOlderThan7d).toBe(-1);
     for (const value of Object.values(scalars)) expect(value).not.toBeNull();
+  });
+});
+
+describe('computeFeedFunnel — card fields', () => {
+  it('rows of one story share a groupId and carry the card memberCount', () => {
+    const r = computeFeedFunnel(
+      baseInput({
+        suggestions: [
+          sugg({ _id: 'a', storyKey: 'k1' }),
+          sugg({ _id: 'b', storyKey: 'k1' }),
+          sugg({ _id: 'c', storyKey: 'k2' }),
+        ],
+      }),
+    );
+    const [a, b, c] = ['a', 'b', 'c'].map((id) => r.samples.visible.find((v) => v.suggestionId === id)!);
+    expect(a.groupId).not.toBeNull();
+    expect(a.groupId).toBe(b.groupId);
+    expect(a.memberCount).toBe(2);
+    expect(b.memberCount).toBe(2);
+    expect(c.groupId).not.toBe(a.groupId);
+    expect(c.memberCount).toBe(1);
+  });
+
+  it('counts keyless rows over the pool and over visible rows', () => {
+    const r = computeFeedFunnel(
+      baseInput({
+        suggestions: [
+          sugg({ _id: 'vis-null', storyKey: null }),
+          sugg({ _id: 'vis-empty', storyKey: '' }),
+          sugg({ _id: 'vis-keyed', storyKey: 'k' }),
+          sugg({ _id: 'low', relevance: 0.3, storyKey: null }),
+        ],
+      }),
+    );
+    expect(r.storyKeys).toEqual({ keylessRows: 3, keylessVisible: 2 });
   });
 });
