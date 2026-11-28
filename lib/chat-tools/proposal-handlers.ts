@@ -15,11 +15,17 @@ import { triggerTopicGeneration } from './tool-handlers';
 import { blockIfOnDevice } from '../llm/cloud-only-notice';
 import type { ProposalAction } from '../llm/types';
 import { submitFeatureRequest } from '../platform/feedback';
-import { getAllByNormalizedText } from '../database/services/topic-service';
+import {
+  createTopics,
+  getAllByNormalizedText,
+  getByFact,
+  normalizeTopicText,
+} from '../database/services/topic-service';
 import {
   applyPersonaAction,
   type PersonaAction,
 } from '../database/services/persona-action-executor';
+import { DEFAULT_HARNESS_CONFIG } from '../news-harness/core/config';
 import { ACTION_NAMES } from '../news-harness/persona-management/action-names';
 import { trackStoryWithProposal, syncFollowedStoryNow } from '../tracking/track-actions';
 import type { FeedbackSubject } from '../tracking/feedback-subject';
@@ -186,11 +192,18 @@ export async function executeProposalActions(
             errors.push(`add_topics: fact ${action.fact_id} not found`);
             break;
           }
-          const current = fact.metadata?.topics ?? [];
-          const merged = Array.from(new Set([...current, ...action.topics]));
-          await updateFact(action.fact_id, {
-            metadata: { ...(fact.metadata ?? {}), topics: merged },
-          });
+          // createTopics also pairs fact.metadata.topics and dedupes on (normalized text, fact).
+          await createTopics(
+            action.topics
+              .filter((text) => text.trim())
+              .map((text) => ({
+                factId: action.fact_id,
+                text,
+                weight: DEFAULT_HARNESS_CONFIG.topicGen.llmTopicWeight,
+                status: 'active' as const,
+                provenance: 'user' as const,
+              })),
+          );
           applied++;
           break;
         }
@@ -200,12 +213,20 @@ export async function executeProposalActions(
             errors.push(`remove_topics: fact ${action.fact_id} not found`);
             break;
           }
-          const remove = new Set(action.topics);
-          const next = (fact.metadata?.topics ?? []).filter((t) => !remove.has(t));
+          const remove = new Set(action.topics.map(normalizeTopicText));
+          // Only this fact's rows: followed and chat-feedback topics carry no factId.
+          const rows = (await getByFact(action.fact_id)).filter(
+            (t) => t.status === 'active' && t.factId === action.fact_id && remove.has(t.normalizedText),
+          );
+          const before = applied;
+          for (const row of rows) {
+            await runRails({ action_type: ACTION_NAMES.RETIRE_TOPIC, topicId: row.id }, 'remove_topics');
+          }
+          applied = before + 1; // once per action, however many rows retired
+          const next = (fact.metadata?.topics ?? []).filter((t) => !remove.has(normalizeTopicText(t)));
           await updateFact(action.fact_id, {
             metadata: { ...(fact.metadata ?? {}), topics: next },
           });
-          applied++;
           break;
         }
         case 'submit_feature_request': {
