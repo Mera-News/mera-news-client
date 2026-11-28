@@ -1,7 +1,13 @@
 // A copy Mera scored below the gate joins the Feed card of its story, at most
 // one card, and never joins two cards into one.
 
-import { attachToGroups, buildStoryGroups, DISPLAY_GROUPING_OPTIONS, type GroupableItem } from '@/lib/algorithms/story-grouping';
+import {
+  attachToGroups,
+  buildStoryGroups,
+  DISPLAY_GROUPING_OPTIONS,
+  groupableOf,
+  type GroupableItem,
+} from '@/lib/algorithms/story-grouping';
 import { buildFeedList } from '@/lib/stores/feed-list-selector';
 import { buildDiscardedStories, foldNotReadTail, newNotReadTailSession } from '@/lib/feed-ordering/not-read-tail';
 import { ArticleSuggestionStatus } from '@/lib/database/article-suggestion-status';
@@ -125,6 +131,20 @@ describe('Discarded holds every below-gate row no card holds', () => {
   it('the bridging copy is listed, the attached copy is not', () => {
     const { rows } = buildDiscardedStories([A, B, BRIDGE, COPY], null, NOW);
     expect(rows.map((it) => it.id)).toEqual(['c']);
+  });
+
+  it('a copy linked to a shown story only by entities attaches nowhere and is listed', () => {
+    const tagged = (id: string, title: string, rel: number) => ({
+      ...sugg(id, { title_en: title, relevance: rel, reason: rel >= 0.4 ? 'note' : '' }),
+      entities: ['European Commission', 'Google', 'Apple'],
+      eventType: 'economy',
+    });
+    const shown = tagged('s', 'commission digital levy giants', 0.6);
+    const foreign = tagged('f', 'commission tax google apple meta', 0.2);
+    // Display grouping alone joins them through the entity edge.
+    expect(buildStoryGroups([groupableOf(shown), groupableOf(foreign)], DISPLAY_GROUPING_OPTIONS)).toHaveLength(1);
+    expect(buildDiscardedStories([shown, foreign], null, NOW).rows.map((it) => it.id)).toEqual(['f']);
+    expect(buildFeedList([shown, foreign], new Set(), NOW)[0].memberIds).toEqual(['s']);
   });
 
   it('below-gate copies with no shown story still group among themselves', () => {

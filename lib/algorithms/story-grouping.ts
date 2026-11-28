@@ -882,7 +882,6 @@ const TIER_STABLE_CLUSTER = 1;
 const TIER_CLUSTER = 2;
 const TIER_TITLE = 3;
 const TIER_WEIGHTED = 4;
-const TIER_ENTITY = 5;
 /** The strongest tier the id edges (story key, stable cluster, cluster) reach. */
 const LAST_ID_TIER = TIER_CLUSTER;
 /** A key held by two groups (never, while groups come from `buildStoryGroups`). */
@@ -904,10 +903,15 @@ export interface AttachResult<T> {
  * union them, so one below-gate row could fold two cards into one. Here an
  * extra item looks only at edges to group members (never to another extra
  * item), takes the group its STRONGEST edge reaches (story key, then stable
- * cluster, cluster, title, weighted title, entity, the same edges and bars as
+ * cluster, cluster, title, weighted title: the edges and bars of
  * `buildStoryGroups`), and when that strongest edge reaches two groups it
- * attaches to none. Corpus statistics (token and entity document frequency)
- * are counted over groups and extras together.
+ * attaches to none. Token document frequency is counted over groups and
+ * extras together.
+ *
+ * No entity edge, whatever `opts` says: it cost the Feed about 1.7 ms of a
+ * 7 ms list build over a 1,773-row pool (owner: too slow for a weak phone). A
+ * copy linked to its story only by entities, which is mostly cross-language
+ * coverage, attaches nowhere and lists under Discarded instead.
  */
 export function attachToGroups<T extends GroupableItem>(
     groups: T[][],
@@ -969,33 +973,6 @@ export function attachToGroups<T extends GroupableItem>(
         }
     }
 
-    // Entity edges, built on first need.
-    let entity: {
-        sets: Set<string>[];
-        postings: Map<string, number[]>;
-        df: Map<string, number>;
-        cap: number;
-    } | null = null;
-    const entityIndex = () => {
-        if (entity) return entity;
-        const sets = shown.map((m) => cachedEntities(m.entities));
-        const ePostings = new Map<string, number[]>();
-        const df = new Map<string, number>();
-        sets.forEach((set, i) => {
-            for (const e of set) {
-                let list = ePostings.get(e);
-                if (!list) ePostings.set(e, (list = []));
-                list.push(i);
-                df.set(e, (df.get(e) ?? 0) + 1);
-            }
-        });
-        for (const x of extra) {
-            for (const e of cachedEntities(x.entities)) df.set(e, (df.get(e) ?? 0) + 1);
-        }
-        entity = { sets, postings: ePostings, df, cap: entityAnchorDfMax(n) };
-        return entity;
-    };
-
     const unattached: T[] = [];
     const shared = new Map<number, number>();
     extra.forEach((x, xi) => {
@@ -1033,30 +1010,6 @@ export function attachToGroups<T extends GroupableItem>(
                     weightedEdgeHolds(setX, setJ, dfByToken, n, opts.weightedJaccardThreshold as number)
                 ) {
                     hit(groupOf[j], TIER_WEIGHTED);
-                }
-            }
-        }
-
-        if (bestTier > TIER_WEIGHTED && opts.entityJaccardThreshold !== undefined) {
-            const idx = entityIndex();
-            const entX = cachedEntities(x.entities);
-            for (const e of entX) {
-                const df = idx.df.get(e) ?? 0;
-                if (df < 2 || df > idx.cap) continue;
-                for (const j of idx.postings.get(e) ?? []) {
-                    if (
-                        entityEdgeHolds(
-                            entX,
-                            idx.sets[j],
-                            setX,
-                            tokenSets[j],
-                            x.eventType,
-                            shown[j].eventType,
-                            opts.entityJaccardThreshold,
-                        )
-                    ) {
-                        hit(groupOf[j], TIER_ENTITY);
-                    }
                 }
             }
         }
