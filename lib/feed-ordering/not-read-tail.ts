@@ -107,7 +107,8 @@ export function foldNotReadTail(
     } else if (isNotRead(it.suggestion) && mayShow(it.suggestion)) {
       fresh.push(it);
     }
-    if (isNotRead(it.suggestion)) notReadArticles += it.memberCount;
+    // Attached copies were read (below the gate), so they are not waiting.
+    if (isNotRead(it.suggestion)) notReadArticles += it.memberCount - (it.attachedCount ?? 0);
   }
   if (fresh.length > 0 && session.ids.length < cap) {
     fresh.sort(newestFirst);

@@ -262,9 +262,13 @@ export interface FeedFunnelReport {
   groups: {
     count: number;
     largestSize: number;
+    /** Σ of each card's VISIBLE members (memberCount minus attached copies). */
     memberSum: number;
+    /** Below-gate copies attached behind a card (`attachToGroups`): counted in
+     *  each card's memberCount, never in `visibleCount`. */
+    attachedCopies: number;
     /** Invariant: with an empty exclusion set `buildFeedList` emits one item per
-     *  group, so Σ memberCount must equal `visibleCount`. */
+     *  group, so Σ visible members must equal `visibleCount`. */
     memberSumMatchesVisible: boolean;
     /** visibleCount / groupCount — rows collapsed into one story card. */
     collapseRatio: number;
@@ -538,12 +542,14 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
     }
   }
   let memberSum = 0;
+  let attachedCopies = 0;
   let largestSize = 0;
   let breakingCount = 0;
   let topScore: number | null = null;
   let lowestScore: number | null = null;
   for (const c of candidates) {
-    memberSum += c.memberCount;
+    memberSum += c.memberCount - (c.attachedCount ?? 0);
+    attachedCopies += c.attachedCount ?? 0;
     if (c.memberCount > largestSize) largestSize = c.memberCount;
     if (c.breaking) breakingCount++;
     if (topScore === null || c.score > topScore) topScore = c.score;
@@ -729,6 +735,7 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
       count: candidates.length,
       largestSize,
       memberSum,
+      attachedCopies,
       memberSumMatchesVisible,
       collapseRatio:
         candidates.length > 0
@@ -832,6 +839,7 @@ export function feedFunnelScalars(r: FeedFunnelReport): Record<string, number | 
     groups: r.groups.count,
     collapseRatio: r.groups.collapseRatio,
     largestGroup: r.groups.largestSize,
+    attachedCopies: r.groups.attachedCopies,
     candidates: r.candidates.count,
     orderLength: r.orderStage.length,
     rendered: r.orderStage.renderedCount,

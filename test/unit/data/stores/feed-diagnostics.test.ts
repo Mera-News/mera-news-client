@@ -646,6 +646,7 @@ describe('computeFeedFunnel — edge cases', () => {
       count: 0,
       largestSize: 0,
       memberSum: 0,
+      attachedCopies: 0,
       memberSumMatchesVisible: true,
       collapseRatio: 0,
     });
@@ -831,8 +832,24 @@ describe('computeFeedFunnel — card fields', () => {
     expect(a.groupId).toBe(b.groupId);
     expect(a.memberCount).toBe(2);
     expect(b.memberCount).toBe(2);
+    expect(c.groupId).not.toBeNull();
     expect(c.groupId).not.toBe(a.groupId);
     expect(c.memberCount).toBe(1);
+  });
+
+  it('a below-gate copy behind a card counts in memberCount, never in the visible sum', () => {
+    const r = computeFeedFunnel(
+      baseInput({
+        suggestions: [
+          sugg({ _id: 'shown', storyKey: 'k1' }),
+          sugg({ _id: 'copy', storyKey: 'k1', relevance: 0.2, reason: '' }),
+        ],
+      }),
+    );
+    expect(r.groups.attachedCopies).toBe(1);
+    expect(r.groups.memberSum).toBe(1);
+    expect(r.sumsCheck.memberSumMatchesVisible).toBe(true);
+    expect(r.samples.visible.find((v) => v.suggestionId === 'shown')?.memberCount).toBe(2);
   });
 
   it('counts keyless rows over the pool and over visible rows', () => {
