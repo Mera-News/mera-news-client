@@ -866,3 +866,40 @@ describe('computeFeedFunnel — card fields', () => {
     expect(r.storyKeys).toEqual({ keylessRows: 3, keylessVisible: 2 });
   });
 });
+
+describe('computeFeedFunnel — topics', () => {
+  const t = (id: string, provenance: string, factId: string | null, weight = 0.7) => ({ id, provenance, factId, weight });
+
+  it('counts active topics by where they came from, zero weights apart, and follows with no story', () => {
+    const r = computeFeedFunnel(
+      baseInput({
+        topics: {
+          rows: [
+            t('1', 'llm', 'f1'),
+            t('2', 'combo', 'f1'),
+            t('3', 'migration', 'f2'),
+            t('4', 'tracked', null),
+            t('5', 'tracked', null),
+            t('6', 'user', 'f1'),
+            t('7', 'feedback', null),
+            t('8', 'exploration', 'f3'),
+            t('9', 'llm', 'f1', 0),
+          ],
+          trackedTopicIds: ['4'],
+        },
+      }),
+    );
+    expect(r.topics).toEqual({
+      available: true,
+      byGroup: { factMade: 3, followed: 2, readerAdded: 2, other: 1 },
+      byProvenance: { llm: 1, combo: 1, migration: 1, tracked: 2, user: 1, feedback: 1, exploration: 1 },
+      zeroWeight: 1,
+      trackedOrphans: 1,
+    });
+  });
+
+  it('a failed or skipped read is unavailable, never a zero', () => {
+    expect(computeFeedFunnel(baseInput({ topics: null })).topics.available).toBe(false);
+    expect(computeFeedFunnel(baseInput({})).topics.available).toBe(false);
+  });
+});

@@ -185,6 +185,11 @@ export interface FeedFunnelInput {
    *  "the vector axis was not measured". */
   vectorSidecarsById?: Record<string, string | null>;
 
+  /** Active topics not staged for deletion, and the topic ids followed
+   *  stories point at. Null or absent: the read failed or was not asked for,
+   *  and the report says so rather than showing zeroes. */
+  topics?: FeedFunnelTopicsInput | null;
+
   userCtx: UserGeoLanguageContext | null;
   /** Captured ONCE by the caller and used for every window/age computation. */
   nowMs: number;
@@ -388,6 +393,20 @@ export interface FeedFunnelReport {
    *  "no duplicates found". */
   dedup: GrayBandCounters;
 
+  /** WHERE THE TOPICS CAME FROM, over active topics not staged for deletion.
+   *  Fact-made: llm, combo, migration. Followed: tracked. Reader-added: user
+   *  (on a fact) and feedback (chat feed tuning, no fact). Anything else is
+   *  `other`. Weight 0 or below is counted apart and in no group: retrieval
+   *  never sends those. `trackedOrphans` is an active tracked topic no
+   *  followed story points at. */
+  topics: {
+    available: boolean;
+    byGroup: { factMade: number; followed: number; readerAdded: number; other: number };
+    byProvenance: Record<string, number>;
+    zeroWeight: number;
+    trackedOrphans: number;
+  };
+
   hydrateProvenance: HydrateProvenance | null;
   /** The persisted READING ORDER was thrown away at launch. `ingest` refills the
    *  list so everything else reads healthy — this is the only visible symptom. */
@@ -409,6 +428,39 @@ export interface FeedFunnelReport {
     droppedBeforeVisible: FeedFunnelSample[];
     missingFromOrder: FeedFunnelSample[];
   };
+}
+
+export interface FeedFunnelTopicsInput {
+  rows: ReadonlyArray<{ id: string; provenance: string; factId: string | null; weight: number }>;
+  trackedTopicIds: ReadonlyArray<string>;
+}
+
+const TOPIC_GROUP: Record<string, 'factMade' | 'followed' | 'readerAdded'> = {
+  llm: 'factMade',
+  combo: 'factMade',
+  migration: 'factMade',
+  tracked: 'followed',
+  user: 'readerAdded',
+  feedback: 'readerAdded',
+};
+
+function topicCounts(input: FeedFunnelTopicsInput | null | undefined): FeedFunnelReport['topics'] {
+  const byGroup = { factMade: 0, followed: 0, readerAdded: 0, other: 0 };
+  const byProvenance: Record<string, number> = {};
+  let zeroWeight = 0;
+  let trackedOrphans = 0;
+  if (!input) return { available: false, byGroup, byProvenance, zeroWeight, trackedOrphans };
+  const followed = new Set(input.trackedTopicIds);
+  for (const t of input.rows) {
+    if (t.provenance === 'tracked' && !followed.has(t.id)) trackedOrphans++;
+    if (t.weight <= 0) {
+      zeroWeight++;
+      continue;
+    }
+    byProvenance[t.provenance] = (byProvenance[t.provenance] ?? 0) + 1;
+    byGroup[TOPIC_GROUP[t.provenance] ?? 'other']++;
+  }
+  return { available: true, byGroup, byProvenance, zeroWeight, trackedOrphans };
 }
 
 function parseMs(iso: string | null | undefined): number {
@@ -793,6 +845,7 @@ export function computeFeedFunnel(input: FeedFunnelInput): FeedFunnelReport {
       available: shared != null,
     },
     dedup,
+    topics: topicCounts(input.topics),
     hydrateProvenance: input.hydrateStats,
     launchWipeSuspected: !!input.hydrateStats?.emptyPoolGuardTripped,
     sumsCheck: {
